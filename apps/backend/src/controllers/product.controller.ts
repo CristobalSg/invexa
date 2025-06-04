@@ -1,0 +1,64 @@
+import { Request, Response } from 'express'
+import prisma from '../prisma/client'
+import { createProductSchema, updateProductSchema } from '../schemas/product.schema'
+
+export async function createProduct(req: Request, res: Response) {
+  const result = createProductSchema.safeParse(req.body)
+  if (!result.success) return res.status(400).json({ error: result.error.format() })
+
+  try {
+    const product = await prisma.product.create({ data: result.data })
+    return res.status(201).json(product)
+  } catch {
+    return res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+export async function getProducts(req: Request, res: Response) {
+  try {
+    const products = await prisma.product.findMany()
+    return res.json(products)
+  } catch {
+    return res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+export async function getProduct(req: Request, res: Response) {
+  const id = Number(req.params.id)
+  if (isNaN(id)) return res.status(400).json({ error: 'Invalid ID' })
+
+  try {
+    const product = await prisma.product.findUnique({ where: { id } })
+    if (!product) return res.status(404).json({ error: 'Product not found' })
+    return res.json(product)
+  } catch {
+    return res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+export async function updateProduct(req: Request, res: Response) {
+  const id = Number(req.params.id)
+  if (isNaN(id)) return res.status(400).json({ error: 'Invalid ID' })
+
+  const result = updateProductSchema.safeParse(req.body)
+  if (!result.success) return res.status(400).json({ error: result.error.format() })
+
+  try {
+    const product = await prisma.product.update({ where: { id }, data: result.data })
+    return res.json(product)
+  } catch {
+    return res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+export async function deleteProduct(req: Request, res: Response) {
+  const id = Number(req.params.id)
+  if (isNaN(id)) return res.status(400).json({ error: 'Invalid ID' })
+
+  try {
+    await prisma.product.delete({ where: { id } })
+    return res.status(204).send()
+  } catch {
+    return res.status(500).json({ error: 'Internal server error' })
+  }
+}

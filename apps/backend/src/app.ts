@@ -1,13 +1,12 @@
 import express from 'express'
 import helmet from 'helmet'
-import userRouter from './routes/user.route'
+import apiRouter from './routes'
 
 const app = express()
 
 app.use(helmet())
 app.use(express.json())
 
-app.use('/api/users', userRouter)
+app.use('/api', apiRouter)
 
 export default app
-

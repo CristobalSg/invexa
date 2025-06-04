@@ -8,4 +8,13 @@ export const createUserSchema = z.object({
   roleId: z.number().optional(),
 })
 
+export const updateUserSchema = z.object({
+  username: z.string().min(1).optional(),
+  password: z.string().min(6).optional(),
+  name: z.string().min(1).optional(),
+  email: z.string().email().optional(),
+  roleId: z.number().optional(),
+})
+
 export type CreateUserInput = z.infer<typeof createUserSchema>
+export type UpdateUserInput = z.infer<typeof updateUserSchema>
