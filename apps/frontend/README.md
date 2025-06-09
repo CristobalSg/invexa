@@ -1,54 +1,49 @@
+
+src/
+├── components/
+│   ├── InputForm.tsx        # Componente de formulario dinámico
+│   ├── StatsPanel.tsx       # Componente para mostrar estadísticas
+│   └── ProductList.tsx      # (si tienes o vas a tener lista de productos)
+│   └── layout.tsx    
+│   └── layout.tsx    
+├── layouts/
+│   └── MainLayout.tsx       # Proximamente se movera aqui el layout
+├── pages/
+│   └── Home.tsx         # Página principal
+│   └── ProductList.tsx         # Futura implementación
+├── App.tsx                  # Punto de entrada con enrutamiento
+├── main.tsx                 # Renderizado principal
+└── types/
+    └── product.ts           # Tipado de productos u otras entidades
+
+
+
+# Sistema de Inventario - PMV
+
+Este proyecto es una plantilla mínima viable (PMV) de un sistema de inventario, desarrollado con:
+
+- ✅ React + Vite
+- ✅ TypeScript
+- ✅ TailwindCSS
+- ✅ React Hook Form + Zod (validaciones futuras)
+- ✅ TanStack Query (integración con backend futura)
+
+## Estructura
+
+- `InputForm`: campo de entrada dinámico
+- `StatsPanel`: muestra el total de ventas y botón para finalizar
+- `MainLayout`: estructura base con navbar (opcionalmente con Flowbite o a medida)
+- Página principal dividida en 2/3 (formulario + lista) y 1/3 (estadísticas)
+
+## Objetivo
+
+Crear una base funcional y flexible para iterar rápidamente el desarrollo del sistema.
+
+---
+
+## Cómo iniciar
+
+```bash
+pnpm install
+pnpm dev
 # React + TypeScript + Vite
-
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
-
-Currently, two official plugins are available:
-
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default tseslint.config({
-  extends: [
-    // Remove ...tseslint.configs.recommended and replace with this
-    ...tseslint.configs.recommendedTypeChecked,
-    // Alternatively, use this for stricter rules
-    ...tseslint.configs.strictTypeChecked,
-    // Optionally, add this for stylistic rules
-    ...tseslint.configs.stylisticTypeChecked,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
-```
-
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default tseslint.config({
-  plugins: {
-    // Add the react-x and react-dom plugins
-    'react-x': reactX,
-    'react-dom': reactDom,
-  },
-  rules: {
-    // other rules...
-    // Enable its recommended typescript rules
-    ...reactX.configs['recommended-typescript'].rules,
-    ...reactDom.configs.recommended.rules,
-  },
-})
-```

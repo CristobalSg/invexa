@@ -9,7 +9,7 @@ const root = document.getElementById('root')!
 createRoot(root).render(
   withReactQuery(
     <StrictMode>
-      <App />
+        <App />
     </StrictMode>
   )
 )
