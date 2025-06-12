@@ -47,6 +47,9 @@ model Product {
   name        String
   description String?
   barcode     String?    @unique
+  cost        Int        @default(0)
+  price       Int        @default(0)
+  quantity    Int        @default(0)
   createdAt   DateTime   @default(now())
 
   inventory   Inventory[]

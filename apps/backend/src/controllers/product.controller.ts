@@ -8,7 +8,8 @@ export async function createProduct(req: Request, res: Response) {
 
   try {
     const product = await prisma.product.create({ data: result.data })
-    return res.status(201).json(product)
+    // Convertir id a string
+    return res.status(201).json({ ...product, id: product.id.toString() })
   } catch {
     return res.status(500).json({ error: 'Internal server error' })
   }
@@ -17,7 +18,9 @@ export async function createProduct(req: Request, res: Response) {
 export async function getProducts(req: Request, res: Response) {
   try {
     const products = await prisma.product.findMany()
-    return res.json(products)
+    // Convertir id a string para cada producto
+    const productsWithStringId = products.map((p) => ({ ...p, id: p.id.toString() }))
+    return res.json(productsWithStringId)
   } catch {
     return res.status(500).json({ error: 'Internal server error' })
   }
@@ -30,7 +33,8 @@ export async function getProduct(req: Request, res: Response) {
   try {
     const product = await prisma.product.findUnique({ where: { id } })
     if (!product) return res.status(404).json({ error: 'Product not found' })
-    return res.json(product)
+    // Convertir id a string
+    return res.json({ ...product, id: product.id.toString() })
   } catch {
     return res.status(500).json({ error: 'Internal server error' })
   }
@@ -45,7 +49,8 @@ export async function updateProduct(req: Request, res: Response) {
 
   try {
     const product = await prisma.product.update({ where: { id }, data: result.data })
-    return res.json(product)
+    // Convertir id a string
+    return res.json({ ...product, id: product.id.toString() })
   } catch {
     return res.status(500).json({ error: 'Internal server error' })
   }

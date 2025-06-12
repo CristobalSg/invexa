@@ -1,13 +1,34 @@
 import type { Product } from "../types/product";
 
-const mockProducts: Product[] = [
-  { id: "1", name: "Pan", quantity: 20, cost: 500, price: 700 },
-  { id: "2", name: "Leche", quantity: 15, cost: 800, price: 1000 },
-];
+const API_URL = "/api/products";
 
-// GET
 export async function getProducts(): Promise<Product[]> {
-  return new Promise((res) => {
-    setTimeout(() => res(mockProducts), 500);
+  const res = await fetch(API_URL);
+  if (!res.ok) throw new Error("Error al obtener productos");
+  return res.json();
+}
+
+export async function createProduct(product: Omit<Product, "id">): Promise<Product> {
+  const res = await fetch(API_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(product),
   });
+  if (!res.ok) throw new Error("Error al crear producto");
+  return res.json();
+}
+
+export async function updateProduct(id: string, product: Partial<Omit<Product, "id">>): Promise<Product> {
+  const res = await fetch(`${API_URL}/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(product),
+  });
+  if (!res.ok) throw new Error("Error al actualizar producto");
+  return res.json();
+}
+
+export async function deleteProduct(id: string): Promise<void> {
+  const res = await fetch(`${API_URL}/${id}`, { method: "DELETE" });
+  if (!res.ok) throw new Error("Error al eliminar producto");
 }
