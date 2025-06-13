@@ -4,4 +4,5 @@ export interface Product {
   quantity: number;
   cost: number;
   price: number;
+  barcode?: string;
 }

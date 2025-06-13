@@ -5,11 +5,15 @@ import {
   createProduct,
   updateProduct,
   deleteProduct,
+  getProductByBarcode,
 } from '../controllers/product.controller'
 
 const router = Router()
 
-router.get('/', getProducts)
+router.get('/', (req, res, next) => {
+  if (req.query.barcode) return getProductByBarcode(req, res)
+  return getProducts(req, res)
+})
 router.get('/:id', getProduct)
 router.post('/', createProduct)
 router.put('/:id', updateProduct)

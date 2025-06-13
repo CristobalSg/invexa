@@ -3,6 +3,7 @@ import { z } from 'zod'
 export const createProductSchema = z.object({
   name: z.string().min(1),
   description: z.string().optional(),
+  barcode: z.string().min(1).optional(),
   cost: z.number().int().nonnegative().default(0),
   price: z.number().int().nonnegative().default(0),
   quantity: z.number().int().nonnegative().default(0),
@@ -11,6 +12,7 @@ export const createProductSchema = z.object({
 export const updateProductSchema = z.object({
   name: z.string().min(1).optional(),
   description: z.string().optional(),
+  barcode: z.string().min(1).optional(),
   cost: z.number().int().nonnegative().optional(),
   price: z.number().int().nonnegative().optional(),
   quantity: z.number().int().nonnegative().optional(),

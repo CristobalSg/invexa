@@ -10,7 +10,10 @@ export async function createProduct(req: Request, res: Response) {
     const product = await prisma.product.create({ data: result.data })
     // Convertir id a string
     return res.status(201).json({ ...product, id: product.id.toString() })
-  } catch {
+  } catch (e: any) {
+    if (e.code === 'P2002' && e.meta?.target?.includes('barcode')) {
+      return res.status(400).json({ error: 'El código de barra ya existe' })
+    }
     return res.status(500).json({ error: 'Internal server error' })
   }
 }
@@ -51,7 +54,10 @@ export async function updateProduct(req: Request, res: Response) {
     const product = await prisma.product.update({ where: { id }, data: result.data })
     // Convertir id a string
     return res.json({ ...product, id: product.id.toString() })
-  } catch {
+  } catch (e: any) {
+    if (e.code === 'P2002' && e.meta?.target?.includes('barcode')) {
+      return res.status(400).json({ error: 'El código de barra ya existe' })
+    }
     return res.status(500).json({ error: 'Internal server error' })
   }
 }
@@ -63,6 +69,19 @@ export async function deleteProduct(req: Request, res: Response) {
   try {
     await prisma.product.delete({ where: { id } })
     return res.status(204).send()
+  } catch {
+    return res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+export async function getProductByBarcode(req: Request, res: Response) {
+  const barcode = req.query.barcode as string
+  if (!barcode) return res.status(400).json({ error: 'Barcode is required' })
+
+  try {
+    const product = await prisma.product.findUnique({ where: { barcode } })
+    if (!product) return res.status(404).json({ error: 'Product not found' })
+    return res.json({ ...product, id: product.id.toString() })
   } catch {
     return res.status(500).json({ error: 'Internal server error' })
   }

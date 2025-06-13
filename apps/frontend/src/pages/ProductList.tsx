@@ -3,7 +3,7 @@ import { getProducts, createProduct, updateProduct, deleteProduct } from "../ser
 import { useState } from "react";
 import type { Product } from "../types/product";
 
-const emptyForm = { name: "", quantity: 0, cost: 0, price: 0 };
+const emptyForm = { name: "", quantity: 0, cost: 0, price: 0, barcode: "" };
 
 export default function ProductList() {
   const queryClient = useQueryClient();
@@ -39,7 +39,7 @@ export default function ProductList() {
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const { name, value } = e.target;
-    setForm((f) => ({ ...f, [name]: name === "name" ? value : Number(value) }));
+    setForm((f) => ({ ...f, [name]: name === "name" || name === "barcode" ? value : Number(value) }));
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -53,7 +53,7 @@ export default function ProductList() {
 
   function handleEdit(product: Product) {
     setEditingId(product.id);
-    setForm({ name: product.name, quantity: product.quantity, cost: product.cost, price: product.price });
+    setForm({ name: product.name, quantity: product.quantity, cost: product.cost, price: product.price, barcode: product.barcode || "" });
   }
 
   function handleDelete(id: string) {
@@ -70,8 +70,9 @@ export default function ProductList() {
   return (
     <div className="max-w-2xl mx-auto p-4">
       <h1 className="text-2xl font-bold mb-4">Productos</h1>
-      <form onSubmit={handleSubmit} className="mb-6 grid grid-cols-5 gap-2 items-end">
+      <form onSubmit={handleSubmit} className="mb-6 grid grid-cols-6 gap-2 items-end">
         <input name="name" value={form.name} onChange={handleChange} placeholder="Nombre" className="border p-2 rounded col-span-2" required />
+        <input name="barcode" value={form.barcode} onChange={handleChange} placeholder="Código de barra" className="border p-2 rounded" required />
         <input name="quantity" type="text" value={form.quantity} onChange={handleChange} placeholder="Cantidad" className="border p-2 rounded" required />
         <input name="cost" type="text" value={form.cost} onChange={handleChange} placeholder="Costo" className="border p-2 rounded" required />
         <input name="price" type="text" value={form.price} onChange={handleChange} placeholder="Precio" className="border p-2 rounded" required />
@@ -88,6 +89,7 @@ export default function ProductList() {
         <thead>
           <tr className="bg-gray-100">
             <th className="border p-2">Nombre</th>
+            <th className="border p-2">Código de barra</th>
             <th className="border p-2">Cantidad</th>
             <th className="border p-2">Costo</th>
             <th className="border p-2">Precio</th>
@@ -98,6 +100,7 @@ export default function ProductList() {
           {products?.map((prod) => (
             <tr key={prod.id}>
               <td className="border p-2">{prod.name}</td>
+              <td className="border p-2">{prod.barcode}</td>
               <td className="border p-2">{prod.quantity}</td>
               <td className="border p-2">${prod.cost}</td>
               <td className="border p-2">${prod.price}</td>

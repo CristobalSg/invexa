@@ -32,3 +32,9 @@ export async function deleteProduct(id: string): Promise<void> {
   const res = await fetch(`${API_URL}/${id}`, { method: "DELETE" });
   if (!res.ok) throw new Error("Error al eliminar producto");
 }
+
+export async function getProductByBarcode(barcode: string): Promise<Product | null> {
+  const res = await fetch(`${API_URL}?barcode=${encodeURIComponent(barcode)}`);
+  if (!res.ok) return null;
+  return res.json();
+}
