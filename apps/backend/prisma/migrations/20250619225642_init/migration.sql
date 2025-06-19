@@ -39,6 +39,9 @@ CREATE TABLE "Product" (
     "name" TEXT NOT NULL,
     "description" TEXT,
     "barcode" TEXT,
+    "cost" INTEGER NOT NULL DEFAULT 0,
+    "price" INTEGER NOT NULL DEFAULT 0,
+    "quantity" INTEGER NOT NULL DEFAULT 0,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "Product_pkey" PRIMARY KEY ("id")
