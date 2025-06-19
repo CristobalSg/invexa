@@ -17,17 +17,36 @@ async function createUser(req, res) {
     }
     try {
         const user = await client_1.default.user.create({ data: result.data });
-        return res.status(201).json(user);
+        // Convertir BigInt a string para serializar correctamente
+        const userSerialized = {
+            ...user,
+            id: user.id.toString(),
+            roleId: user.roleId ? user.roleId.toString() : undefined,
+        };
+        return res.status(201).json(userSerialized);
     }
     catch (error) {
         console.error('Error creating user:', error);
+        if (error.code === 'P2002' && error.meta?.target?.includes('username')) {
+            return res.status(400).json({ error: 'El nombre de usuario ya existe' });
+        }
+        if (error.code === 'P2002' && error.meta?.target?.includes('email')) {
+            return res.status(400).json({ error: 'El email ya existe' });
+        }
         return res.status(500).json({ error: 'Internal server error' });
     }
 }
 async function getUsers(req, res) {
     try {
         const users = await client_1.default.user.findMany({ include: { role: true } });
-        return res.json(users);
+        // Serializar BigInt y roleId correctamente
+        const usersSerialized = users.map(user => ({
+            ...user,
+            id: user.id.toString(),
+            roleId: user.roleId ? user.roleId.toString() : undefined,
+            role: user.role || null,
+        }));
+        return res.json(usersSerialized);
     }
     catch (error) {
         console.error('Error fetching users:', error);
@@ -68,10 +87,25 @@ async function updateUser(req, res) {
             where: { id },
             data: result.data
         });
-        return res.json(user);
+        // Convertir BigInt a string para serializar correctamente
+        const userSerialized = {
+            ...user,
+            id: user.id.toString(),
+            roleId: user.roleId ? user.roleId.toString() : undefined,
+        };
+        return res.json(userSerialized);
     }
     catch (error) {
         console.error('Error updating user:', error);
+        if (error.code === 'P2002' && error.meta?.target?.includes('username')) {
+            return res.status(400).json({ error: 'El nombre de usuario ya existe' });
+        }
+        if (error.code === 'P2002' && error.meta?.target?.includes('email')) {
+            return res.status(400).json({ error: 'El email ya existe' });
+        }
+        if (error.code === 'P2025') {
+            return res.status(404).json({ error: 'Usuario no encontrado' });
+        }
         return res.status(500).json({ error: 'Internal server error' });
     }
 }

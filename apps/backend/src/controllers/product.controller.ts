@@ -7,11 +7,10 @@ export async function createProduct(req: Request, res: Response) {
   if (!result.success) return res.status(400).json({ error: result.error.format() })
 
   try {
-    const product = await prisma.product.create({ data: result.data })
-    // Convertir id a string
+    const product = await prisma.product.create({ data: { ...result.data, productTypeId: 1 } }) // Asignar un productTypeId por defecto
     return res.status(201).json({ ...product, id: product.id.toString() })
   } catch (e: any) {
-    if (e.code === 'P2002' && e.meta?.target?.includes('barcode')) {
+    if (e.code === 'P2002' && e.meta?.target?.includes('barCode')) {
       return res.status(400).json({ error: 'El código de barra ya existe' })
     }
     return res.status(500).json({ error: 'Internal server error' })
@@ -21,7 +20,6 @@ export async function createProduct(req: Request, res: Response) {
 export async function getProducts(req: Request, res: Response) {
   try {
     const products = await prisma.product.findMany()
-    // Convertir id a string para cada producto
     const productsWithStringId = products.map((p) => ({ ...p, id: p.id.toString() }))
     return res.json(productsWithStringId)
   } catch {
@@ -36,7 +34,6 @@ export async function getProduct(req: Request, res: Response) {
   try {
     const product = await prisma.product.findUnique({ where: { id } })
     if (!product) return res.status(404).json({ error: 'Product not found' })
-    // Convertir id a string
     return res.json({ ...product, id: product.id.toString() })
   } catch {
     return res.status(500).json({ error: 'Internal server error' })
@@ -52,10 +49,9 @@ export async function updateProduct(req: Request, res: Response) {
 
   try {
     const product = await prisma.product.update({ where: { id }, data: result.data })
-    // Convertir id a string
     return res.json({ ...product, id: product.id.toString() })
   } catch (e: any) {
-    if (e.code === 'P2002' && e.meta?.target?.includes('barcode')) {
+    if (e.code === 'P2002' && e.meta?.target?.includes('barCode')) {
       return res.status(400).json({ error: 'El código de barra ya existe' })
     }
     return res.status(500).json({ error: 'Internal server error' })
@@ -75,11 +71,12 @@ export async function deleteProduct(req: Request, res: Response) {
 }
 
 export async function getProductByBarcode(req: Request, res: Response) {
-  const barcode = req.query.barcode as string
-  if (!barcode) return res.status(400).json({ error: 'Barcode is required' })
+  // Permitir ambos: ?barCode=... y ?barcode=... para compatibilidad
+  const barCode = (req.query.barCode || req.query.barcode) as string
+  if (!barCode) return res.status(400).json({ error: 'Barcode is required' })
 
   try {
-    const product = await prisma.product.findUnique({ where: { barcode } })
+    const product = await prisma.product.findUnique({ where: { barCode } })
     if (!product) return res.status(404).json({ error: 'Product not found' })
     return res.json({ ...product, id: product.id.toString() })
   } catch {
