@@ -7,23 +7,32 @@ export async function createProduct(req: Request, res: Response) {
   if (!result.success) return res.status(400).json({ error: result.error.format() })
 
   try {
-    const product = await prisma.product.create({ data: { ...result.data, productTypeId: 1 } }) // Asignar un productTypeId por defecto
+    const product = await prisma.product.create({ data: result.data })
     return res.status(201).json({ ...product, id: product.id.toString() })
   } catch (e: any) {
+    console.error('Error en createProduct:', e)
     if (e.code === 'P2002' && e.meta?.target?.includes('barCode')) {
       return res.status(400).json({ error: 'El código de barra ya existe' })
     }
-    return res.status(500).json({ error: 'Internal server error' })
+    return res.status(500).json({ error: 'Internal server error', details: e.message })
   }
 }
 
 export async function getProducts(req: Request, res: Response) {
   try {
-    const products = await prisma.product.findMany()
+    const products = await prisma.product.findMany({
+      include: {
+        productType: true,
+        presentations: true,
+        inventories: true,
+        transactions: true,
+      },
+    })
     const productsWithStringId = products.map((p) => ({ ...p, id: p.id.toString() }))
     return res.json(productsWithStringId)
-  } catch {
-    return res.status(500).json({ error: 'Internal server error' })
+  } catch (e: any) {
+    console.error('Error en getProducts:', e)
+    return res.status(500).json({ error: 'Internal server error', details: e.message })
   }
 }
 
