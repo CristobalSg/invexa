@@ -1,8 +1,9 @@
 // src/App.tsx
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Layout from "./components/Layout";
+
 import Home from "./pages/Home";
-import Products from "./pages/ProductList";
+import InvetoryPage from "./pages/InventoryPage";
 
 export default function App() {
   return (
@@ -10,7 +11,7 @@ export default function App() {
       <Layout>
         <Routes>
           <Route path="/" element={<Home />} />
-          <Route path="/products" element={<Products />} />
+          <Route path="/products" element={<InvetoryPage />} />
         </Routes>
       </Layout>
     </BrowserRouter>

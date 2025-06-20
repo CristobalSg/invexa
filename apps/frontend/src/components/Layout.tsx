@@ -22,7 +22,9 @@ export default function Layout({ children }: LayoutProps) {
 
       {/* Contenido principal */}
       <div className="pt-16 px-4 max-w-screen-xl mx-auto">
-        {children}
+        <div className="min-h-screen bg-gray-100 p-6">
+          {children}
+        </div>
       </div>
     </div>
   );
