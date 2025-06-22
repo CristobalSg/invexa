@@ -8,9 +8,9 @@ type ProductModalProps = {
   form: {
     name: string;
     barcode?: string;
-    quantity: string;
-    cost: string;
-    price: string;
+    quantity: number;
+    cost: number;
+    price: number;
   };
   handleSubmit: (e: React.FormEvent<HTMLFormElement>) => void;
   handleChange: (e: React.ChangeEvent<HTMLInputElement>) => void;

@@ -12,9 +12,6 @@ import type { Product } from "../types/product";
 import { ProductCard } from "../components/ProductCard";
 import { ProductModal } from "../components/ProductModal";
 
-import { Menu, MenuButton, MenuItem, MenuItems} from '@headlessui/react'
-import { ChevronDownIcon} from '@heroicons/react/20/solid'
-
 // Estado inicial vacío del formulario (sin ID porque se añade al guardar)
 const emptyForm = { name: "", quantity: 0, cost: 0, price: 0, barcode: "" };
 
