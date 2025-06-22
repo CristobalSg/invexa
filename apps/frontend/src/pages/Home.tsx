@@ -57,26 +57,24 @@ export default function Home() {
 
 
     return (
-        <div className="min-h-screen bg-gray-100 p-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* Columna principal (2/3) */}
-                <div className="md:col-span-2 space-y-4">
-                    <InputForm title="Codigo de barra....." onProductFound={handleProductFound}/>
-                    <MainList 
-                        products={cart} 
-                        onDecrease={handleDecreaseQuantity}
-                        onRemove={handleRemoveProduct}
-                    />
-                </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Columna principal (2/3) */}
+            <div className="md:col-span-2 space-y-4">
+                <InputForm title="Codigo de barra....." onProductFound={handleProductFound}/>
+                <MainList 
+                    products={cart} 
+                    onDecrease={handleDecreaseQuantity}
+                    onRemove={handleRemoveProduct}
+                />
+            </div>
 
-                {/* Columna secundaria (1/3) */}
-                <div className="md:col-span-1 space-y-4">
-                    <InputForm title="Buscar producto" onSearchChange={setSearchTerm}/>
-                    <SideList 
-                        searchTerm={searchTerm}
-                        onProductClick={handleProductFound}/>
-                    <StatsPanel total={total} onFinish={handleFinishSale}/>
-                </div>
+            {/* Columna secundaria (1/3) */}
+            <div className="md:col-span-1 space-y-4">
+                <InputForm title="Buscar producto" onSearchChange={setSearchTerm}/>
+                <SideList 
+                    searchTerm={searchTerm}
+                    onProductClick={handleProductFound}/>
+                <StatsPanel total={total} onFinish={handleFinishSale}/>
             </div>
         </div>
     )
