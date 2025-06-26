@@ -15,7 +15,17 @@ export async function createTransaction(req: Request, res: Response) {
 
 export async function getTransactions(req: Request, res: Response) {
   try {
-    const transactions = await prisma.transaction.findMany()
+    const { from, to } = req.query
+    let where = {}
+    if (from || to) {
+      where = {
+        date: {
+          ...(from ? { gte: new Date(from as string) } : {}),
+          ...(to ? { lte: new Date(to as string) } : {})
+        }
+      }
+    }
+    const transactions = await prisma.transaction.findMany({ where })
     return res.json(transactions)
   } catch {
     return res.status(500).json({ error: 'Internal server error' })

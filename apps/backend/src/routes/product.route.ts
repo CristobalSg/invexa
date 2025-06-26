@@ -6,7 +6,9 @@ import {
   updateProduct,
   deleteProduct,
   getProductByBarcode,
-} from '../controllers/product.controller'
+  createFullProductFlow,
+} 
+from '../controllers/product.controller'
 
 const router = Router()
 
@@ -16,6 +18,7 @@ router.get('/', (req, res, next) => {
 })
 router.get('/:id', getProduct)
 router.post('/', createProduct)
+router.post('/full', createFullProductFlow)
 router.put('/:id', updateProduct)
 router.delete('/:id', deleteProduct)
 

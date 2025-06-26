@@ -6,7 +6,7 @@ export const createPresentationSchema = z.object({
   baseQuantity: z.number().int().min(1),
   price: z.number().min(0),
   unitLabel: z.string().min(1),
-  qrCode: z.string().optional()
+  barCode: z.string().optional()
 })
 
 export const updatePresentationSchema = z.object({
@@ -14,7 +14,7 @@ export const updatePresentationSchema = z.object({
   baseQuantity: z.number().int().min(1).optional(),
   price: z.number().min(0).optional(),
   unitLabel: z.string().min(1).optional(),
-  qrCode: z.string().optional()
+  barCode: z.string().optional()
 })
 
 export type CreatePresentationInput = z.infer<typeof createPresentationSchema>
