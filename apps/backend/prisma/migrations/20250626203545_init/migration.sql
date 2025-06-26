@@ -49,7 +49,7 @@ CREATE TABLE "Presentation" (
     "baseQuantity" INTEGER NOT NULL,
     "price" DOUBLE PRECISION NOT NULL,
     "unitLabel" TEXT NOT NULL,
-    "qrCode" TEXT,
+    "barCode" TEXT,
 
     CONSTRAINT "Presentation_pkey" PRIMARY KEY ("id")
 );
@@ -88,7 +88,7 @@ CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
 CREATE UNIQUE INDEX "Product_barCode_key" ON "Product"("barCode");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "Presentation_qrCode_key" ON "Presentation"("qrCode");
+CREATE UNIQUE INDEX "Presentation_barCode_key" ON "Presentation"("barCode");
 
 -- AddForeignKey
 ALTER TABLE "User" ADD CONSTRAINT "User_roleId_fkey" FOREIGN KEY ("roleId") REFERENCES "Role"("id") ON DELETE SET NULL ON UPDATE CASCADE;
