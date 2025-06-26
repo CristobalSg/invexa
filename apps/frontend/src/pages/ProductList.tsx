@@ -68,7 +68,7 @@ export default function ProductList() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto p-4">
+    <div className="min-h-screen bg-gray-100 p-6">
       <h1 className="text-2xl font-bold mb-4">Productos</h1>
       <form onSubmit={handleSubmit} className="mb-6 grid grid-cols-6 gap-2 items-end">
         <input name="name" value={form.name} onChange={handleChange} placeholder="Nombre" className="border p-2 rounded col-span-2" required />

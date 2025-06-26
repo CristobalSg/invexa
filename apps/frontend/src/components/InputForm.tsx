@@ -5,9 +5,10 @@ import type { Product } from "../types/product";
 interface Props {
   title: string;
   onProductFound?: (product: Product) => void;
+  onSearchChange?: (text: string) => void;
 }
 
-export default function InputForm({ title, onProductFound }: Props) {
+export default function InputForm({ title, onProductFound, onSearchChange }: Props) {
   const [value, setValue] = useState("");
   const [error, setError] = useState("");
 
@@ -31,7 +32,10 @@ export default function InputForm({ title, onProductFound }: Props) {
         placeholder={title}
         className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
         value={value}
-        onChange={e => setValue(e.target.value)}
+        onChange={e => {
+          setValue(e.target.value);
+          onSearchChange?.(e.target.value);
+        }}
         onKeyDown={handleKeyDown}
       />
       {error && <div className="text-red-500 text-sm mt-1">{error}</div>}
