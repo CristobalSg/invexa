@@ -100,6 +100,46 @@ Obtiene todos los usuarios
 
 ---
 
+### `POST /api/products`
+
+Crea un nuevo producto  
+```json
+{
+  "name": "Coca Cola",
+  "barCode": "1234567890123",
+  "productTypeId": 1
+}
+```
+
+### `GET /api/products`
+
+Obtiene todos los productos
+
+### `GET /api/products/:id`
+
+Obtiene un producto por su ID
+
+### `GET /api/products?barcode=1234567890123`
+
+Obtiene un producto por su código de barras
+
+### `PUT /api/products/:id`
+
+Actualiza un producto existente  
+```json
+{
+  "name": "Coca Cola Light",
+  "barCode": "1234567890123",
+  "productTypeId": 2
+}
+```
+
+### `DELETE /api/products/:id`
+
+Elimina un producto por su ID
+
+---
+
 ## 📦 Despliegue
 
 Este backend puede desplegarse fácilmente en:
