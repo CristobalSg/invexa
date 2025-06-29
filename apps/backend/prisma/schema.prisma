@@ -25,6 +25,18 @@ model User {
 
   roleId BigInt?
   role   Role?   @relation(fields: [roleId], references: [id])
+
+  companyId BigInt?
+  company   Company? @relation(fields: [companyId], references: [id])
+}
+
+model Company {
+  id          BigInt   @id @default(autoincrement())
+  name        String   @unique
+  createdAt   DateTime @default(now())
+  users       User[]
+  products    Product[]
+  inventories Inventory[]
 }
 
 // -------------------
@@ -37,6 +49,9 @@ model Product {
   presentations Presentation[]
   inventories   Inventory[]
   transactions  Transaction[]
+
+  companyId BigInt?
+  company   Company? @relation(fields: [companyId], references: [id])
 }
 
 model ProductType {
@@ -61,6 +76,9 @@ model Inventory {
   product   Product @relation(fields: [productId], references: [id])
   productId Int
   quantity  Int // Stored in base units
+
+  companyId BigInt?
+  company   Company? @relation(fields: [companyId], references: [id])
 }
 
 model Transaction {

@@ -5,6 +5,7 @@ import { createProductTypeSchema } from '../schemas/productType.schema'
 import { createPresentationSchema } from '../schemas/presentation.schema'
 import { createInventorySchema } from '../schemas/inventory.schema'
 import { createTransactionSchema } from '../schemas/transaction.schema'
+import { AuthRequest } from './auth.middleware';
 
 export async function createProduct(req: Request, res: Response) {
   const result = createProductSchema.safeParse(req.body)
@@ -132,3 +133,14 @@ export async function createFullProductFlow(req: Request, res: Response) {
     return res.status(500).json({ error: 'Internal server error', details: (e instanceof Error ? e.message : String(e)) });
   }
 }
+
+// Ejemplo de uso multiempresa en un controlador:
+export const getAllProducts = async (req: AuthRequest, res: Response) => {
+  try {
+    const companyId = req.user?.companyId;
+    const products = await prisma.product.findMany({ where: { companyId: companyId ? BigInt(companyId) : undefined } });
+    res.json(products);
+  } catch (error) {
+    res.status(500).json({ message: 'Error al obtener productos' });
+  }
+};
