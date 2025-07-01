@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import {
-  getInventories,
+  getAllInventory,
   getInventory,
   createInventory,
   updateInventory,
@@ -9,7 +9,7 @@ import {
 
 const router = Router()
 
-router.get('/', getInventories)
+router.get('/', getAllInventory)
 router.get('/:id', getInventory)
 router.post('/', createInventory)
 router.put('/:id', updateInventory)

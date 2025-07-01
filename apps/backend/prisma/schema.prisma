@@ -8,81 +8,92 @@ datasource db {
 }
 
 model Role {
-  id          BigInt     @id @default(autoincrement())
-  name        String     @unique
+  id          BigInt  @id @default(autoincrement())
+  name        String  @unique
   description String?
 
-  users       User[]
+  users User[]
 }
 
 model User {
-  id        BigInt     @id @default(autoincrement())
-  username  String     @unique
+  id        BigInt   @id @default(autoincrement())
+  username  String   @unique
   password  String
   name      String
-  email     String     @unique
-  createdAt DateTime   @default(now())
+  email     String   @unique
+  createdAt DateTime @default(now())
 
-  roleId    BigInt?
-  role      Role?      @relation(fields: [roleId], references: [id])
+  roleId BigInt?
+  role   Role?   @relation(fields: [roleId], references: [id])
 
-  warehousesManaged Warehouse[] @relation("Manager")
-  movements         Movement[]
+  companyId BigInt?
+  company   Company? @relation(fields: [companyId], references: [id])
 }
 
-model Warehouse {
-  id        BigInt     @id @default(autoincrement())
-  name      String
-  location  String?
-
-  managerId BigInt?
-  manager   User?      @relation("Manager", fields: [managerId], references: [id])
-
-  inventory Inventory[]
-  movements Movement[]
+model Company {
+  id          BigInt   @id @default(autoincrement())
+  name        String   @unique
+  createdAt   DateTime @default(now())
+  users       User[]
+  products    Product[]
+  inventories Inventory[]
 }
 
+// -------------------
 model Product {
-  id          BigInt     @id @default(autoincrement())
-  name        String
-  description String?
-  barcode     String?    @unique
-  cost        Int        @default(0)
-  price       Int        @default(0)
-  quantity    Int        @default(0)
-  createdAt   DateTime   @default(now())
+  id            Int            @id @default(autoincrement())
+  name          String
+  barCode       String?        @unique
+  productType   ProductType    @relation(fields: [productTypeId], references: [id])
+  productTypeId Int
+  presentations Presentation[]
+  inventories   Inventory[]
+  transactions  Transaction[]
 
-  inventory   Inventory[]
-  movements   Movement[]
+  companyId BigInt?
+  company   Company? @relation(fields: [companyId], references: [id])
+}
+
+model ProductType {
+  id       Int       @id @default(autoincrement())
+  name     String // e.g., "by weight", "by unit", "split pack"
+  products Product[]
+}
+
+model Presentation {
+  id           Int     @id @default(autoincrement())
+  product      Product @relation(fields: [productId], references: [id])
+  productId    Int
+  description  String // e.g., "Box x24", "Unit", "Pack x4"
+  baseQuantity Int // How many base units this presentation includes
+  price        Float
+  unitLabel    String // "unit", "kg", "pack"
+  barCode      String? @unique
 }
 
 model Inventory {
-  id           BigInt     @id @default(autoincrement())
-  productId    BigInt
-  warehouseId  BigInt
-  quantity     Int        @default(0)
-  lastUpdated  DateTime   @default(now())
+  id        Int     @id @default(autoincrement())
+  product   Product @relation(fields: [productId], references: [id])
+  productId Int
+  quantity  Int // Stored in base units
 
-  product      Product    @relation(fields: [productId], references: [id])
-  warehouse    Warehouse  @relation(fields: [warehouseId], references: [id])
+  companyId BigInt?
+  company   Company? @relation(fields: [companyId], references: [id])
 }
 
-model Movement {
-  id          BigInt     @id @default(autoincrement())
-  productId   BigInt
-  warehouseId BigInt
-  userId      BigInt
-  type        MovementType
-  quantity    Int
-  createdAt   DateTime   @default(now())
-
-  product     Product    @relation(fields: [productId], references: [id])
-  warehouse   Warehouse  @relation(fields: [warehouseId], references: [id])
-  user        User       @relation(fields: [userId], references: [id])
+model Transaction {
+  id             Int             @id @default(autoincrement())
+  product        Product         @relation(fields: [productId], references: [id])
+  productId      Int
+  type           TransactionType
+  quantity       Int
+  presentationId Int?
+  date           DateTime        @default(now())
 }
 
-enum MovementType {
-  IN
-  OUT
-  ADJUST
+enum TransactionType {
+  SALE
+  WASTE
+  ADJUSTMENT
+  ENTRY
 }
