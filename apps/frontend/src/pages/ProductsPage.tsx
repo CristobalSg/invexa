@@ -1,141 +1,110 @@
-// src/pages/ProductsPage.tsx
-import { useForm } from "react-hook-form";
-import { z } from "zod";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createProduct, getProducts } from "../services/productService";
+// ProductsPage.tsx
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { getProducts, deleteProduct } from "../services/productService";
 import type { Product } from "../types/product";
 
-const productSchema = z.object({
-  name: z.string().min(1, "Nombre requerido"),
-  barCode: z.string().optional(),
-  productTypeId: z.coerce.number().int(),
-
-  presentation: z.object({
-    description: z.string().min(1),
-    baseQuantity: z.coerce.number().int().positive(),
-    price: z.coerce.number().positive(),
-    unitLabel: z.string().min(1),
-    barCode: z.string().optional(),
-  }),
-
-  initialQuantity: z.coerce.number().int().nonnegative(),
-});
-
-type FormData = z.infer<typeof productSchema>;
+import { ProductModal } from "../components/ProductModal";
+import { ProductCard } from "../components/ProductCard";
+import ProductFormCreate from "../components/ProductFormCreate";
 
 export default function ProductsPage() {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [productToEdit, setProductToEdit] = useState<Product | null>(null);
+
   const queryClient = useQueryClient();
 
-  const { data: products = [], isLoading } = useQuery({
+  const { data: products, isLoading, error } = useQuery({
     queryKey: ["products"],
     queryFn: getProducts,
   });
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-    reset,
-  } = useForm<FormData>({
-    resolver: zodResolver(productSchema),
-    defaultValues: {
-      productTypeId: 1,
-    },
-  });
-
-  const mutation = useMutation({
-    mutationFn: createProduct,
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteProduct(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["products"] });
-      reset();
     },
   });
 
-  const onSubmit = (data: FormData) => {
-    mutation.mutate(data);
+  const handleEdit = (product: Product) => {
+    setProductToEdit(product);
+    setIsModalOpen(true);
   };
+
+  const handleDelete = (id: string) => {
+    if (confirm("¿Estás seguro de que deseas eliminar este producto?")) {
+      deleteMutation.mutate(id);
+    }
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setProductToEdit(null);
+  };
+
+  const handleSuccess = () => {
+    queryClient.invalidateQueries({ queryKey: ["products"] });
+    handleCloseModal();
+  };
+
+  if (isLoading) return <p>Cargando productos...</p>;
+  if (error) return <p className="text-red-500">Error al cargar productos</p>;
 
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
-      <h1 className="text-2xl font-bold">Crear producto</h1>
+      <div className="flex justify-between items-center mb-4">
+        <h1 className="text-2xl font-bold">Gestión de Inventario</h1>
+        <button
+          onClick={() => {
+            setIsModalOpen(true);
+            setProductToEdit(null);
+          }}
+          className="px-4 py-2 bg-blue-600 text-white rounded"
+        >
+          Crear producto
+        </button>
+      </div>
 
-      <form onSubmit={handleSubmit(onSubmit)} className="grid gap-4 grid-cols-1 md:grid-cols-2">
-        <div>
-          <label className="block text-sm font-medium">Nombre</label>
-          <input {...register("name")} className="input" />
-          {errors.name && <p className="text-red-500 text-sm">{errors.name.message}</p>}
-        </div>
+      <ProductModal isOpen={isModalOpen} onClose={handleCloseModal}>
+        <ProductFormCreate
+          initialData={productToEdit ?? undefined}
+          onSuccess={handleSuccess}
+        />
+      </ProductModal>
 
-        <div>
-          <label className="block text-sm font-medium">Código de barras</label>
-          <input {...register("barCode")} className="input" />
-        </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {products?.map((product) => (
+          <ProductCard
+            key={product.id}
+            name={product.name}
+            description={
+              <div>
+                <p className="text-sm text-gray-500">
+                  Código de barras: {product.barCode}
+                </p>
+                <p className="text-sm text-gray-500">
+                  Tipo: {product.productType.name}
+                </p>
 
-        <div>
-          <label className="block text-sm font-medium">Tipo de producto (ID)</label>
-          <input type="number" {...register("productTypeId")} className="input" />
-          {errors.productTypeId && <p className="text-red-500 text-sm">{errors.productTypeId.message}</p>}
-        </div>
+                <h3 className="font-semibold mt-2">Presentaciones:</h3>
+                <ul className="list-disc ml-5">
+                  {product.presentations.map((p) => (
+                    <li key={p.id}>
+                      {p.description} — {p.unitLabel} — ${p.price}
+                    </li>
+                  ))}
+                </ul>
 
-        <div className="col-span-full border-t pt-4">
-          <h2 className="text-lg font-semibold">Presentación inicial</h2>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium">Descripción</label>
-          <input {...register("presentation.description")} className="input" />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium">Cantidad base</label>
-          <input type="number" {...register("presentation.baseQuantity")} className="input" />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium">Precio</label>
-          <input type="number" step="0.01" {...register("presentation.price")} className="input" />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium">Unidad (ej. unidad, kg)</label>
-          <input {...register("presentation.unitLabel")} className="input" />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium">Código de barras (presentación)</label>
-          <input {...register("presentation.barCode")} className="input" />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium">Inventario inicial</label>
-          <input type="number" {...register("initialQuantity")} className="input" />
-        </div>
-
-        <div className="col-span-full">
-          <button
-            type="submit"
-            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
-            disabled={mutation.isPending}
-          >
-            {mutation.isPending ? "Guardando..." : "Guardar"}
-          </button>
-        </div>
-      </form>
-
-      <div>
-        <h2 className="text-xl font-bold mt-8">Productos</h2>
-        {isLoading ? (
-          <p>Cargando productos...</p>
-        ) : (
-          <ul className="mt-4 space-y-2">
-            {products.map((p: Product) => (
-              <li key={p.id} className="border p-2 rounded shadow">
-                <strong>{p.name}</strong> - Tipo ID: {p.productTypeId} - Barcode: {p.barCode || "—"}
-              </li>
-            ))}
-          </ul>
-        )}
+                <h3 className="font-semibold mt-2">Inventario:</h3>
+                {product.inventories.map((inv) => (
+                  <p key={inv.id}>Cantidad: {inv.quantity}</p>
+                ))}
+              </div>
+            }
+            onEdit={() => handleEdit(product)}
+            onDelete={() => handleDelete(product.id.toString())}
+          />
+        ))}
       </div>
     </div>
   );

@@ -8,20 +8,79 @@ import { createTransactionSchema } from '../schemas/transaction.schema'
 import { AuthRequest } from './auth.middleware';
 
 export async function createProduct(req: Request, res: Response) {
-  const result = createProductSchema.safeParse(req.body)
-  if (!result.success) return res.status(400).json({ error: result.error.format() })
+    console.log("Body recibido:", req.body)
 
-  try {
-    const product = await prisma.product.create({ data: result.data })
-    return res.status(201).json({ ...product, id: product.id.toString() })
-  } catch (e: any) {
-    console.error('Error en createProduct:', e)
-    if (e.code === 'P2002' && e.meta?.target?.includes('barCode')) {
-      return res.status(400).json({ error: 'El código de barra ya existe' })
+   try {
+    const {
+      name,
+      barCode,
+      productTypeId,
+      companyId,
+      presentation,
+      initialQuantity,
+    } = req.body;
+
+    if (
+      !name ||
+      !productTypeId ||
+      !companyId ||
+      !presentation.price ||
+      !initialQuantity
+    ) {
+      return res.status(400).json({ error: "Faltan campos requeridos" });
     }
-    return res.status(500).json({ error: 'Internal server error', details: e.message })
+
+    const product = await prisma.product.create({
+      data: {
+        name,
+        barCode,
+        productTypeId,
+        companyId: companyId,
+        presentations: {
+          create: {
+            price: presentation.price,
+            ...(presentation.unitLabel && { unitLabel: presentation.unitLabel }),
+            ...(presentation.description && { description: presentation.description }),
+          },
+        },
+        inventories: {
+          create: {
+            quantity: initialQuantity,
+            companyId: companyId,
+          },
+        },
+      },
+      include: {
+        presentations: true,
+        inventories: true,
+      },
+    });
+
+    // Crear movimiento ENTRY (usa la primera presentación e inventario)
+    await prisma.transaction.create({
+      data: {
+        productId: product.id,
+        type: "ENTRY",
+        quantity: initialQuantity,
+        presentationId: product.presentations[0].id,
+      },
+    });
+
+    return res.status(201).json({
+      ...product,
+      id: product.id.toString(),
+    });
+  } catch (e: any) {
+    console.error("Error en createProduct:", e);
+    if (e.code === "P2002" && e.meta?.target?.includes("barCode")) {
+      return res.status(400).json({ error: "El código de barra ya existe" });
+    }
+    return res
+      .status(500)
+      .json({ error: "Internal server error", details: e.message });
   }
 }
+
 
 export async function getProducts(req: Request, res: Response) {
   try {
@@ -72,15 +131,34 @@ export async function updateProduct(req: Request, res: Response) {
 }
 
 export async function deleteProduct(req: Request, res: Response) {
-  const id = Number(req.params.id)
-  if (isNaN(id)) return res.status(400).json({ error: 'Invalid ID' })
-
   try {
-    await prisma.product.delete({ where: { id } })
-    return res.status(204).send()
-  } catch {
-    return res.status(500).json({ error: 'Internal server error' })
+  const id = Number(req.params.id);
+  if (isNaN(id)) {
+    return res.status(400).json({ error: "ID inválido" });
   }
+
+  await prisma.presentation.deleteMany({
+    where: { productId: id },
+  });
+
+  await prisma.inventory.deleteMany({
+    where: { productId: id },
+  });
+
+  await prisma.transaction.deleteMany({
+    where: { productId: id },
+  });
+
+  await prisma.product.delete({
+    where: { id },
+  });
+
+  return res.status(204).send();
+} catch (error) {
+  console.error("Error al eliminar producto:", error);
+  return res.status(500).json({ error: "Error interno del servidor" });
+}
+
 }
 
 export async function getProductByBarcode(req: Request, res: Response) {
@@ -138,7 +216,7 @@ export async function createFullProductFlow(req: Request, res: Response) {
 export const getAllProducts = async (req: AuthRequest, res: Response) => {
   try {
     const companyId = req.user?.companyId;
-    const products = await prisma.product.findMany({ where: { companyId: companyId ? BigInt(companyId) : undefined } });
+    const products = await prisma.product.findMany({ where: { companyId: companyId ? companyId : undefined } });
     res.json(products);
   } catch (error) {
     res.status(500).json({ message: 'Error al obtener productos' });

@@ -2,7 +2,7 @@
 export interface Product {
   id: number;
   name: string;
-  barCode?: string;
+  barCode: string;
   productType: {
     id: number;
     name: string;
@@ -17,14 +17,25 @@ export interface Product {
 
 export interface Presentation {
   id: number;
-  description: string;
-  baseQuantity: number;
   price: number;
-  unitLabel: string;
-  barCode?: string;
+  description?: string;
+  unitLabel?: string;
 }
 
 export interface Inventory {
   id: number;
   quantity: number;
 }
+
+export type CreateProductInput = {
+  name: string;
+  barCode: string;
+  productTypeId: number;
+  companyId: number;
+  presentation: {
+    price: number;
+    description?: string;
+    unitLabel?: string;
+  };
+  initialQuantity: number;
+};

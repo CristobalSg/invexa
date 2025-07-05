@@ -3,14 +3,13 @@ import axios from "axios";
 
 const initialState = {
   name: "",
+  barCode: "",
   productTypeId: 1,
-  companyId: "1", // Asegúrate de usar el ID real de la compañía
+  companyId: 1, // Asegúrate de usar el ID real de la compañía
   presentation: {
     description: "",
-    baseQuantity: 1,
     price: 0,
     unitLabel: "",
-    barCode: "",
   },
   initialQuantity: 0,
 };
@@ -19,7 +18,7 @@ export default function CreateProductForm() {
   const [form, setForm] = useState(initialState);
   const [message, setMessage] = useState("");
 
-  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
+  function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
     const { name, value } = e.target;
 
     if (name in form.presentation) {
@@ -27,7 +26,7 @@ export default function CreateProductForm() {
         ...prev,
         presentation: {
           ...prev.presentation,
-          [name]: name === "price" || name === "baseQuantity" ? Number(value) : value,
+          [name]: name === "price" ? Number(value) : value,
         },
       }));
     } else {
@@ -42,7 +41,7 @@ export default function CreateProductForm() {
     e.preventDefault();
     try {
       const token = localStorage.getItem("token");
-      const res = await axios.post(`${import.meta.env.VITE_API_URL}/products`, form, {
+      const res = await axios.post("http://localhost:3000/api/products", form, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -60,15 +59,19 @@ export default function CreateProductForm() {
       <h2 className="text-xl font-bold">Crear Producto</h2>
 
       <input name="name" placeholder="Nombre" value={form.name} onChange={handleChange} className="w-full p-2 border rounded" />
-      <input name="productTypeId" type="number" placeholder="ID tipo de producto" value={form.productTypeId} onChange={handleChange} className="w-full p-2 border rounded" />
-      <input name="companyId" type="number" placeholder="Compañia id" value={form.companyId} onChange={handleChange} className="w-full p-2 border rounded" />
+      <input name="barCode" placeholder="Código de barras" value={form.barCode} onChange={handleChange} className="w-full p-2 border rounded" />
 
-      <input name="description" placeholder="Descripción presentación" value={form.presentation.description} onChange={handleChange} className="w-full p-2 border rounded" />
-      <input name="baseQuantity" type="number" placeholder="Cantidad base" value={form.presentation.baseQuantity} onChange={handleChange} className="w-full p-2 border rounded" />
+      <select name="productTypeId" value={form.productTypeId} onChange={handleChange} className="w-full p-2 border rounded">
+        <option value={1}>Por unidad</option>
+        <option value={2}>Por kilogramo</option>
+      </select>
+
       <input name="price" type="number" placeholder="Precio" value={form.presentation.price} onChange={handleChange} className="w-full p-2 border rounded" />
-      <input name="unitLabel" placeholder="Unidad" value={form.presentation.unitLabel} onChange={handleChange} className="w-full p-2 border rounded" />
       <input name="initialQuantity" type="number" placeholder="Cantidad inicial" value={form.initialQuantity} onChange={handleChange} className="w-full p-2 border rounded" />
-      <input name="barCode" placeholder="Código de barras" value={form.presentation.barCode} onChange={handleChange} className="w-full p-2 border rounded" />
+
+      <p>*</p>      
+      <input name="unitLabel" placeholder="Unidad" value={form.presentation.unitLabel} onChange={handleChange} className="w-full p-2 border rounded" />
+      <input name="description" placeholder="Descripción presentación" value={form.presentation.description} onChange={handleChange} className="w-full p-2 border rounded" />
 
       <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded">Crear</button>
 
