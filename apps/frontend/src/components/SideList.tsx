@@ -13,6 +13,8 @@ export default function SideList({ searchTerm, onProductClick }: Props) {
     queryFn: getProducts,
   })
 
+  console.log(products)
+  
   if (isLoading) {
     return (
       <div className="bg-white p-6 rounded-xl shadow-lg">
@@ -85,16 +87,17 @@ export default function SideList({ searchTerm, onProductClick }: Props) {
                   <div className="flex flex-wrap gap-3 text-sm text-gray-600">
                     <span className="flex items-center">
                       <span className="w-2 h-2 bg-blue-400 rounded-full mr-2"></span>
-                      Código: <span className="font-mono ml-1">{prod.barcode}</span>
+                      Código: <span className="font-mono ml-1">{prod.barCode}</span>
                     </span>
 
+                    {/* Aqui va la cantidad */}
                     <span className="flex items-center">
                       <span className="w-2 h-2 bg-green-400 rounded-full mr-2"></span>
-                      {prod.quantity} unidades
+                      {prod.inventories[0].quantity} unidades
                     </span>
 
                     <span className="flex items-center font-semibold text-gray-800">
-                      <span className="w-2 h-2 bg-yellow-400 rounded-full mr-2"></span>${prod.price}
+                      <span className="w-2 h-2 bg-yellow-400 rounded-full mr-2"></span>${prod.presentations[0].price}
                     </span>
                   </div>
                 </div>

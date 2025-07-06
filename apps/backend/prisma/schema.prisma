@@ -7,82 +7,101 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Role {
-  id          BigInt     @id @default(autoincrement())
-  name        String     @unique
-  description String?
+enum TransactionType {
+  SALE
+  WASTE
+  ADJUSTMENT
+  ENTRY
+}
+
+// ───────────────
+// MODELOS BASE
+// ───────────────
+
+model Company {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  createdAt DateTime @default(now())
 
   users       User[]
+  products    Product[]
+  inventories Inventory[]
+}
+
+model Role {
+  id          Int     @id @default(autoincrement())
+  name        String  @unique
+  description String?
+
+  users User[]
 }
 
 model User {
-  id        BigInt     @id @default(autoincrement())
-  username  String     @unique
+  id        Int      @id @default(autoincrement())
+  username  String   @unique
   password  String
   name      String
-  email     String     @unique
-  createdAt DateTime   @default(now())
+  email     String   @unique
+  createdAt DateTime @default(now())
 
-  roleId    BigInt?
-  role      Role?      @relation(fields: [roleId], references: [id])
+  roleId Int?
+  role   Role? @relation(fields: [roleId], references: [id])
 
-  warehousesManaged Warehouse[] @relation("Manager")
-  movements         Movement[]
+  companyId Int?
+  company   Company? @relation(fields: [companyId], references: [id])
 }
 
-model Warehouse {
-  id        BigInt     @id @default(autoincrement())
-  name      String
-  location  String?
+model ProductType {
+  id   Int    @id @default(autoincrement())
+  name String @unique
 
-  managerId BigInt?
-  manager   User?      @relation("Manager", fields: [managerId], references: [id])
-
-  inventory Inventory[]
-  movements Movement[]
+  products Product[]
 }
 
 model Product {
-  id          BigInt     @id @default(autoincrement())
-  name        String
-  description String?
-  barcode     String?    @unique
-  cost        Int        @default(0)
-  price       Int        @default(0)
-  quantity    Int        @default(0)
-  createdAt   DateTime   @default(now())
+  id            Int         @id @default(autoincrement())
+  name          String
+  barCode       String      @unique
+  productTypeId Int
+  productType   ProductType @relation(fields: [productTypeId], references: [id])
 
-  inventory   Inventory[]
-  movements   Movement[]
+  companyId Int
+  company   Company @relation(fields: [companyId], references: [id])
+
+  presentations Presentation[]
+  inventories   Inventory[]
+  transactions  Transaction[]
+}
+
+model Presentation {
+  id        Int     @id @default(autoincrement())
+  productId Int
+  product   Product @relation(fields: [productId], references: [id])
+
+  description String? // Ej: "Botella 1L"
+  price       Float
+  unitLabel   String? // Ej: "litro", "unidad", etc.
 }
 
 model Inventory {
-  id           BigInt     @id @default(autoincrement())
-  productId    BigInt
-  warehouseId  BigInt
-  quantity     Int        @default(0)
-  lastUpdated  DateTime   @default(now())
+  id        Int     @id @default(autoincrement())
+  productId Int
+  product   Product @relation(fields: [productId], references: [id])
 
-  product      Product    @relation(fields: [productId], references: [id])
-  warehouse    Warehouse  @relation(fields: [warehouseId], references: [id])
+  quantity Int // en base units
+
+  companyId Int
+  company   Company @relation(fields: [companyId], references: [id])
 }
 
-model Movement {
-  id          BigInt     @id @default(autoincrement())
-  productId   BigInt
-  warehouseId BigInt
-  userId      BigInt
-  type        MovementType
-  quantity    Int
-  createdAt   DateTime   @default(now())
+model Transaction {
+  id        Int     @id @default(autoincrement())
+  productId Int
+  product   Product @relation(fields: [productId], references: [id])
 
-  product     Product    @relation(fields: [productId], references: [id])
-  warehouse   Warehouse  @relation(fields: [warehouseId], references: [id])
-  user        User       @relation(fields: [userId], references: [id])
-}
+  type     TransactionType
+  quantity Int // en base units
 
-enum MovementType {
-  IN
-  OUT
-  ADJUST
+  presentationId Int?
+  date           DateTime @default(now())
 }

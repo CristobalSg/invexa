@@ -1,31 +1,18 @@
 import React from "react";
 import { Dialog, DialogPanel, DialogTitle } from "@headlessui/react";
-import { ProductForm } from "./ProductForm";
 
 type ProductModalProps = {
   isOpen: boolean;
   onClose: () => void;
-  form: {
-    name: string;
-    barcode?: string;
-    quantity: number;
-    cost: number;
-    price: number;
-  };
-  handleSubmit: (e: React.FormEvent<HTMLFormElement>) => void;
-  handleChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  handleCancelEdit: () => void;
-  editingId: string | null;
+  title?: string;
+  children: React.ReactNode;
 };
 
 export const ProductModal: React.FC<ProductModalProps> = ({
   isOpen,
   onClose,
-  form,
-  handleSubmit,
-  handleChange,
-  handleCancelEdit,
-  editingId,
+  title = "Agregar nuevo producto",
+  children,
 }) => {
   return (
     <Dialog open={isOpen} onClose={onClose} className="relative z-50">
@@ -33,19 +20,9 @@ export const ProductModal: React.FC<ProductModalProps> = ({
       <div className="fixed inset-0 flex items-center justify-center p-4">
         <DialogPanel className="w-full max-w-3xl rounded-xl bg-zinc-900 p-6 shadow-xl">
           <DialogTitle className="text-xl font-bold text-white mb-4">
-            {editingId ? "Editar producto" : "Agregar nuevo producto"}
+            {title}
           </DialogTitle>
-
-          <ProductForm
-            form={form}
-            handleSubmit={handleSubmit}
-            handleChange={handleChange}
-            handleCancelEdit={() => {
-              handleCancelEdit();
-              onClose();
-            }}
-            editingId={editingId}
-          />
+          {children}
         </DialogPanel>
       </div>
     </Dialog>

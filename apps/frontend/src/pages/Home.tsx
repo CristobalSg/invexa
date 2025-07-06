@@ -1,82 +1,110 @@
-// src/pages/Home.tsx
+// Home.tsx - Finalizar venta actualiza inventario y registra transacción
 import { useState } from "react";
 import InputForm from "../components/InputForm";
 import MainList from "../components/MainList";
 import SideList from "../components/SideList";
 import StatsPanel from "../components/StatsPanel";
 import type { Product } from "../types/product";
+import { registerSale } from "../services/inventoryService";
+import { useQueryClient } from "@tanstack/react-query";
 
+// Define tipo con cantidad para el carro
+type CartProduct = Product & { quantity: number };
 
 export default function Home() {
-    const [searchTerm, setSearchTerm] = useState("");
-    const [cart, setCart] = useState<Product[]>([]);
-    
-    // Total calculado dinámicamente sumando (precio * cantidad) por producto
-    const total = cart.reduce((acc, p) => acc + p.price * p.quantity, 0);
+  const queryClient = useQueryClient();
+  const [searchTerm, setSearchTerm] = useState("");
+  const [cart, setCart] = useState<CartProduct[]>([]);
 
-    const handleFinishSale = () => {
-        console.log("Venta finalizada");
-        setCart([]); // ← limpia el carrito
-        // Posteriormente vamos a gestionar la cantidad de productos en el inventario
+  const total = cart.reduce((acc, p) => {
+    const price = p.presentations?.[0]?.price ?? 0;
+    const quantity = p.quantity ?? 0;
+    return acc + price * quantity;
+  }, 0);
 
-    };
+  const handleFinishSale = async () => {
+    try {
+    console.log(cart)
+      await registerSale(cart);
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      setCart([]);
+    } catch (error) {
+      console.error("Error al finalizar venta:", error);
+      alert("Hubo un error al registrar la venta");
+    }
+  };
 
-    const handleProductFound = (product: Product) => {
-        setCart((prev) => {
-            // Si ya está en el carrito, suma cantidad
-            const idx = prev.findIndex(p => p.id === product.id);
-            if (idx !== -1) {
-                const updated = [...prev];
-                updated[idx] = { ...updated[idx], quantity: updated[idx].quantity + 1 };
-                return updated;
-            }
-            return [...prev, { ...product, quantity: 1 }];
-        });
-    };
+  const handleProductFound = (product: Product) => {
+  setCart((prev) => {
+    const idx = prev.findIndex((p) => String(p.id) === String(product.id));
+    const stock = product.inventories?.[0]?.quantity ?? 0;
 
-    // Si hay más de 1 unidad, resta una. Si solo queda una, elimina el producto.
-    const handleDecreaseQuantity = (productId: string) => {
-        setCart((prev) => {
-            return prev.flatMap(p => {
-                if (p.id === productId) {
-                    if (p.quantity > 1) {
-                        return [{ ...p, quantity: p.quantity - 1 }];
-                    } else {
-                        return []; // eliminar si llega a 0
-                    }
-                }
-                return [p];
-            });
-        });
-    };
+    if (idx !== -1) {
+      const currentQty = prev[idx].quantity;
+      if (currentQty >= stock) {
+        // ya no se puede agregar más
+        return prev;
+      }
+      const updated = [...prev];
+      updated[idx] = {
+        ...updated[idx],
+        quantity: updated[idx].quantity + 1,
+      };
+      return updated;
+    }
 
-    // Elimina completamente el producto del carrito
-    const handleRemoveProduct = (productId: string) => {
-        setCart((prev) => prev.filter(p => p.id !== productId));
-    };
+    if (stock <= 0) return prev;
+
+    return [...prev, { ...product, quantity: 1 }];
+  });
+};
 
 
-    return (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Columna principal (2/3) */}
-            <div className="md:col-span-2 space-y-4">
-                <InputForm title="Codigo de barra....." onProductFound={handleProductFound}/>
-                <MainList 
-                    products={cart} 
-                    onDecrease={handleDecreaseQuantity}
-                    onRemove={handleRemoveProduct}
-                />
-            </div>
+  const handleDecreaseQuantity = (productId: string) => {
+    setCart((prev) =>
+      prev.flatMap((p) => {
+        if (String(p.id) === productId) {
+          if (p.quantity > 1) {
+            return [{ ...p, quantity: p.quantity - 1 }];
+          }
+          return [];
+        }
+        return [p];
+      })
+    );
+  };
 
-            {/* Columna secundaria (1/3) */}
-            <div className="md:col-span-1 space-y-4">
-                <InputForm title="Buscar producto" onSearchChange={setSearchTerm}/>
-                <SideList 
-                    searchTerm={searchTerm}
-                    onProductClick={handleProductFound}/>
-                <StatsPanel total={total} onFinish={handleFinishSale}/>
-            </div>
-        </div>
-    )
+  const handleRemoveProduct = (productId: string) => {
+    setCart((prev) => prev.filter((p) => String(p.id) !== productId));
+  };
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {/* Columna principal (2/3) */}
+      <div className="md:col-span-2 space-y-4">
+        <InputForm
+          title="Código de barra..."
+          onProductFound={handleProductFound}
+        />
+        <MainList
+          products={cart}
+          onDecrease={handleDecreaseQuantity}
+          onRemove={handleRemoveProduct}
+        />
+      </div>
+
+      {/* Columna lateral (1/3) */}
+      <div className="md:col-span-1 space-y-4">
+        <InputForm
+          title="Buscar producto"
+          onSearchChange={setSearchTerm}
+        />
+        <SideList
+          searchTerm={searchTerm}
+          onProductClick={handleProductFound}
+        />
+        <StatsPanel total={total} onFinish={handleFinishSale} />
+      </div>
+    </div>
+  );
 }
-

@@ -1,13 +1,13 @@
 import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/react'
-import { ChevronDownIcon, PencilIcon, TrashIcon} from '@heroicons/react/20/solid'
+import { ChevronDownIcon, PencilIcon, TrashIcon } from '@heroicons/react/20/solid'
+import type { ReactNode } from "react";
 
 interface ProductCardProps {
   name: string
-  description: string
+  description: ReactNode
   onEdit: () => void
   onDelete: () => void
 }
-
 
 export const ProductCard: React.FC<ProductCardProps> = ({
   name,
@@ -17,10 +17,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({
 }) => {
   return (
     <div className="rounded-lg shadow-lg p-4 relative bg-white">
-      {/* Título y botón Options alineados */}
       <div className="flex justify-between items-start mb-1">
         <h3 className="text-lg font-semibold">{name}</h3>
-        
+
         <Menu as="div" className="relative inline-block text-left">
           <MenuButton className="inline-flex justify-center rounded-md bg-black/20 px-2 py-1 text-sm font-medium text-white hover:bg-black/30 focus:outline-none">
             Opciones
@@ -37,17 +36,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                       active ? 'bg-violet-500 text-white' : 'text-gray-900'
                     } group flex w-full items-center rounded-md px-2 py-2 text-sm`}
                   >
-                      {active ? (
-                        <PencilIcon
-                        className="mr-2 h-5 w-5"
-                        aria-hidden="true"
-                        />
-                      ) : (
-                        <PencilIcon
-                        className="mr-2 h-5 w-5"
-                        aria-hidden="true"
-                        />
-                      )}
+                    <PencilIcon className="mr-2 h-5 w-5" aria-hidden="true" />
                     Editar
                   </button>
                 )}
@@ -60,17 +49,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                       active ? 'bg-violet-500 text-white' : 'text-gray-900'
                     } group flex w-full items-center rounded-md px-2 py-2 text-sm`}
                   >
-                      {active ? (
-                        <TrashIcon
-                        className="mr-2 h-5 w-5"
-                        aria-hidden="true"
-                        />
-                      ) : (
-                        <TrashIcon
-                        className="mr-2 h-5 w-5"
-                        aria-hidden="true"
-                        />
-                      )}
+                    <TrashIcon className="mr-2 h-5 w-5" aria-hidden="true" />
                     Eliminar
                   </button>
                 )}
@@ -80,8 +59,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         </Menu>
       </div>
 
-      {/* Descripción debajo */}
-      <p className="text-sm text-gray-600">{description}</p>
+      <div className="text-sm text-gray-600">{description}</div>
     </div>
   )
 }
