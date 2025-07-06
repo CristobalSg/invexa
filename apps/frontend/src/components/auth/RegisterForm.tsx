@@ -3,6 +3,9 @@ import axios from "axios";
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 
+import { Label, Field} from "@headlessui/react";
+import { UserIcon } from "@heroicons/react/20/solid";
+
 type RegisterFormInputs = {
   companyName: string;
   username: string;
@@ -39,74 +42,83 @@ export default function RegisterForm() {
   };
 
   return (
-    <div className="max-w-md mx-auto mt-10 p-6 border rounded shadow bg-white">
-      <h2 className="text-2xl font-bold mb-4 text-center">Registro de Usuario</h2>
+    // <div className="max-w-md mx-auto mt-16 bg-white p-8 shadow-xl rounded-xl">
+    <div className="w-full max-w-lg px-10 py-8 mx-auto bg-white border rounded-lg shadow-2xl">
+      <h2 className="text-2xl font-bold text-gray-800 mb-6 text-center flex items-center justify-center gap-2">
+        Registro de Usuario
+      </h2>
+    {/* <div className="max-w-md mx-auto mt-10 p-6 border rounded shadow bg-white">
+      <h2 className="text-2xl font-bold mb-4 text-center">Registro de Usuario</h2> */}
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-        <div>
-          <label htmlFor="companyName" className="block text-sm font-medium text-gray-700">
-            Nombre de la empresa
-          </label>
-          <input
-            id="companyName"
-            type="text"
-            {...register("companyName", { required: true })}
-            className="mt-1 w-full border p-2 rounded"
-          />
-          {errors.companyName && <p className="text-red-500 text-sm">Campo requerido</p>}
-        </div>
+        <Field>
+          <div>
+            <Label className="block text-sm font-medium text-gray-700">Nombre de la empresa</Label>
+            <input
+              id="companyName"
+              type="text"
+              {...register("companyName", { required: true })}
+              // className="mt-1 w-full border p-2 rounded"
+              className="block w-full p-3 rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+            />
+            {errors.companyName && <p className="text-red-500 text-sm">Campo requerido</p>}
+          </div>
+        </Field>
 
-        <div>
-          <label htmlFor="username" className="block text-sm font-medium text-gray-700">
-            Nombre de usuario
-          </label>
-          <input
-            id="username"
-            type="text"
-            {...register("username", { required: true })}
-            className="mt-1 w-full border p-2 rounded"
-          />
-          {errors.username && <p className="text-red-500 text-sm">Campo requerido</p>}
-        </div>
+        <Field>
+          <div>
+            <Label className="block text-sm font-medium text-gray-700">Nombre de usuario</Label>
+          <div className="mt-1 relative">
+            <input
+              id="username"
+              type="text"
+              {...register("username", { required: true })}
+              className="block w-full p-3 rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+              />
+            <UserIcon className="absolute right-3 top-3.5 h-5 w-5 text-gray-400" />
+            {errors.username && <p className="text-red-500 text-sm">Campo requerido</p>}
+            </div>
+          </div>
+        </Field>
 
-        <div>
-          <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-            Contraseña
-          </label>
-          <input
-            id="password"
-            type="password"
-            {...register("password", { required: true })}
-            className="mt-1 w-full border p-2 rounded"
-          />
-          {errors.password && <p className="text-red-500 text-sm">Campo requerido</p>}
-        </div>
+        <Field>
+          <div>
+            <Label className="block text-sm font-medium text-gray-700">Contraseña</Label>
+            <input
+              id="password"
+              type="password"
+              {...register("password", { required: true })}
+              className="block w-full p-3 rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+            />
+            {errors.password && <p className="text-red-500 text-sm">Campo requerido</p>}
+          </div>
+        </Field>
 
-        <div>
-          <label htmlFor="name" className="block text-sm font-medium text-gray-700">
-            Nombre completo
-          </label>
-          <input
-            id="name"
-            type="text"
-            {...register("name", { required: true })}
-            className="mt-1 w-full border p-2 rounded"
-          />
-          {errors.name && <p className="text-red-500 text-sm">Campo requerido</p>}
-        </div>
+        <Field>
+          <div>
+            <Label className="block text-sm font-medium text-gray-700">Nombre Completo</Label>
+            <input
+              id="name"
+              type="text"
+              {...register("name", { required: true })}
+              className="block w-full p-3 rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+            />
+            {errors.name && <p className="text-red-500 text-sm">Campo requerido</p>}
+          </div>
+        </Field>
 
-        <div>
-          <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-            Correo electrónico
-          </label>
-          <input
-            id="email"
-            type="email"
-            {...register("email", { required: true })}
-            className="mt-1 w-full border p-2 rounded"
-          />
-          {errors.email && <p className="text-red-500 text-sm">Campo requerido</p>}
-        </div>
+        <Field>
+          <div>
+            <Label className="block text-sm font-medium text-gray-700">Correo Electrónico</Label>
+            <input
+              id="email"
+              type="email"
+              {...register("email", { required: true })}
+              className="block w-full p-3 rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+            />
+            {errors.email && <p className="text-red-500 text-sm">Campo requerido</p>}
+          </div>
+        </Field>
 
         <button
           type="submit"

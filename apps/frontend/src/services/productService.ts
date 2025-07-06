@@ -14,7 +14,7 @@ export async function createProduct(input: CreateProductInput): Promise<Product>
   return data;
 }
 
-export async function updateProduct(id: string, product: Partial<CreateProductInput>): Promise<Product> {
+export async function updateProduct(id: number, product: Partial<CreateProductInput>): Promise<Product> {
   const { data } = await api.put<Product>(`${ENDPOINT}/${id}`, product);
   return data;
 }

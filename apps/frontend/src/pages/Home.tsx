@@ -35,19 +35,30 @@ export default function Home() {
   };
 
   const handleProductFound = (product: Product) => {
-    setCart((prev) => {
-      const idx = prev.findIndex((p) => String(p.id) === String(product.id));
-      if (idx !== -1) {
-        const updated = [...prev];
-        updated[idx] = {
-          ...updated[idx],
-          quantity: updated[idx].quantity + 1,
-        };
-        return updated;
+  setCart((prev) => {
+    const idx = prev.findIndex((p) => String(p.id) === String(product.id));
+    const stock = product.inventories?.[0]?.quantity ?? 0;
+
+    if (idx !== -1) {
+      const currentQty = prev[idx].quantity;
+      if (currentQty >= stock) {
+        // ya no se puede agregar más
+        return prev;
       }
-      return [...prev, { ...product, quantity: 1 }];
-    });
-  };
+      const updated = [...prev];
+      updated[idx] = {
+        ...updated[idx],
+        quantity: updated[idx].quantity + 1,
+      };
+      return updated;
+    }
+
+    if (stock <= 0) return prev;
+
+    return [...prev, { ...product, quantity: 1 }];
+  });
+};
+
 
   const handleDecreaseQuantity = (productId: string) => {
     setCart((prev) =>

@@ -59,7 +59,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         </Menu>
       </div>
 
-      <p className="text-sm text-gray-600">{description}</p>
+      <div className="text-sm text-gray-600">{description}</div>
     </div>
   )
 }

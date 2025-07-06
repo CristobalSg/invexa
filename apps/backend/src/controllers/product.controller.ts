@@ -6,6 +6,7 @@ import { createPresentationSchema } from '../schemas/presentation.schema'
 import { createInventorySchema } from '../schemas/inventory.schema'
 import { createTransactionSchema } from '../schemas/transaction.schema'
 import { AuthRequest } from './auth.middleware';
+import { log } from 'console'
 
 export async function createProduct(req: Request, res: Response) {
     console.log("Body recibido:", req.body)
@@ -113,22 +114,49 @@ export async function getProduct(req: Request, res: Response) {
 }
 
 export async function updateProduct(req: Request, res: Response) {
-  const id = Number(req.params.id)
-  if (isNaN(id)) return res.status(400).json({ error: 'Invalid ID' })
+  const id = Number(req.params.id);
+  if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
 
-  const result = updateProductSchema.safeParse(req.body)
-  if (!result.success) return res.status(400).json({ error: result.error.format() })
+  const { name, barCode, productTypeId, initialQuantity, presentation } = req.body;
 
   try {
-    const product = await prisma.product.update({ where: { id }, data: result.data })
-    return res.json({ ...product, id: product.id.toString() })
+    const product = await prisma.product.update({
+      where: { id },
+      data: {
+        name,
+        barCode,
+        productTypeId,
+      },
+    });
+
+    // Actualizar inventario
+    await prisma.inventory.updateMany({
+      where: { productId: id },
+      data: {
+        quantity: initialQuantity,
+      },
+    });
+
+    // Actualizar presentación
+    await prisma.presentation.updateMany({
+      where: { productId: id },
+      data: {
+        price: presentation?.price,
+        unitLabel: presentation?.unitLabel,
+        description: presentation?.description,
+      },
+    });
+
+    return res.json({ success: true });
   } catch (e: any) {
-    if (e.code === 'P2002' && e.meta?.target?.includes('barCode')) {
-      return res.status(400).json({ error: 'El código de barra ya existe' })
+    if (e.code === "P2002" && e.meta?.target?.includes("barCode")) {
+      return res.status(400).json({ error: "El código de barra ya existe" });
     }
-    return res.status(500).json({ error: 'Internal server error' })
+    console.error(e);
+    return res.status(500).json({ error: "Internal server error" });
   }
 }
+
 
 export async function deleteProduct(req: Request, res: Response) {
   try {

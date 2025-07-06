@@ -70,7 +70,7 @@ export default function ProductFormCreate({
     e.preventDefault();
     try {
       if (initialData) {
-        await updateProduct(initialData.id.toString(), form);
+        await updateProduct(initialData.id , form);
         setMessage("Producto actualizado con éxito");
       } else {
         await createProduct(form);

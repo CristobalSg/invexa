@@ -2,7 +2,7 @@
 import { useForm } from "react-hook-form";
 import { useState } from "react";
 import { useNavigate, Link} from "react-router-dom";
-import { Input, Label, Field, Description } from "@headlessui/react";
+import { Label, Field} from "@headlessui/react";
 import { LockClosedIcon, UserIcon } from "@heroicons/react/20/solid";
 import axios from "axios";
 
@@ -30,20 +30,21 @@ export default function LoginForm() {
   };
 
   return (
-    <div className="max-w-md mx-auto mt-16 bg-white p-8 shadow-xl rounded-xl border">
+    // <div className="max-w-md mx-auto mt-16 bg-white p-8 shadow-xl rounded-xl ">
+    <div className="w-full max-w-lg px-10 py-8 mx-auto bg-white border rounded-lg shadow-2xl">
       <h2 className="text-2xl font-bold text-gray-800 mb-6 text-center flex items-center justify-center gap-2">
         <LockClosedIcon className="h-6 w-6 text-blue-600" /> Iniciar Sesión
       </h2>
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <Field>
           <Label className="block text-sm font-medium text-gray-700">Usuario</Label>
           <div className="mt-1 relative">
             <input
               type="text"
               {...register("username", { required: true })}
-              className="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+              className="block w-full p-3 rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
             />
-            <UserIcon className="absolute right-3 top-2.5 h-5 w-5 text-gray-400" />
+            <UserIcon className="absolute right-3 top-3.5 h-5 w-5 text-gray-400" />
           </div>
           {errors.username && <p className="text-sm text-red-500 mt-1">Campo requerido</p>}
         </Field>
@@ -53,7 +54,7 @@ export default function LoginForm() {
           <input
             type="password"
             {...register("password", { required: true })}
-            className="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+            className="block w-full p-3 rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
           />
           {errors.password && <p className="text-sm text-red-500 mt-1">Campo requerido</p>}
         </Field>

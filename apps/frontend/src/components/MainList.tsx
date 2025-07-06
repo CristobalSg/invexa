@@ -1,8 +1,11 @@
+// src/components/MainList.tsx
 import { MinusIcon, TrashIcon } from "@heroicons/react/24/outline"
 import type { Product } from "../types/product"
 
+type CartProduct = Product & { quantity: number }
+
 interface ProductListProps {
-  products?: Product[]
+  products?: CartProduct[]
   onDecrease?: (id: string) => void
   onRemove?: (id: string) => void
 }
@@ -34,7 +37,7 @@ export default function ProductList({ products = [], onDecrease, onRemove }: Pro
                 <span className="text-xs text-gray-500">{product.barCode}</span>
                 <span className="text-xs text-gray-400">•</span>
                 <span className="text-xs text-gray-500">
-                  {product.quantity} {product.quantity === 1 ? "unidad" : "unidades"}
+                  {product.quantity} de {product.inventories?.[0]?.quantity ?? 0} unidades
                 </span>
               </div>
             </div>
