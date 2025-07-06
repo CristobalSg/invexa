@@ -1,12 +1,7 @@
 // src/components/Layout.tsx
-import type { ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { Link, Outlet } from "react-router-dom";
 
-interface LayoutProps {
-  children: ReactNode;
-}
-
-export default function Layout({ children }: LayoutProps) {
+export default function Layout() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Navbar */}
@@ -15,7 +10,7 @@ export default function Layout({ children }: LayoutProps) {
           <span className="text-xl font-semibold text-blue-600">Invexa</span>
           <div className="space-x-4">
             <Link to="/" className="text-gray-700 hover:text-blue-600">Inicio</Link>
-            <Link to="/products" className="text-gray-700 hover:text-blue-600">Productos</Link>
+            <Link to="/inventory" className="text-gray-700 hover:text-blue-600">Inventario</Link>
           </div>
         </div>
       </nav>
@@ -23,9 +18,10 @@ export default function Layout({ children }: LayoutProps) {
       {/* Contenido principal */}
       <div className="pt-16 px-4 max-w-screen-xl mx-auto">
         <div className="min-h-screen bg-gray-100 p-6">
-          {children}
+          <Outlet />
         </div>
       </div>
     </div>
   );
 }
+

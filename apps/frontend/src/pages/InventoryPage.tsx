@@ -1,46 +1,45 @@
-// Importa hooks de React Query para manejo de datos asíncronos (fetch, mutate, cache).
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-
-// Importa funciones del servicio que interactúan con el backend.
-import { getProducts, createProduct, updateProduct, deleteProduct } from "../services/productService";
-
-// Importa hooks y tipos
 import { useState } from "react";
 import type { Product } from "../types/product";
-
-// Importa componentes reutilizables para productos
+import { getProducts, createProduct, updateProduct, deleteProduct } from "../services/productService";
 import { ProductCard } from "../components/ProductCard";
 import { ProductModal } from "../components/ProductModal";
 
-// Estado inicial vacío del formulario (sin ID porque se añade al guardar)
-const emptyForm = { name: "", quantity: 0, cost: 0, price: 0, barcode: "" };
+const emptyForm = {
+  name: "",
+  barCode: "",
+  productTypeId: 1,
+  initialQuantity: 0,
+  companyId: 1,
+  presentation: {
+    price: 0,
+    unitLabel: "",
+    description: "",
+  },
+};
 
-export default function InvetoryPage() {
-  const queryClient = useQueryClient(); // Permite invalidar caché y refetch
+export default function InventoryPage() {
+  const queryClient = useQueryClient();
 
-  // Consulta de productos (fetch inicial y refetch automático tras mutaciones)
   const { data: products, isLoading, error } = useQuery({
     queryKey: ["products"],
     queryFn: getProducts,
   });
 
-  // ESTADOS LOCALES
-  const [form, setForm] = useState<Omit<Product, "id">>(emptyForm); // Formulario controlado
-  const [editingId, setEditingId] = useState<string | null>(null); // ID de producto en edición
-  const [showModal, setShowModal] = useState(false); // Modal no implementado en este archivo
+  const [form, setForm] = useState<typeof emptyForm>(emptyForm);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [showModal, setShowModal] = useState(false);
 
-  // Mutación para crear producto
   const createMutation = useMutation({
     mutationFn: createProduct,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["products"] }); // Refresca lista
-      setForm(emptyForm); // Limpia el formulario
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      setForm(emptyForm);
     },
   });
 
-  // Mutación para actualizar producto
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<Omit<Product, "id">> }) =>
+    mutationFn: ({ id, data }: { id: string; data: Partial<typeof emptyForm> }) =>
       updateProduct(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["products"] });
@@ -49,22 +48,31 @@ export default function InvetoryPage() {
     },
   });
 
-  // Mutación para eliminar producto
   const deleteMutation = useMutation({
     mutationFn: deleteProduct,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["products"] }),
   });
 
-  // Maneja cambios en inputs del formulario
-  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
+  function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
     const { name, value } = e.target;
-    setForm((f) => ({
-      ...f,
-      [name]: name === "name" || name === "barcode" ? value : Number(value),
-    }));
+
+    if (name.startsWith("presentation.")) {
+      const key = name.split(".")[1];
+      setForm((prev) => ({
+        ...prev,
+        presentation: {
+          ...prev.presentation,
+          [key]: key === "price" ? Number(value) : value,
+        },
+      }));
+    } else {
+      setForm((prev) => ({
+        ...prev,
+        [name]: name === "productTypeId" || name === "initialQuantity" ? Number(value) : value,
+      }));
+    }
   }
 
-  // Maneja envío del formulario (crear o actualizar)
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (editingId) {
@@ -72,29 +80,34 @@ export default function InvetoryPage() {
     } else {
       createMutation.mutate(form);
     }
+    setShowModal(false);
   }
 
-  // Activa modo edición y llena el formulario con los datos del producto
   function handleEdit(product: Product) {
     setShowModal(true);
-    setEditingId(product.id);
+    setEditingId(product.id.toString());
+    const firstPresentation = product.presentations[0] || { price: 0 };
+
     setForm({
       name: product.name,
-      quantity: product.quantity,
-      cost: product.cost,
-      price: product.price,
-      barcode: product.barcode || "",
+      barCode: product.barCode,
+      productTypeId: product.productType.id,
+      initialQuantity: product.inventories[0]?.quantity || 0,
+      companyId: 1,
+      presentation: {
+        price: firstPresentation.price,
+        unitLabel: firstPresentation.unitLabel || "",
+        description: firstPresentation.description || "",
+      },
     });
   }
 
-  // Elimina un producto (con confirmación)
   function handleDelete(id: string) {
     if (confirm("¿Seguro que deseas eliminar este producto?")) {
       deleteMutation.mutate(id);
     }
   }
 
-  // Cancela la edición y limpia el formulario
   function handleCancelEdit() {
     setEditingId(null);
     setForm(emptyForm);
@@ -102,22 +115,20 @@ export default function InvetoryPage() {
 
   return (
     <div>
-      {/* Encabezado con botón de "Crear producto" */}
       <div className="flex justify-between items-center mb-4">
         <h1 className="text-2xl font-bold">Gestión de Inventario</h1>
         <button
-        onClick={() => {
-          setShowModal(true);
-          setEditingId(null); // Asegura que sea modo "crear"
-          setForm(emptyForm);
-        }}
-        className="px-4 py-2 bg-blue-600 text-white rounded"
-      >
-        Crear producto
-      </button>
+          onClick={() => {
+            setShowModal(true);
+            setEditingId(null);
+            setForm(emptyForm);
+          }}
+          className="px-4 py-2 bg-blue-600 text-white rounded"
+        >
+          Crear producto
+        </button>
       </div>
 
-      {/* Formulario controlado */}
       <ProductModal
         isOpen={showModal}
         onClose={() => setShowModal(false)}
@@ -128,21 +139,18 @@ export default function InvetoryPage() {
         editingId={editingId}
       />
 
-      {/* Indicadores de carga o error */}
       {isLoading && <p>Cargando productos...</p>}
       {error && <p className="text-red-500">Error al cargar productos</p>}
 
-      {/* Lista de productos en una cuadrícula responsiva */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         {products?.map((prod) => (
-          <div key={prod.id}>
-            <ProductCard
-              name={prod.name}
-              description={`Cantidad: ${prod.quantity} | Precio: $${prod.price}`}
-              onEdit={() => handleEdit(prod)}
-              onDelete={() => handleDelete(prod.id)}
-            />
-          </div>
+          <ProductCard
+            key={prod.id}
+            name={prod.name}
+            description={`Stock: ${prod.inventories[0]?.quantity ?? 0} | Precio: $${prod.presentations[0]?.price ?? 0}`}
+            onEdit={() => handleEdit(prod)}
+            onDelete={() => handleDelete(prod.id.toString())}
+          />
         ))}
       </div>
     </div>

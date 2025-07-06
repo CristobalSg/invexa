@@ -1,41 +1,33 @@
-import type { Product } from "../types/product";
+// src/services/productService.ts
+import type { Product, CreateProductInput } from "../types/product";
+import api from "../lib/axios";
 
-//const API_URL = "/api/products";
-const API_URL = `${import.meta.env.VITE_API_URL}/api/products`;
+const ENDPOINT = "/products";
 
 export async function getProducts(): Promise<Product[]> {
-  const res = await fetch(API_URL);
-  if (!res.ok) throw new Error("Error al obtener productos");
-  return res.json();
+  const { data } = await api.get<Product[]>(ENDPOINT);
+  return data;
 }
 
-export async function createProduct(product: Omit<Product, "id">): Promise<Product> {
-  const res = await fetch(API_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(product),
-  });
-  if (!res.ok) throw new Error("Error al crear producto");
-  return res.json();
+export async function createProduct(input: CreateProductInput): Promise<Product> {
+  const { data } = await api.post<Product>(ENDPOINT, input);
+  return data;
 }
 
-export async function updateProduct(id: string, product: Partial<Omit<Product, "id">>): Promise<Product> {
-  const res = await fetch(`${API_URL}/${id}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(product),
-  });
-  if (!res.ok) throw new Error("Error al actualizar producto");
-  return res.json();
+export async function updateProduct(id: string, product: Partial<CreateProductInput>): Promise<Product> {
+  const { data } = await api.put<Product>(`${ENDPOINT}/${id}`, product);
+  return data;
 }
 
-export async function deleteProduct(id: string): Promise<void> {
-  const res = await fetch(`${API_URL}/${id}`, { method: "DELETE" });
-  if (!res.ok) throw new Error("Error al eliminar producto");
+export async function deleteProduct(id: string | number): Promise<void> {
+  await api.delete(`${ENDPOINT}/${id}`);
 }
 
 export async function getProductByBarcode(barcode: string): Promise<Product | null> {
-  const res = await fetch(`${API_URL}?barcode=${encodeURIComponent(barcode)}`);
-  if (!res.ok) return null;
-  return res.json();
+  try {
+    const { data } = await api.get<Product>(`${ENDPOINT}?barcode=${encodeURIComponent(barcode)}`);
+    return data;
+  } catch {
+    return null;
+  }
 }

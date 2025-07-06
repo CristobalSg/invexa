@@ -2,16 +2,22 @@ import React from "react";
 import { Description, Field, Input, Label } from "@headlessui/react";
 import clsx from "clsx";
 
+// Ajustado al nuevo modelo de backend
+
 type ProductFormProps = {
   form: {
     name: string;
-    barcode?: string;
-    quantity: number;
-    cost: number;
-    price: number;
+    barCode: string;
+    productTypeId: number;
+    initialQuantity: number;
+    presentation: {
+      price: number;
+      unitLabel?: string;
+      description?: string;
+    };
   };
   handleSubmit: (e: React.FormEvent<HTMLFormElement>) => void;
-  handleChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  handleChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => void;
   handleCancelEdit: () => void;
   editingId: string | null;
 };
@@ -29,13 +35,9 @@ export const ProductForm: React.FC<ProductFormProps> = ({
   );
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="space-y-4 flex flex-col"
-    >
+    <form onSubmit={handleSubmit} className="space-y-4 flex flex-col">
       <Field>
         <Label className="text-sm/6 font-medium text-white">Nombre</Label>
-        <Description className="text-sm/6 text-white/50">Nombre del producto</Description>
         <Input
           name="name"
           value={form.name}
@@ -47,10 +49,9 @@ export const ProductForm: React.FC<ProductFormProps> = ({
 
       <Field>
         <Label className="text-sm/6 font-medium text-white">Código de barra</Label>
-        <Description className="text-sm/6 text-white/50">Escanéalo o escríbelo</Description>
         <Input
-          name="barcode"
-          value={form.barcode ?? ""}
+          name="barCode"
+          value={form.barCode}
           onChange={handleChange}
           className={inputClass}
           required
@@ -58,23 +59,25 @@ export const ProductForm: React.FC<ProductFormProps> = ({
       </Field>
 
       <Field>
-        <Label className="text-sm/6 font-medium text-white">Cantidad</Label>
-        <Input
-          name="quantity"
-          type="text"
-          value={form.quantity}
+        <Label className="text-sm/6 font-medium text-white">Tipo de producto</Label>
+        <select
+          name="productTypeId"
+          value={form.productTypeId}
           onChange={handleChange}
           className={inputClass}
           required
-        />
+        >
+          <option value={1}>Unidad</option>
+          <option value={2}>Kilogramo</option>
+        </select>
       </Field>
 
       <Field>
-        <Label className="text-sm/6 font-medium text-white">Costo</Label>
+        <Label className="text-sm/6 font-medium text-white">Cantidad inicial</Label>
         <Input
-          name="cost"
-          type="text"
-          value={form.cost}
+          name="initialQuantity"
+          type="number"
+          value={form.initialQuantity}
           onChange={handleChange}
           className={inputClass}
           required
@@ -85,11 +88,46 @@ export const ProductForm: React.FC<ProductFormProps> = ({
         <Label className="text-sm/6 font-medium text-white">Precio</Label>
         <Input
           name="price"
-          type="text"
-          value={form.price}
-          onChange={handleChange}
+          type="number"
+          value={form.presentation.price}
+          onChange={(e) =>
+            handleChange({
+              ...e,
+              target: { ...e.target, name: "price" },
+            } as React.ChangeEvent<HTMLInputElement>)
+          }
           className={inputClass}
           required
+        />
+      </Field>
+
+      <Field>
+        <Label className="text-sm/6 font-medium text-white">Unidad (opcional)</Label>
+        <Input
+          name="unitLabel"
+          value={form.presentation.unitLabel ?? ""}
+          onChange={(e) =>
+            handleChange({
+              ...e,
+              target: { ...e.target, name: "unitLabel" },
+            } as React.ChangeEvent<HTMLInputElement>)
+          }
+          className={inputClass}
+        />
+      </Field>
+
+      <Field>
+        <Label className="text-sm/6 font-medium text-white">Descripción (opcional)</Label>
+        <Input
+          name="description"
+          value={form.presentation.description ?? ""}
+          onChange={(e) =>
+            handleChange({
+              ...e,
+              target: { ...e.target, name: "description" },
+            } as React.ChangeEvent<HTMLInputElement>)
+          }
+          className={inputClass}
         />
       </Field>
 
