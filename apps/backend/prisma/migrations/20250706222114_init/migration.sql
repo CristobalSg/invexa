@@ -56,10 +56,9 @@ CREATE TABLE "Product" (
 CREATE TABLE "Presentation" (
     "id" SERIAL NOT NULL,
     "productId" INTEGER NOT NULL,
-    "description" TEXT NOT NULL,
-    "baseQuantity" INTEGER NOT NULL,
+    "description" TEXT,
     "price" DOUBLE PRECISION NOT NULL,
-    "unitLabel" TEXT NOT NULL,
+    "unitLabel" TEXT,
 
     CONSTRAINT "Presentation_pkey" PRIMARY KEY ("id")
 );
