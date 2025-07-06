@@ -1,7 +1,14 @@
 // src/components/Layout.tsx
 import { Link, Outlet } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 export default function Layout() {
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    navigate("/login");
+  };
   return (
     <div className="min-h-screen from-purple-900 via-indigo-800 to-indigo-500 bg-gradient-to-br">
       {/* Navbar */}
@@ -12,6 +19,12 @@ export default function Layout() {
             <Link to="/" className="text-gray-700 hover:text-blue-600">Inicio</Link>
             <Link to="/inventory" className="text-gray-700 hover:text-blue-600">Inventario</Link>
             {/* <Link to="/stats" className="text-gray-700 hover:text-blue-600">Estadísticas</Link> */}
+            <button
+              onClick={handleLogout}
+              className="text-red-600 hover:text-red-800 font-semibold ml-4"
+            >
+              Cerrar sesión
+            </button>
           </div>
         </div>
       </nav>
