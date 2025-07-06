@@ -29,13 +29,14 @@ export default function ProductFormCreate({
 }: ProductFormCreateProps) {
   const [form, setForm] = useState(initialState);
   const [message, setMessage] = useState("");
+  const [messageType, setMessageType] = useState<"success"|"error">();
 
   useEffect(() => {
     if (initialData) {
       setForm({
         name: initialData.name,
         barCode: initialData.barCode || "",
-        productTypeId: initialData.productType.id,
+        productTypeId: Number(initialData.productType.id),
         initialQuantity: initialData.inventories?.[0]?.quantity ?? 0,
         companyId: 1,
         presentation: {
@@ -44,6 +45,7 @@ export default function ProductFormCreate({
           description: initialData.presentations?.[0]?.description ?? "",
         },
       });
+      console.log("Cargando initialData en form:", initialData);
     }
   }, [initialData]);
 
@@ -51,36 +53,90 @@ export default function ProductFormCreate({
     const { name, value } = e.target;
 
     if (["price", "unitLabel", "description"].includes(name)) {
-      setForm((prev) => ({
-        ...prev,
-        presentation: {
-          ...prev.presentation,
-          [name]: name === "price" ? Number(value) : value,
-        },
-      }));
+      setForm((prev) => {
+        const updated = {
+          ...prev,
+          presentation: {
+            ...prev.presentation,
+            [name]: name === "price" ? Number(value) : value,
+          },
+        };
+        console.log("Cambio en presentación:", name, value, updated);
+        return updated;
+      });
     } else {
-      setForm((prev) => ({
-        ...prev,
-        [name]: ["productTypeId", "initialQuantity"].includes(name) ? Number(value) : value,
-      }));
+      setForm((prev) => {
+        const updated = {
+          ...prev,
+          [name]: ["productTypeId", "initialQuantity"].includes(name) ? Number(value) : value,
+        };
+        console.log("Cambio en form:", name, value, updated);
+        return updated;
+      });
     }
   }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    console.log("Enviando form:", form);
+    // Validación simple antes de enviar
+    if (
+      form.initialQuantity === undefined ||
+      form.initialQuantity === null ||
+      isNaN(Number(form.initialQuantity)) ||
+      Number(form.initialQuantity) <= 0
+    ) {
+      setMessageType("error");
+      setMessage("La cantidad inicial debe ser un número mayor a 0");
+      return;
+    }
+    if (
+      form.presentation.price === undefined ||
+      form.presentation.price === null ||
+      isNaN(Number(form.presentation.price)) ||
+      Number(form.presentation.price) <= 0
+    ) {
+      setMessageType("error");
+      setMessage("El precio debe ser un número mayor a 0");
+      return;
+    }
     try {
       if (initialData) {
-        await updateProduct(initialData.id.toString(), form);
+        await updateProduct(initialData.id.toString(), {
+          name: form.name,
+          barCode: form.barCode,
+          productTypeId: form.productTypeId,
+          presentation: {
+            id: initialData.presentations?.[0]?.id,
+            price: form.presentation.price,
+            unitLabel: form.presentation.unitLabel,
+            description: form.presentation.description,
+          },
+          inventory: {
+            id: initialData.inventories?.[0]?.id,
+            quantity: form.initialQuantity,
+          },
+        });
+        setMessageType("success");
         setMessage("Producto actualizado con éxito");
+        setTimeout(() => setMessage(""), 3000);
+        if (onSuccess) onSuccess();
       } else {
         await createProduct(form);
+        setMessageType("success");
         setMessage("Producto creado con éxito");
+        setTimeout(() => setMessage(""), 3000);
         setForm(initialState);
+        if (onSuccess) onSuccess();
       }
-
-      if (onSuccess) onSuccess();
     } catch (error) {
-      setMessage("Error al guardar el producto");
+      setMessageType("error");
+      let backendMsg = "Error al guardar el producto";
+      if (typeof error === "object" && error !== null && "response" in error) {
+        const err = error as { response?: { data?: { error?: string; message?: string } } };
+        backendMsg = err.response?.data?.error || err.response?.data?.message || backendMsg;
+      }
+      setMessage(backendMsg);
       console.error(error);
     }
   }
@@ -92,6 +148,12 @@ export default function ProductFormCreate({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4 flex flex-col">
+      {message && (
+        <div className={`mb-2 text-center ${messageType === "success" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"} px-4 py-2 rounded font-semibold animate-fade-in`}>
+          {message}
+        </div>
+      )}
+
       <Field>
         <Label className="text-sm/6 font-medium text-white">Nombre</Label>
         <Input
@@ -123,8 +185,8 @@ export default function ProductFormCreate({
           className={inputClass}
           required
         >
-          <option value={1}>Unidad</option>
-          <option value={2}>Kilogramo</option>
+          <option value={1}>Kilogramo</option>
+          <option value={2}>Unidad</option>
         </select>
       </Field>
 
@@ -132,7 +194,9 @@ export default function ProductFormCreate({
         <Label className="text-sm/6 font-medium text-white">Cantidad inicial</Label>
         <Input
           name="initialQuantity"
-          type="number"
+          type="text"
+          inputMode="numeric"
+          pattern="[0-9]*"
           value={form.initialQuantity}
           onChange={handleChange}
           className={inputClass}
@@ -144,7 +208,9 @@ export default function ProductFormCreate({
         <Label className="text-sm/6 font-medium text-white">Precio</Label>
         <Input
           name="price"
-          type="number"
+          type="text"
+          inputMode="decimal"
+          pattern="[0-9.]*"
           value={form.presentation.price}
           onChange={handleChange}
           className={inputClass}
@@ -180,10 +246,6 @@ export default function ProductFormCreate({
           {initialData ? "Guardar" : "Crear"}
         </button>
       </div>
-
-      {message && (
-        <p className="text-center text-sm text-white mt-2">{message}</p>
-      )}
     </form>
   );
 }

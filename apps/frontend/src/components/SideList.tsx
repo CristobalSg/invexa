@@ -26,7 +26,10 @@ export default function SideList({ searchTerm, onProductClick }: Props) {
     )
   }
 
-  const filtered = products?.filter((p) => p.name.toLowerCase().includes(searchTerm.toLowerCase()))
+  // Usar array vacío si products no es array
+  const filtered = Array.isArray(products)
+    ? products.filter((p) => p.name.toLowerCase().includes(searchTerm.toLowerCase()))
+    : [];
 
   // Colores alternados tipo acuarela
   const watercolorBgs = [

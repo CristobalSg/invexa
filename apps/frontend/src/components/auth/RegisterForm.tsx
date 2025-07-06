@@ -21,6 +21,7 @@ export default function RegisterForm() {
   } = useForm<RegisterFormInputs>();
 
   const [message, setMessage] = useState("");
+  const [messageType, setMessageType] = useState<"success" | "error">();
 
   const onSubmit = async (data: RegisterFormInputs) => {
     try {
@@ -30,10 +31,13 @@ export default function RegisterForm() {
       );
       const token = res.data.token;
       localStorage.setItem("token", token);
+      setMessageType("success");
       setMessage("Registro exitoso");
-      navigate("/");
-    } catch (error: any) {
-      console.error(error);
+      setTimeout(() => setMessage(""), 3000);
+      navigate("/login");
+    } catch (error) {
+      setMessageType("error");
+      // @ts-expect-error: error puede ser de axios
       setMessage(error.response?.data?.message || "Error al registrar usuario");
     }
   };
@@ -41,10 +45,24 @@ export default function RegisterForm() {
   return (
     <div className="max-w-md mx-auto mt-10 p-6 border rounded shadow bg-white">
       <h2 className="text-2xl font-bold mb-4 text-center">Registro de Usuario</h2>
+      {message && (
+        <div
+          className={`mb-4 text-center ${
+            messageType === "success"
+              ? "bg-green-100 text-green-800"
+              : "bg-red-100 text-red-800"
+          } px-4 py-2 rounded font-semibold animate-fade-in`}
+        >
+          {message}
+        </div>
+      )}
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <div>
-          <label htmlFor="companyName" className="block text-sm font-medium text-gray-700">
+          <label
+            htmlFor="companyName"
+            className="block text-sm font-medium text-gray-700"
+          >
             Nombre de la empresa
           </label>
           <input
@@ -53,11 +71,16 @@ export default function RegisterForm() {
             {...register("companyName", { required: true })}
             className="mt-1 w-full border p-2 rounded"
           />
-          {errors.companyName && <p className="text-red-500 text-sm">Campo requerido</p>}
+          {errors.companyName && (
+            <p className="text-red-500 text-sm">Campo requerido</p>
+          )}
         </div>
 
         <div>
-          <label htmlFor="username" className="block text-sm font-medium text-gray-700">
+          <label
+            htmlFor="username"
+            className="block text-sm font-medium text-gray-700"
+          >
             Nombre de usuario
           </label>
           <input
@@ -66,11 +89,16 @@ export default function RegisterForm() {
             {...register("username", { required: true })}
             className="mt-1 w-full border p-2 rounded"
           />
-          {errors.username && <p className="text-red-500 text-sm">Campo requerido</p>}
+          {errors.username && (
+            <p className="text-red-500 text-sm">Campo requerido</p>
+          )}
         </div>
 
         <div>
-          <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+          <label
+            htmlFor="password"
+            className="block text-sm font-medium text-gray-700"
+          >
             Contraseña
           </label>
           <input
@@ -79,11 +107,16 @@ export default function RegisterForm() {
             {...register("password", { required: true })}
             className="mt-1 w-full border p-2 rounded"
           />
-          {errors.password && <p className="text-red-500 text-sm">Campo requerido</p>}
+          {errors.password && (
+            <p className="text-red-500 text-sm">Campo requerido</p>
+          )}
         </div>
 
         <div>
-          <label htmlFor="name" className="block text-sm font-medium text-gray-700">
+          <label
+            htmlFor="name"
+            className="block text-sm font-medium text-gray-700"
+          >
             Nombre completo
           </label>
           <input
@@ -96,7 +129,10 @@ export default function RegisterForm() {
         </div>
 
         <div>
-          <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+          <label
+            htmlFor="email"
+            className="block text-sm font-medium text-gray-700"
+          >
             Correo electrónico
           </label>
           <input
@@ -116,12 +152,13 @@ export default function RegisterForm() {
         </button>
       </form>
 
-      {message && <p className="mt-4 text-sm text-center text-red-500">{message}</p>}
-
       <div className="mt-6 text-center">
         <p className="text-sm text-gray-600">
           ¿Ya tienes una cuenta?{" "}
-          <Link to="/login" className="text-blue-600 hover:underline font-medium">
+          <Link
+            to="/login"
+            className="text-blue-600 hover:underline font-medium"
+          >
             Iniciar sesión
           </Link>
         </p>

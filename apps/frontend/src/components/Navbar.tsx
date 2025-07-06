@@ -1,8 +1,32 @@
 // src/components/Navbar.tsx
 import React from "react";
-import { Link } from "react-router-dom"; // o next/link si usas Next.js
+import { Link, useNavigate, useLocation } from "react-router-dom"; // o next/link si usas Next.js
 
 export const Navbar: React.FC = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [isLogged, setIsLogged] = React.useState(!!localStorage.getItem("token"));
+
+  React.useEffect(() => {
+    const checkToken = () => setIsLogged(!!localStorage.getItem("token"));
+    checkToken(); // Verifica al montar
+    window.addEventListener("storage", checkToken);
+    // También escucha cambios de ruta (por si el token cambia en la misma pestaña)
+    window.addEventListener("focus", checkToken);
+    return () => {
+      window.removeEventListener("storage", checkToken);
+      window.removeEventListener("focus", checkToken);
+    };
+  }, []);
+  React.useEffect(() => {
+    setIsLogged(!!localStorage.getItem("token"));
+  }, [location]);
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    navigate("/login");
+  };
+
   return (
     <nav className="bg-white dark:bg-gray-900 fixed w-full z-20 top-0 start-0 border-b border-gray-200 dark:border-gray-600">
       <div className="max-w-screen-xl flex flex-wrap items-center justify-between mx-auto p-4">
@@ -17,12 +41,26 @@ export const Navbar: React.FC = () => {
           </span>
         </Link>
         <div className="flex md:order-2 space-x-3 md:space-x-0 rtl:space-x-reverse">
-          <button
-            type="button"
-            className="text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:outline-none focus:ring-blue-300 font-medium rounded-lg text-sm px-4 py-2 text-center dark:bg-blue-600 dark:hover:bg-blue-700 dark:focus:ring-blue-800"
-          >
-            Ingresar
-          </button>
+          {isLogged ? (
+            <button
+              type="button"
+              onClick={() => {
+                handleLogout();
+                setIsLogged(false);
+              }}
+              className="text-white bg-red-600 hover:bg-red-700 focus:ring-4 focus:outline-none focus:ring-red-300 font-medium rounded-lg text-sm px-4 py-2 text-center dark:bg-red-600 dark:hover:bg-red-700 dark:focus:ring-red-800"
+            >
+              Cerrar sesión
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => navigate("/login")}
+              className="text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:outline-none focus:ring-blue-300 font-medium rounded-lg text-sm px-4 py-2 text-center dark:bg-blue-600 dark:hover:bg-blue-700 dark:focus:ring-blue-800"
+            >
+              Ingresar
+            </button>
+          )}
         </div>
         <div
           className="items-center justify-between hidden w-full md:flex md:w-auto md:order-1"

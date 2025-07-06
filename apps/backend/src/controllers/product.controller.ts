@@ -120,13 +120,55 @@ export async function updateProduct(req: Request, res: Response) {
   if (!result.success) return res.status(400).json({ error: result.error.format() })
 
   try {
-    const product = await prisma.product.update({ where: { id }, data: result.data })
-    return res.json({ ...product, id: product.id.toString() })
+    // Filtra solo los campos simples para el update de product
+    const { name, barCode, productTypeId } = result.data;
+    const productUpdateData: any = {};
+    if (name !== undefined) productUpdateData.name = name;
+    if (barCode !== undefined) productUpdateData.barCode = barCode;
+    if (productTypeId !== undefined) productUpdateData.productTypeId = Number(productTypeId);
+
+    const product = await prisma.product.update({ where: { id }, data: productUpdateData });
+
+    // Actualiza la presentación si viene en el body
+    if (result.data.presentation && result.data.presentation.id) {
+      await prisma.presentation.update({
+        where: { id: result.data.presentation.id },
+        data: {
+          price: result.data.presentation.price,
+          description: result.data.presentation.description,
+          unitLabel: result.data.presentation.unitLabel,
+        },
+      });
+    }
+
+    // Actualiza el inventario si viene en el body
+    if (result.data.inventory && result.data.inventory.id) {
+      await prisma.inventory.update({
+        where: { id: result.data.inventory.id },
+        data: {
+          quantity: result.data.inventory.quantity,
+        },
+      });
+    }
+
+    // Devuelve el producto actualizado con relaciones
+    const updated = await prisma.product.findUnique({
+      where: { id },
+      include: {
+        productType: true,
+        presentations: true,
+        inventories: true,
+      },
+    });
+
+    if (!updated) return res.status(404).json({ error: 'Producto no encontrado tras actualizar' });
+    return res.json({ ...updated, id: updated.id.toString() });
   } catch (e: any) {
+    console.error('Error en updateProduct:', e);
     if (e.code === 'P2002' && e.meta?.target?.includes('barCode')) {
       return res.status(400).json({ error: 'El código de barra ya existe' })
     }
-    return res.status(500).json({ error: 'Internal server error' })
+    return res.status(500).json({ error: 'Internal server error', details: e.message });
   }
 }
 

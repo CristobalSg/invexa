@@ -1,5 +1,5 @@
 // src/services/productService.ts
-import type { Product, CreateProductInput } from "../types/product";
+import type { Product, CreateProductInput, UpdateProductInput } from "../types/product";
 import api from "../lib/axios";
 
 const ENDPOINT = "/products";
@@ -14,8 +14,10 @@ export async function createProduct(input: CreateProductInput): Promise<Product>
   return data;
 }
 
-export async function updateProduct(id: string, product: Partial<CreateProductInput>): Promise<Product> {
+export async function updateProduct(id: string, product: UpdateProductInput): Promise<Product> {
+  console.log("updateProduct - id:", id, "product:", product);
   const { data } = await api.put<Product>(`${ENDPOINT}/${id}`, product);
+  console.log("updateProduct - response:", data);
   return data;
 }
 

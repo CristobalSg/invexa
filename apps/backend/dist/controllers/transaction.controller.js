@@ -24,7 +24,26 @@ async function createTransaction(req, res) {
 }
 async function getTransactions(req, res) {
     try {
-        const transactions = await client_1.default.transaction.findMany();
+        const { from, to } = req.query;
+        let where = {};
+        if (from || to) {
+            where = {
+                date: {
+                    ...(from ? { gte: new Date(from) } : {}),
+                    ...(to ? { lte: new Date(to) } : {})
+                }
+            };
+        }
+        const transactions = await client_1.default.transaction.findMany({
+            where,
+            include: {
+                product: {
+                    include: {
+                        presentations: true, // para obtener el precio
+                    },
+                },
+            },
+        });
         return res.json(transactions);
     }
     catch {

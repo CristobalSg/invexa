@@ -39,3 +39,19 @@ export type CreateProductInput = {
   };
   initialQuantity: number;
 };
+
+export type UpdateProductInput = {
+  name?: string;
+  barCode?: string;
+  productTypeId?: number;
+  presentation?: {
+    id: number;
+    price?: number;
+    description?: string;
+    unitLabel?: string;
+  };
+  inventory?: {
+    id: number;
+    quantity?: number;
+  };
+};

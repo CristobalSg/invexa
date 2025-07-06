@@ -2,7 +2,7 @@
 import { useForm } from "react-hook-form";
 import { useState } from "react";
 import { useNavigate, Link} from "react-router-dom";
-import { Input, Label, Field, Description } from "@headlessui/react";
+import { Label, Field } from "@headlessui/react";
 import { LockClosedIcon, UserIcon } from "@heroicons/react/20/solid";
 import axios from "axios";
 
@@ -14,6 +14,7 @@ export default function LoginForm() {
     formState: { errors },
   } = useForm<{ username: string; password: string }>();
   const [message, setMessage] = useState("");
+  const [messageType, setMessageType] = useState<"success"|"error">();
 
   const onSubmit = async (data: { username: string; password: string }) => {
     try {
@@ -22,15 +23,24 @@ export default function LoginForm() {
         data
       );
       localStorage.setItem("token", res.data.token);
+      setMessageType("success");
       setMessage("Inicio de sesión exitoso");
+      setTimeout(() => setMessage(""), 3000);
       navigate("/");
-    } catch (error: any) {
+    } catch (error) {
+      setMessageType("error");
+      // @ts-expect-error: error puede ser de axios
       setMessage(error.response?.data?.message || "Error al iniciar sesión");
     }
   };
 
   return (
     <div className="max-w-md mx-auto mt-16 bg-white p-8 shadow-xl rounded-xl border">
+      {message && (
+        <div className={`mb-4 text-center ${messageType === "success" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"} px-4 py-2 rounded font-semibold animate-fade-in`}>
+          {message}
+        </div>
+      )}
       <h2 className="text-2xl font-bold text-gray-800 mb-6 text-center flex items-center justify-center gap-2">
         <LockClosedIcon className="h-6 w-6 text-blue-600" /> Iniciar Sesión
       </h2>
@@ -64,8 +74,6 @@ export default function LoginForm() {
         >
           Iniciar Sesión
         </button>
-
-        {message && <p className="text-sm text-center mt-4 text-gray-600">{message}</p>}
 
         <div className="mt-6 text-center">
           <p className="text-sm text-gray-600">

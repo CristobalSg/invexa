@@ -15,6 +15,7 @@ export default function Home() {
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState("");
   const [cart, setCart] = useState<CartProduct[]>([]);
+  const [saleMessage, setSaleMessage] = useState("");
 
   const total = cart.reduce((acc, p) => {
     const price = p.presentations?.[0]?.price ?? 0;
@@ -24,10 +25,12 @@ export default function Home() {
 
   const handleFinishSale = async () => {
     try {
-    console.log(cart)
+      console.log(cart)
       await registerSale(cart);
       queryClient.invalidateQueries({ queryKey: ["products"] });
       setCart([]);
+      setSaleMessage("¡Venta exitosa!");
+      setTimeout(() => setSaleMessage(""), 3000);
     } catch (error) {
       console.error("Error al finalizar venta:", error);
       alert("Hubo un error al registrar la venta");
@@ -93,6 +96,13 @@ export default function Home() {
           onProductClick={handleProductFound}
         />
         <StatsPanel total={total} onFinish={handleFinishSale} />
+        {saleMessage && (
+          <div className="mt-4 text-center">
+            <span className="inline-block bg-green-100 text-green-800 px-4 py-2 rounded shadow font-semibold animate-fade-in">
+              {saleMessage}
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );

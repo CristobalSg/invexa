@@ -10,6 +10,7 @@ router.get('/', (req, res, next) => {
 });
 router.get('/:id', product_controller_1.getProduct);
 router.post('/', product_controller_1.createProduct);
+router.post('/full', product_controller_1.createFullProductFlow);
 router.put('/:id', product_controller_1.updateProduct);
 router.delete('/:id', product_controller_1.deleteProduct);
 exports.default = router;

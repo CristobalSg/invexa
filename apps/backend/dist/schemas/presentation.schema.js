@@ -8,12 +8,12 @@ exports.createPresentationSchema = zod_1.z.object({
     baseQuantity: zod_1.z.number().int().min(1),
     price: zod_1.z.number().min(0),
     unitLabel: zod_1.z.string().min(1),
-    qrCode: zod_1.z.string().optional()
+    barCode: zod_1.z.string().optional()
 });
 exports.updatePresentationSchema = zod_1.z.object({
     description: zod_1.z.string().min(1).optional(),
     baseQuantity: zod_1.z.number().int().min(1).optional(),
     price: zod_1.z.number().min(0).optional(),
     unitLabel: zod_1.z.string().min(1).optional(),
-    qrCode: zod_1.z.string().optional()
+    barCode: zod_1.z.string().optional()
 });
