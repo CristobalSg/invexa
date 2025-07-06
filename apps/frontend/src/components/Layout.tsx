@@ -11,6 +11,7 @@ export default function Layout() {
           <div className="space-x-4">
             <Link to="/" className="text-gray-700 hover:text-blue-600">Inicio</Link>
             <Link to="/inventory" className="text-gray-700 hover:text-blue-600">Inventario</Link>
+            {/* <Link to="/stats" className="text-gray-700 hover:text-blue-600">Estadísticas</Link> */}
           </div>
         </div>
       </nav>

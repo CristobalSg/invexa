@@ -6,8 +6,8 @@ import RegisterPage from "./pages/auth/Register";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 
 import Home from "./pages/Home";
-import InventoryPage from "./pages/InventoryPage";
 import ProductsPage from "./pages/ProductsPage";
+import StatsPage from "./pages/StatsPage";
 
 export default function App() {
   return (
@@ -31,18 +31,19 @@ export default function App() {
             path="/inventory"
             element={
               <ProtectedRoute>
-                <InventoryPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/products"
-            element={
-              <ProtectedRoute>
                 <ProductsPage />
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/stats"
+            element={
+              <ProtectedRoute>
+                <StatsPage />
+              </ProtectedRoute>
+            }
+          />
+
         </Route>
       </Routes>
     </BrowserRouter>

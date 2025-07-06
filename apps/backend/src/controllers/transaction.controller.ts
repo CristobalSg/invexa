@@ -25,7 +25,16 @@ export async function getTransactions(req: Request, res: Response) {
         }
       }
     }
-    const transactions = await prisma.transaction.findMany({ where })
+    const transactions = await prisma.transaction.findMany({
+      where,
+      include: {
+        product: {
+          include: {
+            presentations: true, // para obtener el precio
+          },
+        },
+      },
+    });
     return res.json(transactions)
   } catch {
     return res.status(500).json({ error: 'Internal server error' })
