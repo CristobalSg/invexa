@@ -26,7 +26,7 @@ export default function Home() {
     try {
     console.log(cart)
       await registerSale(cart);
-      queryClient.invalidateQueries({ queryKey: ["products"] }); // 🔁 fuerza refetch
+      queryClient.invalidateQueries({ queryKey: ["products"] });
       setCart([]);
     } catch (error) {
       console.error("Error al finalizar venta:", error);
