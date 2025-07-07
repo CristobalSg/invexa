@@ -1,0 +1,33 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: invexa-ingress
+  namespace: jdelpino-dev
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    external-dns.alpha.kubernetes.io/hostname: invexa.inf.uct.cl
+    external-dns.alpha.kubernetes.io/target: 190.102.240.125
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - invexa.inf.uct.cl
+      secretName: inf-uct-cl-tls
+  rules:
+    - host: invexa.inf.uct.cl
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: backend-service
+                port:
+                  number: 3000
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend-service
+                port:
+                  number: 80

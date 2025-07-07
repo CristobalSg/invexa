@@ -4,6 +4,7 @@ import type { Product } from "../types/product";
 import { getProducts, createProduct, updateProduct, deleteProduct } from "../services/productService";
 import { ProductCard } from "../components/ProductCard";
 import { ProductModal } from "../components/ProductModal";
+import { ProductForm } from "../components/ProductForm";
 
 const emptyForm = {
   name: "",
@@ -39,8 +40,25 @@ export default function InventoryPage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<typeof emptyForm> }) =>
-      updateProduct(id, data),
+    mutationFn: ({ id, data }: { id: string; data: Partial<typeof emptyForm> }) => {
+      // Buscar el producto original para obtener los ids necesarios
+      const product = products?.find((p) => p.id.toString() === id);
+      return updateProduct(id, {
+        name: data.name,
+        barCode: data.barCode,
+        productTypeId: data.productTypeId,
+        presentation: product && product.presentations[0] ? {
+          id: product.presentations[0].id,
+          price: data.presentation?.price,
+          unitLabel: data.presentation?.unitLabel,
+          description: data.presentation?.description,
+        } : undefined,
+        inventory: product && product.inventories[0] ? {
+          id: product.inventories[0].id,
+          quantity: data.initialQuantity,
+        } : undefined,
+      });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["products"] });
       setEditingId(null);
@@ -132,12 +150,15 @@ export default function InventoryPage() {
       <ProductModal
         isOpen={showModal}
         onClose={() => setShowModal(false)}
-        form={form}
-        handleSubmit={handleSubmit}
-        handleChange={handleChange}
-        handleCancelEdit={handleCancelEdit}
-        editingId={editingId}
-      />
+      >
+        <ProductForm
+          form={form}
+          handleSubmit={handleSubmit}
+          handleChange={handleChange}
+          handleCancelEdit={handleCancelEdit}
+          editingId={editingId}
+        />
+      </ProductModal>
 
       {isLoading && <p>Cargando productos...</p>}
       {error && <p className="text-red-500">Error al cargar productos</p>}

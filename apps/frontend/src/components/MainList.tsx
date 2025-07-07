@@ -2,9 +2,9 @@ import { MinusIcon, TrashIcon } from "@heroicons/react/24/outline"
 import type { Product } from "../types/product"
 
 interface ProductListProps {
-  products?: Product[]
-  onDecrease?: (id: string) => void
-  onRemove?: (id: string) => void
+  products?: (Product & { quantity?: number })[];
+  onDecrease?: (id: string) => void;
+  onRemove?: (id: string) => void;
 }
 
 export default function ProductList({ products = [], onDecrease, onRemove }: ProductListProps) {
@@ -34,7 +34,7 @@ export default function ProductList({ products = [], onDecrease, onRemove }: Pro
                 <span className="text-xs text-gray-500">{product.barCode}</span>
                 <span className="text-xs text-gray-400">•</span>
                 <span className="text-xs text-gray-500">
-                  {product.quantity} {product.quantity === 1 ? "unidad" : "unidades"}
+                  {product.quantity ?? 1} {product.quantity === 1 ? "unidad" : "unidades"}
                 </span>
               </div>
             </div>

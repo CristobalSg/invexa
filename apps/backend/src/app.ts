@@ -7,7 +7,7 @@ const app = express()
 
 
 app.use(cors({
-  origin: ["http://localhost:5173", "https://invexa-five.vercel.app"],
+  origin: ["http://localhost:5173", "https://invexa-five.vercel.app", "https://invexa.inf.uct.cl"],
   methods: ["GET", "POST", "PUT", "DELETE"],
   credentials: true,
 }));

@@ -1,12 +1,12 @@
 import React from "react";
 import { Dialog, DialogPanel, DialogTitle } from "@headlessui/react";
 
-type ProductModalProps = {
+interface ProductModalProps {
   isOpen: boolean;
   onClose: () => void;
   title?: string;
   children: React.ReactNode;
-};
+}
 
 export const ProductModal: React.FC<ProductModalProps> = ({
   isOpen,

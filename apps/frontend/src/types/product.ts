@@ -27,6 +27,9 @@ export interface Inventory {
   quantity: number;
 }
 
+// Para el carrito (con cantidad)
+export type CartProduct = Product & { quantity: number };
+
 export type CreateProductInput = {
   name: string;
   barCode: string;

@@ -1,0 +1,21 @@
+FROM node:20-alpine AS builder
+WORKDIR /app
+
+COPY pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/backend ./apps/backend
+
+RUN npm install -g pnpm \
+  && pnpm install --shamefully-hoist --frozen-lockfile \
+  && pnpm --filter backend build
+
+FROM node:20-alpine
+WORKDIR /app
+
+COPY --from=builder /app/apps/backend/dist ./dist
+COPY --from=builder /app/apps/backend/package.json ./
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/apps/backend/prisma ./prisma
+COPY apps/backend/.env.production .env
+
+EXPOSE 3000
+CMD ["node", "dist/index.js"]
