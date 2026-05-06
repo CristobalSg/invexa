@@ -1,7 +1,10 @@
 packages:
-  - apps/*
+  - backend
+  - frontend
   - packages/*
 onlyBuiltDependencies:
   - '@prisma/client'
   - '@prisma/engines'
+  - bcrypt
+  - esbuild
   - prisma
