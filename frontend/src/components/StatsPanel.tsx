@@ -6,19 +6,14 @@ interface StatsPanelProps {
 
 export default function StatsPanel({ total, onFinish, disabled }: StatsPanelProps) {
   return (
-    <div className="bg-white shadow-md rounded-xl p-6 flex flex-col items-center">
-      <div className="text-center mb-6">
-        <p className="text-gray-600">Total de venta:</p>
-        <p className="text-3xl font-bold text-green-600">${total.toFixed(2)}</p>
-      </div>
-
-      <button
-        onClick={onFinish}
-        disabled={disabled}
-        className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-medium py-2 px-6 rounded-lg transition-colors"
-      >
-        Finalizar venta
-      </button>
-    </div>
+    <button
+      type="button"
+      onClick={onFinish}
+      disabled={disabled}
+      className="w-full rounded-xl bg-blue-600 p-6 text-center text-white shadow-md transition-all hover:-translate-y-0.5 hover:bg-blue-700 hover:shadow-lg disabled:translate-y-0 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:shadow-none"
+    >
+      <span className="block text-sm font-medium text-blue-100">Finalizar venta</span>
+      <span className="mt-2 block text-3xl font-bold">${total.toLocaleString()}</span>
+    </button>
   );
 }

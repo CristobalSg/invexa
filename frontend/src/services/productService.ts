@@ -1,5 +1,5 @@
 import api from "../lib/axios";
-import type { PaginatedResult, Producto, TipoPropiedadProducto } from "../types/api";
+import type { ModoInventarioProducto, PaginatedResult, Producto, TipoPropiedadProducto } from "../types/api";
 import type { CreateProductInput } from "../types/product";
 
 const ENDPOINT = "/productos";
@@ -12,6 +12,7 @@ export interface ProductFilters {
   categoria_id?: number;
   proveedor_id?: number;
   tipo_propiedad?: TipoPropiedadProducto;
+  modo_inventario?: ModoInventarioProducto;
 }
 
 export async function getProducts(filters: ProductFilters = {}): Promise<PaginatedResult<Producto>> {

@@ -1,6 +1,8 @@
 export type MetodoPago = 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'MIXTO';
 export type EstadoVenta = 'COMPLETADA' | 'ANULADA';
 export type TipoPropiedadProducto = 'PROPIO' | 'CONSIGNACION';
+export type ModalidadVenta = 'NORMAL' | 'PRECIO_COSTO' | 'RETIRO_DUENO';
+export type ModoInventarioProducto = 'SIN_INVENTARIO' | 'FLEXIBLE' | 'ESTRICTO';
 
 export interface SesionCajaAbiertaRow {
   readonly id: number;
@@ -11,14 +13,17 @@ export interface VentaProductoRow {
   readonly id: number;
   readonly nombre: string;
   readonly precio_venta: string;
+  readonly costo_actual: string | null;
   readonly stock: string;
   readonly activo: boolean;
   readonly tipo_propiedad: TipoPropiedadProducto;
+  readonly modo_inventario: ModoInventarioProducto;
   readonly proveedor_id: number | null;
 }
 
 export interface OfertaActivaRow {
   readonly id: number;
+  readonly cantidad_oferta: string;
   readonly precio_oferta: string;
 }
 
@@ -31,6 +36,7 @@ export interface VentaRow {
   readonly subtotal: string;
   readonly descuento: string;
   readonly total: string;
+  readonly modalidad: ModalidadVenta;
   readonly estado: EstadoVenta;
   readonly anulada_en: Date | null;
   readonly anulada_por: number | null;
@@ -51,6 +57,9 @@ export interface DetalleVentaRow {
   readonly cantidad: string;
   readonly precio_unitario: string;
   readonly subtotal: string;
+  readonly precio_normal: string;
+  readonly descuento: string;
+  readonly total_final: string;
   readonly tipo_propiedad: TipoPropiedadProducto;
   readonly proveedor_id: number | null;
   readonly proveedor_nombre: string | null;
@@ -76,6 +85,7 @@ export interface Venta {
   readonly subtotal: number;
   readonly descuento: number;
   readonly total: number;
+  readonly modalidad: ModalidadVenta;
   readonly estado: EstadoVenta;
   readonly anulada_en: string | null;
   readonly anulada_por: number | null;
@@ -92,6 +102,9 @@ export interface DetalleVenta {
   readonly cantidad: number;
   readonly precio_unitario: number;
   readonly subtotal: number;
+  readonly precio_normal: number;
+  readonly descuento: number;
+  readonly total_final: number;
   readonly tipo_propiedad: TipoPropiedadProducto;
   readonly proveedor_id: number | null;
   readonly proveedor_nombre: string | null;
@@ -121,11 +134,14 @@ export interface CreateVentaItemBody {
 export interface CreateVentaBody {
   readonly metodo_pago: MetodoPago;
   readonly descuento?: number;
+  readonly modalidad?: ModalidadVenta;
+  readonly master_password?: string;
   readonly items: CreateVentaItemBody[];
 }
 
 export interface AnularVentaBody {
   readonly motivo: string;
+  readonly master_password: string;
 }
 
 export interface VentaParams {

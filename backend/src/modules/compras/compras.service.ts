@@ -1,6 +1,7 @@
 import type { Pool } from 'pg';
 
 import { BadRequestError, NotFoundError } from '../../utils/errors.js';
+import { assertValidOwnerPassword } from '../../utils/master-authorization.js';
 import { withTransaction } from '../../utils/transactions.js';
 import type { ComprasRepository } from './compras.repository.js';
 import type {
@@ -8,6 +9,7 @@ import type {
   CompraDetalle,
   CompraListRow,
   CompraRow,
+  AnularCompraBody,
   CreateCompraBody,
   DetalleCompra,
   DetalleCompraRow,
@@ -38,7 +40,10 @@ export class ComprasService {
         }
 
         const stockAnterior = Number(producto.stock);
-        const stockNuevo = this.round(stockAnterior + item.cantidad, 3);
+        const actualizaInventario = producto.modo_inventario !== 'SIN_INVENTARIO';
+        const stockNuevo = actualizaInventario
+          ? this.round(stockAnterior + item.cantidad, 3)
+          : stockAnterior;
         const costoAnterior = producto.costo_actual === null ? null : Number(producto.costo_actual);
         const precioAnterior = Number(producto.precio_venta);
         const multiplicadorGanancia = Number(producto.multiplicador_ganancia);
@@ -74,17 +79,20 @@ export class ComprasService {
           costoActual: item.costo_unitario,
           precioVenta: precioFinal,
           shouldUpdatePrecioVenta,
+          shouldUpdateStock: actualizaInventario,
         });
 
-        await this.repository.createMovimientoCompra(client, {
-          productoId: item.producto_id,
-          usuarioId,
-          cantidad: item.cantidad,
-          stockAnterior,
-          stockNuevo,
-          compraId: compra.id,
-          motivo: `Compra #${compra.id}`,
-        });
+        if (actualizaInventario) {
+          await this.repository.createMovimientoCompra(client, {
+            productoId: item.producto_id,
+            usuarioId,
+            cantidad: item.cantidad,
+            stockAnterior,
+            stockNuevo,
+            compraId: compra.id,
+            motivo: `Compra #${compra.id}`,
+          });
+        }
 
         totalCosto = this.round(totalCosto + subtotalCosto, 2);
       }
@@ -137,6 +145,74 @@ export class ComprasService {
     return this.mapCompraDetalle(compra, detalles, movimientos);
   }
 
+  async anular(compraId: number, usuarioId: number, data: AnularCompraBody): Promise<CompraDetalle> {
+    await assertValidOwnerPassword(this.pool, data.master_password);
+
+    return withTransaction(this.pool, async (client) => {
+      const compra = await this.repository.findCompraForUpdate(client, compraId);
+
+      if (!compra) {
+        throw new NotFoundError('Compra no encontrada');
+      }
+
+      if (compra.estado === 'ANULADA') {
+        throw new BadRequestError('La compra ya fue anulada');
+      }
+
+      const detalles = await this.repository.findDetallesByCompraIdWithClient(client, compra.id);
+
+      for (const detalle of detalles) {
+        const producto = await this.repository.findProductoForUpdate(client, detalle.producto_id);
+
+        if (!producto) {
+          throw new BadRequestError(`Producto ${detalle.producto_id} no existe`);
+        }
+
+        if (producto.modo_inventario === 'SIN_INVENTARIO') {
+          continue;
+        }
+
+        const cantidad = Number(detalle.cantidad);
+        const stockAnterior = Number(producto.stock);
+        const stockNuevo = this.round(stockAnterior - cantidad, 3);
+
+        if (stockNuevo < 0) {
+          throw new BadRequestError(
+            `No se puede anular la compra porque ${producto.nombre} quedaria con stock negativo`,
+          );
+        }
+
+        await this.repository.updateProductoStock(client, {
+          productoId: producto.id,
+          stockNuevo,
+        });
+
+        await this.repository.createMovimientoAnulacionCompra(client, {
+          productoId: producto.id,
+          usuarioId,
+          cantidad,
+          stockAnterior,
+          stockNuevo,
+          compraId: compra.id,
+          motivo: data.motivo,
+        });
+      }
+
+      const compraCompleta = await this.repository.findByIdWithClient(client, compra.id);
+
+      if (!compraCompleta) {
+        throw new NotFoundError('Compra no encontrada');
+      }
+
+      const movimientos = await this.repository.findMovimientosByCompraIdWithClient(
+        client,
+        compra.id,
+      );
+
+      return this.mapCompraDetalle(compraCompleta, detalles, movimientos);
+    });
+  }
+
   private validateUniqueProducts(data: CreateCompraBody): void {
     const productIds = new Set<number>();
 
@@ -155,6 +231,7 @@ export class ComprasService {
       usuario_id: row.usuario_id,
       usuario_nombre: row.usuario_nombre,
       total_costo: Number(row.total_costo),
+      estado: row.estado,
       creado_en: row.creado_en.toISOString(),
     };
   }

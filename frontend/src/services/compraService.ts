@@ -23,3 +23,8 @@ export async function getCompra(id: number) {
   const { data } = await api.get<CompraDetalle>(`/compras/${id}`);
   return data;
 }
+
+export async function anularCompra(id: number, motivo: string, master_password: string) {
+  const { data } = await api.patch<CompraDetalle>(`/compras/${id}/anular`, { motivo, master_password });
+  return data;
+}

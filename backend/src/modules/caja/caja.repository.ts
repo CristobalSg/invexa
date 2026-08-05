@@ -2,6 +2,7 @@ import type { Pool, PoolClient } from 'pg';
 
 import type {
   CajaResumenRow,
+  CajaMovimientoRow,
   CajaSessionListRow,
   CajaSessionRow,
   CajaSessionsQuery,
@@ -23,6 +24,8 @@ export class CajaRepository {
           u.nombre AS usuario_nombre,
           sc.monto_apertura,
           sc.monto_cierre,
+          sc.monto_esperado,
+          sc.diferencia_cierre,
           sc.abierta_en,
           sc.cerrada_en,
           sc.abierta
@@ -50,6 +53,8 @@ export class CajaRepository {
           u.nombre AS usuario_nombre,
           sc.monto_apertura,
           sc.monto_cierre,
+          sc.monto_esperado,
+          sc.diferencia_cierre,
           sc.abierta_en,
           sc.cerrada_en,
           sc.abierta
@@ -85,6 +90,8 @@ export class CajaRepository {
           '' AS usuario_nombre,
           monto_apertura,
           monto_cierre,
+          monto_esperado,
+          diferencia_cierre,
           abierta_en,
           cerrada_en,
           abierta
@@ -95,12 +102,20 @@ export class CajaRepository {
     return result.rows[0] as CajaSessionRow;
   }
 
-  async close(client: PoolClient, sessionId: number, montoCierre: number): Promise<CajaSessionRow> {
+  async close(
+    client: PoolClient,
+    sessionId: number,
+    efectivoContado: number,
+    montoEsperado: number,
+    diferencia: number,
+  ): Promise<CajaSessionRow> {
     const result = await client.query<CajaSessionRow>(
       `
         UPDATE sesiones_caja
         SET
           monto_cierre = $2,
+          monto_esperado = $3,
+          diferencia_cierre = $4,
           cerrada_en = NOW(),
           abierta = FALSE
         WHERE id = $1
@@ -110,11 +125,13 @@ export class CajaRepository {
           '' AS usuario_nombre,
           monto_apertura,
           monto_cierre,
+          monto_esperado,
+          diferencia_cierre,
           abierta_en,
           cerrada_en,
           abierta
       `,
-      [sessionId, montoCierre],
+      [sessionId, efectivoContado, montoEsperado, diferencia],
     );
 
     return result.rows[0] as CajaSessionRow;
@@ -129,6 +146,8 @@ export class CajaRepository {
           u.nombre AS usuario_nombre,
           sc.monto_apertura,
           sc.monto_cierre,
+          sc.monto_esperado,
+          sc.diferencia_cierre,
           sc.abierta_en,
           sc.cerrada_en,
           sc.abierta
@@ -152,6 +171,8 @@ export class CajaRepository {
           u.nombre AS usuario_nombre,
           sc.monto_apertura,
           sc.monto_cierre,
+          sc.monto_esperado,
+          sc.diferencia_cierre,
           sc.abierta_en,
           sc.cerrada_en,
           sc.abierta
@@ -179,6 +200,8 @@ export class CajaRepository {
           u.nombre AS usuario_nombre,
           sc.monto_apertura,
           sc.monto_cierre,
+          sc.monto_esperado,
+          sc.diferencia_cierre,
           sc.abierta_en,
           sc.cerrada_en,
           sc.abierta,
@@ -208,18 +231,30 @@ export class CajaRepository {
   async getResumen(sessionId: number): Promise<CajaResumenRow> {
     const result = await this.pool.query<CajaResumenRow>(
       `
-        SELECT
-          COUNT(v.id)::text AS cantidad_ventas,
-          COALESCE(SUM(v.subtotal), 0)::text AS subtotal,
-          COALESCE(SUM(v.descuento), 0)::text AS descuento,
-          COALESCE(SUM(v.total), 0)::text AS total_ventas,
-          COALESCE(SUM(v.total) FILTER (WHERE v.metodo_pago = 'EFECTIVO'), 0)::text AS efectivo,
-          COALESCE(SUM(v.total) FILTER (WHERE v.metodo_pago = 'TARJETA'), 0)::text AS tarjeta,
-          COALESCE(SUM(v.total) FILTER (WHERE v.metodo_pago = 'TRANSFERENCIA'), 0)::text AS transferencia,
-          COALESCE(SUM(v.total) FILTER (WHERE v.metodo_pago = 'MIXTO'), 0)::text AS mixto
-        FROM ventas v
-        WHERE v.sesion_caja_id = $1
-          AND v.estado = 'COMPLETADA'
+        WITH ventas_resumen AS (
+          SELECT
+            COUNT(v.id)::text AS cantidad_ventas,
+            COALESCE(SUM(v.subtotal), 0)::text AS subtotal,
+            COALESCE(SUM(v.descuento), 0)::text AS descuento,
+            COALESCE(SUM(v.total), 0)::text AS total_ventas,
+            COALESCE(SUM(v.total) FILTER (WHERE v.metodo_pago = 'EFECTIVO'), 0)::text AS efectivo,
+            COALESCE(SUM(v.total) FILTER (WHERE v.metodo_pago = 'TARJETA'), 0)::text AS tarjeta,
+            COALESCE(SUM(v.total) FILTER (WHERE v.metodo_pago = 'TRANSFERENCIA'), 0)::text AS transferencia,
+            COALESCE(SUM(v.total) FILTER (WHERE v.metodo_pago = 'MIXTO'), 0)::text AS mixto
+          FROM ventas v
+          WHERE v.sesion_caja_id = $1
+            AND v.estado = 'COMPLETADA'
+        ),
+        movimientos_resumen AS (
+          SELECT
+            COALESCE(SUM(mc.monto) FILTER (WHERE mc.tipo = 'INGRESO'), 0)::text AS ingresos,
+            COALESCE(SUM(mc.monto) FILTER (WHERE mc.tipo = 'EGRESO'), 0)::text AS egresos
+          FROM movimientos_caja mc
+          WHERE mc.sesion_caja_id = $1
+        )
+        SELECT *
+        FROM ventas_resumen
+        CROSS JOIN movimientos_resumen
       `,
       [sessionId],
     );
@@ -230,22 +265,104 @@ export class CajaRepository {
   async getResumenWithClient(client: PoolClient, sessionId: number): Promise<CajaResumenRow> {
     const result = await client.query<CajaResumenRow>(
       `
-        SELECT
-          COUNT(v.id)::text AS cantidad_ventas,
-          COALESCE(SUM(v.subtotal), 0)::text AS subtotal,
-          COALESCE(SUM(v.descuento), 0)::text AS descuento,
-          COALESCE(SUM(v.total), 0)::text AS total_ventas,
-          COALESCE(SUM(v.total) FILTER (WHERE v.metodo_pago = 'EFECTIVO'), 0)::text AS efectivo,
-          COALESCE(SUM(v.total) FILTER (WHERE v.metodo_pago = 'TARJETA'), 0)::text AS tarjeta,
-          COALESCE(SUM(v.total) FILTER (WHERE v.metodo_pago = 'TRANSFERENCIA'), 0)::text AS transferencia,
-          COALESCE(SUM(v.total) FILTER (WHERE v.metodo_pago = 'MIXTO'), 0)::text AS mixto
-        FROM ventas v
-        WHERE v.sesion_caja_id = $1
-          AND v.estado = 'COMPLETADA'
+        WITH ventas_resumen AS (
+          SELECT
+            COUNT(v.id)::text AS cantidad_ventas,
+            COALESCE(SUM(v.subtotal), 0)::text AS subtotal,
+            COALESCE(SUM(v.descuento), 0)::text AS descuento,
+            COALESCE(SUM(v.total), 0)::text AS total_ventas,
+            COALESCE(SUM(v.total) FILTER (WHERE v.metodo_pago = 'EFECTIVO'), 0)::text AS efectivo,
+            COALESCE(SUM(v.total) FILTER (WHERE v.metodo_pago = 'TARJETA'), 0)::text AS tarjeta,
+            COALESCE(SUM(v.total) FILTER (WHERE v.metodo_pago = 'TRANSFERENCIA'), 0)::text AS transferencia,
+            COALESCE(SUM(v.total) FILTER (WHERE v.metodo_pago = 'MIXTO'), 0)::text AS mixto
+          FROM ventas v
+          WHERE v.sesion_caja_id = $1
+            AND v.estado = 'COMPLETADA'
+        ),
+        movimientos_resumen AS (
+          SELECT
+            COALESCE(SUM(mc.monto) FILTER (WHERE mc.tipo = 'INGRESO'), 0)::text AS ingresos,
+            COALESCE(SUM(mc.monto) FILTER (WHERE mc.tipo = 'EGRESO'), 0)::text AS egresos
+          FROM movimientos_caja mc
+          WHERE mc.sesion_caja_id = $1
+        )
+        SELECT *
+        FROM ventas_resumen
+        CROSS JOIN movimientos_resumen
       `,
       [sessionId],
     );
 
     return result.rows[0] as CajaResumenRow;
+  }
+
+  async createMovimiento(
+    client: PoolClient,
+    sessionId: number,
+    usuarioId: number,
+    data: {
+      readonly tipo: string;
+      readonly categoria: string;
+      readonly monto: number;
+      readonly descripcion?: string | null;
+    },
+  ): Promise<CajaMovimientoRow> {
+    const result = await client.query<CajaMovimientoRow>(
+      `
+        INSERT INTO movimientos_caja (
+          sesion_caja_id,
+          usuario_id,
+          tipo,
+          categoria,
+          monto,
+          descripcion
+        )
+        VALUES (
+          $1,
+          $2,
+          $3::tipo_movimiento_caja,
+          $4::categoria_movimiento_caja,
+          $5::numeric,
+          $6
+        )
+        RETURNING
+          id,
+          sesion_caja_id,
+          usuario_id,
+          '' AS usuario_nombre,
+          tipo,
+          categoria,
+          monto,
+          descripcion,
+          creado_en
+      `,
+      [sessionId, usuarioId, data.tipo, data.categoria, data.monto, data.descripcion ?? null],
+    );
+
+    return result.rows[0] as CajaMovimientoRow;
+  }
+
+  async findMovimientosBySessionId(sessionId: number): Promise<CajaMovimientoRow[]> {
+    const result = await this.pool.query<CajaMovimientoRow>(
+      `
+        SELECT
+          mc.id,
+          mc.sesion_caja_id,
+          mc.usuario_id,
+          u.nombre AS usuario_nombre,
+          mc.tipo,
+          mc.categoria,
+          mc.monto,
+          mc.descripcion,
+          mc.creado_en
+        FROM movimientos_caja mc
+        INNER JOIN usuarios u ON u.id = mc.usuario_id
+        WHERE mc.sesion_caja_id = $1
+        ORDER BY mc.creado_en DESC, mc.id DESC
+      `,
+      [sessionId],
+    );
+
+    return result.rows;
   }
 }

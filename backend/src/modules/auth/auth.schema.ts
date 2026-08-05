@@ -67,3 +67,34 @@ export const meSchema = {
     },
   },
 } as const;
+
+export const authorizeOwnerSchema = {
+  body: {
+    type: 'object',
+    required: ['master_password'],
+    additionalProperties: false,
+    properties: {
+      master_password: {
+        type: 'string',
+        minLength: 1,
+        maxLength: 200,
+      },
+    },
+  },
+  response: {
+    200: {
+      type: 'object',
+      required: ['success', 'data'],
+      properties: {
+        success: { type: 'boolean' },
+        data: {
+          type: 'object',
+          required: ['authorized'],
+          properties: {
+            authorized: { type: 'boolean' },
+          },
+        },
+      },
+    },
+  },
+} as const;

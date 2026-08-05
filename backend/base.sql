@@ -2,6 +2,14 @@ CREATE TYPE rol_usuario AS ENUM ('OWNER', 'CASHIER');
 
 CREATE TYPE tipo_propiedad_producto AS ENUM ('PROPIO', 'CONSIGNACION');
 
+CREATE TYPE unidad_venta_producto AS ENUM ('UNIDAD', 'PESO');
+
+CREATE TYPE modo_inventario_producto AS ENUM (
+  'SIN_INVENTARIO',
+  'FLEXIBLE',
+  'ESTRICTO'
+);
+
 CREATE TYPE tipo_movimiento_inventario AS ENUM (
   'VENTA',
   'COMPRA',
@@ -21,6 +29,23 @@ CREATE TYPE metodo_pago AS ENUM (
 CREATE TYPE estado_venta AS ENUM (
   'COMPLETADA',
   'ANULADA'
+);
+
+CREATE TYPE modalidad_venta AS ENUM (
+  'NORMAL',
+  'PRECIO_COSTO',
+  'RETIRO_DUENO'
+);
+
+CREATE TYPE tipo_movimiento_caja AS ENUM ('INGRESO', 'EGRESO');
+
+CREATE TYPE categoria_movimiento_caja AS ENUM (
+  'PAGO_PROVEEDOR',
+  'COMPRA_MENOR',
+  'RETIRO_PROPIETARIO',
+  'DEPOSITO',
+  'REPOSICION',
+  'OTRO'
 );
 
 CREATE TABLE usuarios (
@@ -59,6 +84,8 @@ CREATE TABLE productos (
   categoria_id INT NOT NULL,
 
   tipo_propiedad tipo_propiedad_producto NOT NULL DEFAULT 'PROPIO',
+  unidad_venta unidad_venta_producto NOT NULL DEFAULT 'UNIDAD',
+  modo_inventario modo_inventario_producto NOT NULL DEFAULT 'FLEXIBLE',
   proveedor_id INT,
 
   costo_actual NUMERIC(10,2),
@@ -90,6 +117,7 @@ CREATE TABLE ofertas_producto (
   producto_id INT NOT NULL,
 
   nombre VARCHAR(150) NOT NULL,
+  cantidad_oferta NUMERIC(10,3) NOT NULL DEFAULT 1,
   precio_oferta NUMERIC(10,2) NOT NULL,
 
   activa BOOLEAN NOT NULL DEFAULT TRUE,
@@ -105,7 +133,35 @@ CREATE TABLE ofertas_producto (
     FOREIGN KEY (producto_id) REFERENCES productos(id),
 
   CONSTRAINT chk_precio_oferta_positivo
-    CHECK (precio_oferta > 0)
+    CHECK (precio_oferta > 0),
+
+  CONSTRAINT chk_cantidad_oferta_positiva
+    CHECK (cantidad_oferta > 0)
+);
+
+CREATE UNIQUE INDEX uq_ofertas_producto_activa
+  ON ofertas_producto(producto_id)
+  WHERE activa = TRUE;
+
+CREATE TABLE productos_destacados (
+  id SERIAL PRIMARY KEY,
+
+  producto_id INT NOT NULL UNIQUE,
+  posicion INT NOT NULL DEFAULT 0,
+
+  creado_por INT,
+
+  creado_en TIMESTAMP NOT NULL DEFAULT NOW(),
+  actualizado_en TIMESTAMP NOT NULL DEFAULT NOW(),
+
+  CONSTRAINT fk_producto_destacado_producto
+    FOREIGN KEY (producto_id) REFERENCES productos(id) ON DELETE CASCADE,
+
+  CONSTRAINT fk_producto_destacado_usuario
+    FOREIGN KEY (creado_por) REFERENCES usuarios(id) ON DELETE SET NULL,
+
+  CONSTRAINT chk_producto_destacado_posicion
+    CHECK (posicion >= 0)
 );
 
 CREATE TABLE sesiones_caja (
@@ -114,6 +170,8 @@ CREATE TABLE sesiones_caja (
 
   monto_apertura NUMERIC(10,2) NOT NULL DEFAULT 0,
   monto_cierre NUMERIC(10,2),
+  monto_esperado NUMERIC(10,2),
+  diferencia_cierre NUMERIC(10,2),
 
   abierta_en TIMESTAMP NOT NULL DEFAULT NOW(),
   cerrada_en TIMESTAMP,
@@ -122,6 +180,26 @@ CREATE TABLE sesiones_caja (
 
   CONSTRAINT fk_sesion_usuario
     FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+);
+
+CREATE TABLE movimientos_caja (
+  id SERIAL PRIMARY KEY,
+  sesion_caja_id INT NOT NULL,
+  usuario_id INT NOT NULL,
+  tipo tipo_movimiento_caja NOT NULL,
+  categoria categoria_movimiento_caja NOT NULL,
+  monto NUMERIC(10,2) NOT NULL,
+  descripcion TEXT,
+  creado_en TIMESTAMP NOT NULL DEFAULT NOW(),
+
+  CONSTRAINT fk_movimiento_caja_sesion
+    FOREIGN KEY (sesion_caja_id) REFERENCES sesiones_caja(id),
+
+  CONSTRAINT fk_movimiento_caja_usuario
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id),
+
+  CONSTRAINT chk_movimiento_caja_monto
+    CHECK (monto > 0)
 );
 
 CREATE TABLE compras (
@@ -178,6 +256,8 @@ CREATE TABLE ventas (
   descuento NUMERIC(10,2) NOT NULL DEFAULT 0,
   total NUMERIC(10,2) NOT NULL,
 
+  modalidad modalidad_venta NOT NULL DEFAULT 'NORMAL',
+
   estado estado_venta NOT NULL DEFAULT 'COMPLETADA',
   anulada_en TIMESTAMP,
   anulada_por INT,
@@ -207,6 +287,9 @@ CREATE TABLE detalle_ventas (
 
   precio_unitario NUMERIC(10,2) NOT NULL,
   subtotal NUMERIC(10,2) NOT NULL,
+  precio_normal NUMERIC(10,2) NOT NULL DEFAULT 0,
+  descuento NUMERIC(10,2) NOT NULL DEFAULT 0,
+  total_final NUMERIC(10,2) NOT NULL DEFAULT 0,
 
   tipo_propiedad tipo_propiedad_producto NOT NULL,
   proveedor_id INT,
@@ -278,6 +361,9 @@ CREATE INDEX idx_ofertas_producto
 CREATE INDEX idx_ofertas_activas
   ON ofertas_producto(activa);
 
+CREATE INDEX idx_productos_destacados_posicion
+  ON productos_destacados(posicion);
+
 CREATE INDEX idx_ventas_creado_en
   ON ventas(creado_en);
 
@@ -310,6 +396,12 @@ CREATE INDEX idx_detalle_compras_producto
 
 CREATE INDEX idx_sesiones_caja_usuario_abierta
   ON sesiones_caja(usuario_id, abierta);
+
+CREATE INDEX idx_movimientos_caja_sesion
+  ON movimientos_caja(sesion_caja_id, creado_en);
+
+CREATE INDEX idx_movimientos_caja_tipo_categoria
+  ON movimientos_caja(tipo, categoria);
 
 INSERT INTO categorias_producto
 (nombre, multiplicador_ganancia, variacion_maxima_precio)

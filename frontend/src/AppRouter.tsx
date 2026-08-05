@@ -11,6 +11,7 @@ import CajaPage from "./pages/CajaPage";
 import VentasPage from "./pages/VentasPage";
 import ComprasPage from "./pages/ComprasPage";
 import CatalogosPage from "./pages/CatalogosPage";
+import OfertasPage from "./pages/OfertasPage";
 import UsuariosPage from "./pages/UsuariosPage";
 
 export default function AppRouter() {
@@ -55,7 +56,7 @@ export default function AppRouter() {
           <Route
             path="/compras"
             element={
-              <ProtectedRoute roles={["OWNER"]}>
+              <ProtectedRoute roles={["OWNER", "CASHIER"]}>
                 <ComprasPage />
               </ProtectedRoute>
             }
@@ -65,6 +66,14 @@ export default function AppRouter() {
             element={
               <ProtectedRoute roles={["OWNER"]}>
                 <CatalogosPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/catalogos/ofertas"
+            element={
+              <ProtectedRoute roles={["OWNER"]}>
+                <OfertasPage />
               </ProtectedRoute>
             }
           />

@@ -13,6 +13,12 @@ import type {
   VentasResumenRow,
 } from './reportes.types.js';
 
+const localDate = (column: string) =>
+  `(${column} AT TIME ZONE 'UTC' AT TIME ZONE 'America/Santiago')::date`;
+
+const localMonth = (column: string) =>
+  `DATE_TRUNC('month', ${column} AT TIME ZONE 'UTC' AT TIME ZONE 'America/Santiago')`;
+
 export class ReportesRepository {
   constructor(private readonly pool: Pool) {}
 
@@ -31,8 +37,8 @@ export class ReportesRepository {
           COALESCE(SUM(total) FILTER (WHERE metodo_pago = 'MIXTO'), 0)::text AS mixto
         FROM ventas
         WHERE estado = 'COMPLETADA'
-          AND ($1::date IS NULL OR creado_en::date >= $1)
-          AND ($2::date IS NULL OR creado_en::date <= $2)
+          AND ($1::date IS NULL OR ${localDate('creado_en')} >= $1)
+          AND ($2::date IS NULL OR ${localDate('creado_en')} <= $2)
       `,
       [query.fecha_desde ?? null, query.fecha_hasta ?? null],
     );
@@ -44,17 +50,17 @@ export class ReportesRepository {
     const result = await this.pool.query<VentasMensualRow>(
       `
         SELECT
-          TO_CHAR(DATE_TRUNC('month', creado_en), 'YYYY-MM') AS mes,
+          TO_CHAR(${localMonth('creado_en')}, 'YYYY-MM') AS mes,
           COUNT(*)::text AS cantidad_ventas,
           COALESCE(SUM(total), 0)::text AS total,
           COALESCE(SUM(subtotal), 0)::text AS subtotal,
           COALESCE(SUM(descuento), 0)::text AS descuento
         FROM ventas
         WHERE estado = 'COMPLETADA'
-          AND ($1::date IS NULL OR creado_en::date >= $1)
-          AND ($2::date IS NULL OR creado_en::date <= $2)
-        GROUP BY DATE_TRUNC('month', creado_en)
-        ORDER BY DATE_TRUNC('month', creado_en) ASC
+          AND ($1::date IS NULL OR ${localDate('creado_en')} >= $1)
+          AND ($2::date IS NULL OR ${localDate('creado_en')} <= $2)
+        GROUP BY ${localMonth('creado_en')}
+        ORDER BY ${localMonth('creado_en')} ASC
       `,
       [query.fecha_desde ?? null, query.fecha_hasta ?? null],
     );
@@ -72,15 +78,15 @@ export class ReportesRepository {
           SELECT id
           FROM ventas
           WHERE estado = 'COMPLETADA'
-            AND ($1::date IS NULL OR creado_en::date >= $1)
-            AND ($2::date IS NULL OR creado_en::date <= $2)
+            AND ($1::date IS NULL OR ${localDate('creado_en')} >= $1)
+            AND ($2::date IS NULL OR ${localDate('creado_en')} <= $2)
         ),
         productos_vendidos AS (
           SELECT
             dv.producto_id,
             p.nombre AS producto_nombre,
             SUM(dv.cantidad) AS cantidad_vendida,
-            SUM(dv.subtotal) AS total_vendido
+            SUM(dv.total_final) AS total_vendido
           FROM detalle_ventas dv
           INNER JOIN ventas_filtradas vf ON vf.id = dv.venta_id
           INNER JOIN productos p ON p.id = dv.producto_id
@@ -158,6 +164,7 @@ export class ReportesRepository {
         INNER JOIN categorias_producto c ON c.id = p.categoria_id
         LEFT JOIN proveedores pr ON pr.id = p.proveedor_id
         WHERE p.activo = TRUE
+          AND p.modo_inventario <> 'SIN_INVENTARIO'
           AND p.stock <= $1
         ORDER BY p.stock ASC, p.nombre ASC
         LIMIT $2 OFFSET $3
@@ -232,40 +239,40 @@ export class ReportesRepository {
             INNER JOIN ventas v ON v.id = dv.venta_id
             WHERE dv.producto_id = $1
               AND v.estado = 'COMPLETADA'
-              AND ($2::date IS NULL OR v.creado_en::date >= $2)
-              AND ($3::date IS NULL OR v.creado_en::date <= $3)
+              AND ($2::date IS NULL OR ${localDate('v.creado_en')} >= $2)
+              AND ($3::date IS NULL OR ${localDate('v.creado_en')} <= $3)
           ), 0)::text AS cantidad_vendida,
           COALESCE((
-            SELECT SUM(dv.subtotal)
+            SELECT SUM(dv.total_final)
             FROM detalle_ventas dv
             INNER JOIN ventas v ON v.id = dv.venta_id
             WHERE dv.producto_id = $1
               AND v.estado = 'COMPLETADA'
-              AND ($2::date IS NULL OR v.creado_en::date >= $2)
-              AND ($3::date IS NULL OR v.creado_en::date <= $3)
+              AND ($2::date IS NULL OR ${localDate('v.creado_en')} >= $2)
+              AND ($3::date IS NULL OR ${localDate('v.creado_en')} <= $3)
           ), 0)::text AS total_vendido,
           COALESCE((
             SELECT SUM(dc.cantidad)
             FROM detalle_compras dc
             INNER JOIN compras c ON c.id = dc.compra_id
             WHERE dc.producto_id = $1
-              AND ($2::date IS NULL OR c.creado_en::date >= $2)
-              AND ($3::date IS NULL OR c.creado_en::date <= $3)
+              AND ($2::date IS NULL OR ${localDate('c.creado_en')} >= $2)
+              AND ($3::date IS NULL OR ${localDate('c.creado_en')} <= $3)
           ), 0)::text AS cantidad_comprada,
           COALESCE((
             SELECT SUM(dc.subtotal_costo)
             FROM detalle_compras dc
             INNER JOIN compras c ON c.id = dc.compra_id
             WHERE dc.producto_id = $1
-              AND ($2::date IS NULL OR c.creado_en::date >= $2)
-              AND ($3::date IS NULL OR c.creado_en::date <= $3)
+              AND ($2::date IS NULL OR ${localDate('c.creado_en')} >= $2)
+              AND ($3::date IS NULL OR ${localDate('c.creado_en')} <= $3)
           ), 0)::text AS total_comprado,
           COALESCE((
             SELECT COUNT(*)
             FROM movimientos_inventario mi
             WHERE mi.producto_id = $1
-              AND ($2::date IS NULL OR mi.creado_en::date >= $2)
-              AND ($3::date IS NULL OR mi.creado_en::date <= $3)
+              AND ($2::date IS NULL OR ${localDate('mi.creado_en')} >= $2)
+              AND ($3::date IS NULL OR ${localDate('mi.creado_en')} <= $3)
           ), 0)::text AS movimientos
       `,
       [id, query.fecha_desde ?? null, query.fecha_hasta ?? null],

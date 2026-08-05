@@ -2,7 +2,9 @@ export interface OfertaRow {
   readonly id: number;
   readonly producto_id: number;
   readonly producto_nombre: string;
+  readonly producto_unidad_venta: 'UNIDAD' | 'PESO';
   readonly nombre: string;
+  readonly cantidad_oferta: string;
   readonly precio_oferta: string;
   readonly activa: boolean;
   readonly inicia_en: Date;
@@ -20,7 +22,9 @@ export interface Oferta {
   readonly id: number;
   readonly producto_id: number;
   readonly producto_nombre: string;
+  readonly producto_unidad_venta: 'UNIDAD' | 'PESO';
   readonly nombre: string;
+  readonly cantidad_oferta: number;
   readonly precio_oferta: number;
   readonly activa: boolean;
   readonly inicia_en: string;
@@ -55,6 +59,7 @@ export interface PaginatedResult<T> {
 export interface CreateOfertaBody {
   readonly producto_id: number;
   readonly nombre: string;
+  readonly cantidad_oferta?: number;
   readonly precio_oferta: number;
   readonly activa?: boolean;
   readonly inicia_en?: string;
@@ -65,6 +70,7 @@ export interface CreateOfertaBody {
 export interface UpdateOfertaBody {
   readonly producto_id?: number;
   readonly nombre?: string;
+  readonly cantidad_oferta?: number;
   readonly precio_oferta?: number;
   readonly activa?: boolean;
   readonly inicia_en?: string;

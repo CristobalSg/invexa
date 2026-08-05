@@ -1,7 +1,18 @@
 export type UserRole = "OWNER" | "CASHIER";
 export type TipoPropiedadProducto = "PROPIO" | "CONSIGNACION";
+export type UnidadVentaProducto = "UNIDAD" | "PESO";
+export type ModoInventarioProducto = "SIN_INVENTARIO" | "FLEXIBLE" | "ESTRICTO";
 export type MetodoPago = "EFECTIVO" | "TARJETA" | "TRANSFERENCIA" | "MIXTO";
 export type EstadoVenta = "COMPLETADA" | "ANULADA";
+export type ModalidadVenta = "NORMAL" | "PRECIO_COSTO" | "RETIRO_DUENO";
+export type TipoMovimientoCaja = "INGRESO" | "EGRESO";
+export type CategoriaMovimientoCaja =
+  | "PAGO_PROVEEDOR"
+  | "COMPRA_MENOR"
+  | "RETIRO_PROPIETARIO"
+  | "DEPOSITO"
+  | "REPOSICION"
+  | "OTRO";
 export type TipoMovimientoInventario =
   | "VENTA"
   | "COMPRA"
@@ -47,6 +58,8 @@ export interface Producto {
   categoria_id: number;
   categoria_nombre: string;
   tipo_propiedad: TipoPropiedadProducto;
+  unidad_venta: UnidadVentaProducto;
+  modo_inventario: ModoInventarioProducto;
   proveedor_id: number | null;
   proveedor_nombre: string | null;
   costo_actual: number | null;
@@ -83,7 +96,22 @@ export interface CajaResumen {
   tarjeta: number;
   transferencia: number;
   mixto: number;
+  ingresos: number;
+  egresos: number;
   monto_esperado_cierre: number;
+  diferencia_cierre: number | null;
+}
+
+export interface CajaMovimiento {
+  id: number;
+  sesion_caja_id: number;
+  usuario_id: number;
+  usuario_nombre: string;
+  tipo: TipoMovimientoCaja;
+  categoria: CategoriaMovimientoCaja;
+  monto: number;
+  descripcion: string | null;
+  creado_en: string;
 }
 
 export interface CajaSession {
@@ -92,10 +120,13 @@ export interface CajaSession {
   usuario_nombre: string;
   monto_apertura: number;
   monto_cierre: number | null;
+  monto_esperado: number | null;
+  diferencia_cierre: number | null;
   abierta_en: string;
   cerrada_en: string | null;
   abierta: boolean;
   resumen: CajaResumen;
+  movimientos: CajaMovimiento[];
 }
 
 export interface Venta {
@@ -107,6 +138,7 @@ export interface Venta {
   subtotal: number;
   descuento: number;
   total: number;
+  modalidad: ModalidadVenta;
   estado: EstadoVenta;
   anulada_en: string | null;
   anulada_por: number | null;
@@ -123,6 +155,9 @@ export interface DetalleVenta {
   cantidad: number;
   precio_unitario: number;
   subtotal: number;
+  precio_normal: number;
+  descuento: number;
+  total_final: number;
   tipo_propiedad: TipoPropiedadProducto;
   proveedor_id: number | null;
   proveedor_nombre: string | null;
@@ -137,6 +172,7 @@ export interface Compra {
   usuario_id: number;
   usuario_nombre: string;
   total_costo: number;
+  estado: "COMPLETADA" | "ANULADA";
   creado_en: string;
 }
 
@@ -161,7 +197,9 @@ export interface Oferta {
   id: number;
   producto_id: number;
   producto_nombre: string;
+  producto_unidad_venta: UnidadVentaProducto;
   nombre: string;
+  cantidad_oferta: number;
   precio_oferta: number;
   activa: boolean;
   inicia_en: string;

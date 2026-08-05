@@ -1,7 +1,11 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { UserCircleIcon, UserGroupIcon } from "@heroicons/react/24/outline";
 import { createUsuario, deactivateUsuario, getUsuarios } from "../services/catalogService";
 import type { UserRole } from "../types/api";
+import ListPanel from "../components/ListPanel";
+import ModuleCard from "../components/ModuleCard";
+import { Button, FormField, inputClassName } from "../components/FormControls";
 
 export default function UsuariosPage() {
   const queryClient = useQueryClient();
@@ -25,26 +29,57 @@ export default function UsuariosPage() {
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Usuarios</h1>
-      <section className="bg-white border rounded-lg p-5 space-y-3">
-        <h2 className="font-semibold">Crear usuario</h2>
-        <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
-          <input className="border rounded px-3 py-2" placeholder="Usuario" value={form.nombre_usuario} onChange={(e) => setForm({ ...form, nombre_usuario: e.target.value })} />
-          <input className="border rounded px-3 py-2" placeholder="Contraseña" type="password" value={form.contraseña} onChange={(e) => setForm({ ...form, contraseña: e.target.value })} />
-          <input className="border rounded px-3 py-2" placeholder="Nombre" value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} />
-          <input className="border rounded px-3 py-2" placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-          <select className="border rounded px-3 py-2" value={form.rol} onChange={(e) => setForm({ ...form, rol: e.target.value as UserRole })}><option value="CASHIER">Cajero</option><option value="OWNER">Owner</option></select>
-          <button onClick={() => create.mutate()} className="bg-blue-600 text-white rounded px-4 py-2">Crear</button>
+      <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
+        <div className="xl:sticky xl:top-6 xl:self-start">
+      <ModuleCard title="Crear usuario" icon={UserCircleIcon} contentClassName="p-5">
+        <div className="space-y-3">
+        <div className="grid grid-cols-1 gap-3">
+          <FormField label="Usuario">
+            <input className={inputClassName} value={form.nombre_usuario} onChange={(e) => setForm({ ...form, nombre_usuario: e.target.value })} />
+          </FormField>
+          <FormField label="Contraseña">
+            <input className={inputClassName} type="password" value={form.contraseña} onChange={(e) => setForm({ ...form, contraseña: e.target.value })} />
+          </FormField>
+          <FormField label="Nombre">
+            <input className={inputClassName} value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} />
+          </FormField>
+          <FormField label="Email">
+            <input className={inputClassName} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+          </FormField>
+          <FormField label="Rol">
+            <select className={inputClassName} value={form.rol} onChange={(e) => setForm({ ...form, rol: e.target.value as UserRole })}><option value="CASHIER">Cajero</option><option value="OWNER">Owner</option></select>
+          </FormField>
+          <Button onClick={() => create.mutate()} disabled={create.isPending}>{create.isPending ? "Creando..." : "Crear"}</Button>
         </div>
         {message && <p className="text-sm">{message}</p>}
-      </section>
-      <section className="bg-white border rounded-lg overflow-x-auto">
-        {isLoading ? <p className="p-4">Cargando usuarios...</p> : (
-          <table className="w-full text-sm">
-            <thead className="text-left text-gray-500"><tr><th className="p-3">Usuario</th><th>Nombre</th><th>Email</th><th>Rol</th><th>Estado</th><th></th></tr></thead>
-            <tbody>{data?.map((u) => <tr key={u.id} className="border-t"><td className="p-3">{u.nombre_usuario}</td><td>{u.nombre}</td><td>{u.email ?? "-"}</td><td>{u.rol}</td><td>{u.activo ? "Activo" : "Inactivo"}</td><td>{u.activo && <button className="text-red-600" onClick={() => disable.mutate(u.id)}>Desactivar</button>}</td></tr>)}</tbody>
-          </table>
-        )}
-      </section>
+        </div>
+      </ModuleCard>
+        </div>
+        <div>
+      <ListPanel
+        title="Usuarios"
+        icon={UserGroupIcon}
+        isLoading={isLoading}
+        loadingMessage="Cargando usuarios..."
+        emptyMessage="Sin usuarios registrados."
+        items={(data ?? []).map((u) => ({
+          id: u.id,
+          icon: UserCircleIcon,
+          title: u.nombre_usuario,
+          description: u.nombre,
+          meta: [u.email ?? "Sin email", u.rol, u.activo ? "Activo" : "Inactivo"],
+          action: u.activo ? (
+            <button
+              className="rounded-md px-3 py-1.5 text-sm font-semibold text-red-600 hover:bg-red-50"
+              onClick={() => disable.mutate(u.id)}
+            >
+              Desactivar
+            </button>
+          ) : undefined,
+        }))}
+      />
+        </div>
+      </div>
     </div>
   );
 }

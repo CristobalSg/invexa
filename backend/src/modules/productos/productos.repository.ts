@@ -26,6 +26,8 @@ export class ProductosRepository {
           p.categoria_id,
           c.nombre AS categoria_nombre,
           p.tipo_propiedad,
+          p.unidad_venta,
+          p.modo_inventario,
           p.proveedor_id,
           pr.nombre AS proveedor_nombre,
           p.costo_actual,
@@ -43,8 +45,9 @@ export class ProductosRepository {
           AND ($3::integer IS NULL OR p.categoria_id = $3)
           AND ($4::integer IS NULL OR p.proveedor_id = $4)
           AND ($5::tipo_propiedad_producto IS NULL OR p.tipo_propiedad = $5)
+          AND ($6::modo_inventario_producto IS NULL OR p.modo_inventario = $6)
         ORDER BY p.nombre ASC
-        LIMIT $6 OFFSET $7
+        LIMIT $7 OFFSET $8
       `,
       [
         search,
@@ -52,6 +55,7 @@ export class ProductosRepository {
         query.categoria_id ?? null,
         query.proveedor_id ?? null,
         query.tipo_propiedad ?? null,
+        query.modo_inventario ?? null,
         query.limit,
         offset,
       ],
@@ -70,6 +74,8 @@ export class ProductosRepository {
           p.categoria_id,
           c.nombre AS categoria_nombre,
           p.tipo_propiedad,
+          p.unidad_venta,
+          p.modo_inventario,
           p.proveedor_id,
           pr.nombre AS proveedor_nombre,
           p.costo_actual,
@@ -100,6 +106,8 @@ export class ProductosRepository {
           p.categoria_id,
           c.nombre AS categoria_nombre,
           p.tipo_propiedad,
+          p.unidad_venta,
+          p.modo_inventario,
           p.proveedor_id,
           pr.nombre AS proveedor_nombre,
           p.costo_actual,
@@ -166,6 +174,8 @@ export class ProductosRepository {
           p.categoria_id,
           c.nombre AS categoria_nombre,
           p.tipo_propiedad,
+          p.unidad_venta,
+          p.modo_inventario,
           p.proveedor_id,
           pr.nombre AS proveedor_nombre,
           p.costo_actual,
@@ -195,6 +205,8 @@ export class ProductosRepository {
           codigo_barras,
           categoria_id,
           tipo_propiedad,
+          unidad_venta,
+          modo_inventario,
           proveedor_id,
           costo_actual,
           precio_venta,
@@ -206,11 +218,13 @@ export class ProductosRepository {
           $2,
           $3,
           COALESCE($4::tipo_propiedad_producto, 'PROPIO'),
-          $5,
-          $6,
+          COALESCE($5::unidad_venta_producto, 'UNIDAD'),
+          COALESCE($6::modo_inventario_producto, 'FLEXIBLE'),
           $7,
-          COALESCE($8, 0),
-          COALESCE($9, TRUE)
+          $8::numeric,
+          $9::numeric,
+          COALESCE($10::numeric, 0),
+          COALESCE($11, TRUE)
         )
         RETURNING id
       `,
@@ -219,6 +233,8 @@ export class ProductosRepository {
         data.codigo_barras ?? null,
         data.categoria_id,
         data.tipo_propiedad ?? null,
+        data.unidad_venta ?? null,
+        data.modo_inventario ?? null,
         data.proveedor_id ?? null,
         data.costo_actual ?? null,
         data.precio_venta,
@@ -242,16 +258,18 @@ export class ProductosRepository {
           END,
           categoria_id = COALESCE($5, categoria_id),
           tipo_propiedad = COALESCE($6::tipo_propiedad_producto, tipo_propiedad),
+          unidad_venta = COALESCE($7::unidad_venta_producto, unidad_venta),
           proveedor_id = CASE
-            WHEN $7::boolean THEN $8::integer
+            WHEN $8::boolean THEN $9::integer
             ELSE proveedor_id
           END,
+          modo_inventario = COALESCE($10::modo_inventario_producto, modo_inventario),
           costo_actual = CASE
-            WHEN $9::boolean THEN $10::numeric
+            WHEN $11::boolean THEN $12::numeric
             ELSE costo_actual
           END,
-          precio_venta = COALESCE($11, precio_venta),
-          activo = COALESCE($12, activo),
+          precio_venta = COALESCE($13, precio_venta),
+          activo = COALESCE($14, activo),
           actualizado_en = NOW()
         WHERE id = $1
         RETURNING id
@@ -263,8 +281,10 @@ export class ProductosRepository {
         data.codigo_barras ?? null,
         data.categoria_id ?? null,
         data.tipo_propiedad ?? null,
+        data.unidad_venta ?? null,
         Object.hasOwn(data, 'proveedor_id'),
         data.proveedor_id ?? null,
+        data.modo_inventario ?? null,
         Object.hasOwn(data, 'costo_actual'),
         data.costo_actual ?? null,
         data.precio_venta ?? null,

@@ -1,5 +1,11 @@
 import api from "../lib/axios";
-import type { CajaSession, PaginatedResult } from "../types/api";
+import type {
+  CajaMovimiento,
+  CajaSession,
+  CategoriaMovimientoCaja,
+  PaginatedResult,
+  TipoMovimientoCaja,
+} from "../types/api";
 
 export async function getCajaActual() {
   const { data } = await api.get<CajaSession | null>("/caja/actual");
@@ -11,8 +17,24 @@ export async function abrirCaja(monto_apertura: number) {
   return data;
 }
 
-export async function cerrarCaja() {
-  const { data } = await api.post<CajaSession>("/caja/cerrar");
+export async function cerrarCaja(efectivo_contado: number) {
+  const { data } = await api.post<CajaSession>("/caja/cerrar", { efectivo_contado });
+  return data;
+}
+
+export async function crearMovimientoCaja(input: {
+  tipo: TipoMovimientoCaja;
+  categoria: CategoriaMovimientoCaja;
+  monto: number;
+  descripcion?: string | null;
+  master_password: string;
+}) {
+  const { data } = await api.post<CajaMovimiento>("/caja/movimientos", input);
+  return data;
+}
+
+export async function getMovimientosCajaActual() {
+  const { data } = await api.get<CajaMovimiento[]>("/caja/movimientos/actual");
   return data;
 }
 

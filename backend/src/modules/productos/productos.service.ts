@@ -145,6 +145,8 @@ export class ProductosService {
       categoria_id: row.categoria_id,
       categoria_nombre: row.categoria_nombre,
       tipo_propiedad: row.tipo_propiedad,
+      unidad_venta: row.unidad_venta,
+      modo_inventario: row.modo_inventario,
       proveedor_id: row.proveedor_id,
       proveedor_nombre: row.proveedor_nombre,
       costo_actual: row.costo_actual === null ? null : Number(row.costo_actual),

@@ -14,6 +14,11 @@ export async function getMe(): Promise<AuthUser> {
   return data;
 }
 
+export async function authorizeAdmin(master_password: string): Promise<boolean> {
+  const { data } = await api.post<{ authorized: boolean }>("/auth/autorizar-admin", { master_password });
+  return data.authorized;
+}
+
 export function getStoredUser(): AuthUser | null {
   const raw = localStorage.getItem("usuario");
   if (!raw) return null;

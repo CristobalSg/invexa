@@ -32,6 +32,7 @@ const ventaResponseSchema = {
     'subtotal',
     'descuento',
     'total',
+    'modalidad',
     'estado',
     'anulada_en',
     'anulada_por',
@@ -47,6 +48,7 @@ const ventaResponseSchema = {
     subtotal: { type: 'number' },
     descuento: { type: 'number' },
     total: { type: 'number' },
+    modalidad: { type: 'string', enum: ['NORMAL', 'PRECIO_COSTO', 'RETIRO_DUENO'] },
     estado: { type: 'string', enum: ['COMPLETADA', 'ANULADA'] },
     anulada_en: { type: ['string', 'null'] },
     anulada_por: { type: ['number', 'null'] },
@@ -66,6 +68,9 @@ const detalleVentaResponseSchema = {
     'cantidad',
     'precio_unitario',
     'subtotal',
+    'precio_normal',
+    'descuento',
+    'total_final',
     'tipo_propiedad',
     'proveedor_id',
     'proveedor_nombre',
@@ -79,6 +84,9 @@ const detalleVentaResponseSchema = {
     cantidad: { type: 'number' },
     precio_unitario: { type: 'number' },
     subtotal: { type: 'number' },
+    precio_normal: { type: 'number' },
+    descuento: { type: 'number' },
+    total_final: { type: 'number' },
     tipo_propiedad: { type: 'string', enum: ['PROPIO', 'CONSIGNACION'] },
     proveedor_id: { type: ['number', 'null'] },
     proveedor_nombre: { type: ['string', 'null'] },
@@ -127,6 +135,8 @@ export const createVentaSchema = {
     properties: {
       metodo_pago: { type: 'string', enum: ['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'MIXTO'] },
       descuento: { type: 'number', minimum: 0, default: 0 },
+      modalidad: { type: 'string', enum: ['NORMAL', 'PRECIO_COSTO', 'RETIRO_DUENO'], default: 'NORMAL' },
+      master_password: { type: 'string', minLength: 1, maxLength: 200 },
       items: {
         type: 'array',
         minItems: 1,
@@ -202,10 +212,11 @@ export const anularVentaSchema = {
   params: idParamsSchema,
   body: {
     type: 'object',
-    required: ['motivo'],
+    required: ['motivo', 'master_password'],
     additionalProperties: false,
     properties: {
       motivo: { type: 'string', minLength: 3, maxLength: 500 },
+      master_password: { type: 'string', minLength: 1, maxLength: 200 },
     },
   },
   response: {

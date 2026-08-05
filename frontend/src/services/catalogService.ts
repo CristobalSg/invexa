@@ -62,9 +62,15 @@ export async function getOfertas(params: { page?: number; limit?: number; search
   return data;
 }
 
+export async function getOfertasActivas(params: { page?: number; limit?: number; search?: string; producto_id?: number } = {}) {
+  const { data } = await api.get<PaginatedResult<Oferta>>("/ofertas/activas", { params: { page: 1, limit: 100, ...params } });
+  return data;
+}
+
 export async function createOferta(input: {
   producto_id: number;
   nombre: string;
+  cantidad_oferta?: number;
   precio_oferta: number;
   activa?: boolean;
   inicia_en?: string;

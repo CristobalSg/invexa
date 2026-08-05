@@ -23,7 +23,9 @@ export class OfertasRepository {
           o.id,
           o.producto_id,
           p.nombre AS producto_nombre,
+          p.unidad_venta AS producto_unidad_venta,
           o.nombre,
+          o.cantidad_oferta,
           o.precio_oferta,
           o.activa,
           o.inicia_en,
@@ -62,7 +64,9 @@ export class OfertasRepository {
           o.id,
           o.producto_id,
           p.nombre AS producto_nombre,
+          p.unidad_venta AS producto_unidad_venta,
           o.nombre,
+          o.cantidad_oferta,
           o.precio_oferta,
           o.activa,
           o.inicia_en,
@@ -94,7 +98,9 @@ export class OfertasRepository {
           o.id,
           o.producto_id,
           p.nombre AS producto_nombre,
+          p.unidad_venta AS producto_unidad_venta,
           o.nombre,
+          o.cantidad_oferta,
           o.precio_oferta,
           o.activa,
           o.inicia_en,
@@ -132,12 +138,32 @@ export class OfertasRepository {
     return result.rows[0]?.exists ?? false;
   }
 
+  async findActiveByProductId(
+    productId: number,
+    ignoredId?: number,
+  ): Promise<{ readonly id: number } | null> {
+    const result = await this.pool.query<{ readonly id: number }>(
+      `
+        SELECT id
+        FROM ofertas_producto
+        WHERE producto_id = $1
+          AND activa = TRUE
+          AND ($2::integer IS NULL OR id <> $2)
+        LIMIT 1
+      `,
+      [productId, ignoredId ?? null],
+    );
+
+    return result.rows[0] ?? null;
+  }
+
   async create(data: CreateOfertaBody): Promise<OfertaRow> {
     const result = await this.pool.query<{ readonly id: number }>(
       `
         INSERT INTO ofertas_producto (
           producto_id,
           nombre,
+          cantidad_oferta,
           precio_oferta,
           activa,
           inicia_en,
@@ -147,17 +173,19 @@ export class OfertasRepository {
         VALUES (
           $1,
           $2,
-          $3,
-          COALESCE($4, TRUE),
-          COALESCE($5, NOW()),
-          $6,
-          $7
+          COALESCE($3::numeric, 1),
+          $4,
+          COALESCE($5, TRUE),
+          COALESCE($6, NOW()),
+          $7,
+          $8
         )
         RETURNING id
       `,
       [
         data.producto_id,
         data.nombre,
+        data.cantidad_oferta ?? null,
         data.precio_oferta,
         data.activa ?? null,
         data.inicia_en ?? null,
@@ -176,15 +204,16 @@ export class OfertasRepository {
         SET
           producto_id = COALESCE($2, producto_id),
           nombre = COALESCE($3, nombre),
-          precio_oferta = COALESCE($4, precio_oferta),
-          activa = COALESCE($5, activa),
-          inicia_en = COALESCE($6, inicia_en),
+          cantidad_oferta = COALESCE($4::numeric, cantidad_oferta),
+          precio_oferta = COALESCE($5, precio_oferta),
+          activa = COALESCE($6, activa),
+          inicia_en = COALESCE($7, inicia_en),
           termina_en = CASE
-            WHEN $7::boolean THEN $8::timestamp
+            WHEN $8::boolean THEN $9::timestamp
             ELSE termina_en
           END,
           motivo = CASE
-            WHEN $9::boolean THEN $10::text
+            WHEN $10::boolean THEN $11::text
             ELSE motivo
           END
         WHERE id = $1
@@ -194,6 +223,7 @@ export class OfertasRepository {
         id,
         data.producto_id ?? null,
         data.nombre ?? null,
+        data.cantidad_oferta ?? null,
         data.precio_oferta ?? null,
         data.activa ?? null,
         data.inicia_en ?? null,

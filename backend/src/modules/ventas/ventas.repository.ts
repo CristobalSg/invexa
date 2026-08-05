@@ -31,6 +31,7 @@ export class VentasRepository {
           v.subtotal,
           v.descuento,
           v.total,
+          v.modalidad,
           v.estado,
           v.anulada_en,
           v.anulada_por,
@@ -73,6 +74,7 @@ export class VentasRepository {
           v.subtotal,
           v.descuento,
           v.total,
+          v.modalidad,
           v.estado,
           v.anulada_en,
           v.anulada_por,
@@ -101,6 +103,9 @@ export class VentasRepository {
           dv.cantidad,
           dv.precio_unitario,
           dv.subtotal,
+          dv.precio_normal,
+          dv.descuento,
+          dv.total_final,
           dv.tipo_propiedad,
           dv.proveedor_id,
           pr.nombre AS proveedor_nombre
@@ -171,9 +176,11 @@ export class VentasRepository {
           id,
           nombre,
           precio_venta,
+          costo_actual,
           stock,
           activo,
           tipo_propiedad,
+          modo_inventario,
           proveedor_id
         FROM productos
         WHERE id = $1
@@ -190,6 +197,7 @@ export class VentasRepository {
       `
         SELECT
           id,
+          cantidad_oferta,
           precio_oferta
         FROM ofertas_producto
         WHERE producto_id = $1
@@ -214,6 +222,7 @@ export class VentasRepository {
       readonly subtotal: number;
       readonly descuento: number;
       readonly total: number;
+      readonly modalidad: string;
     },
   ): Promise<VentaRow> {
     const result = await client.query<VentaRow>(
@@ -224,9 +233,10 @@ export class VentasRepository {
           metodo_pago,
           subtotal,
           descuento,
-          total
+          total,
+          modalidad
         )
-        VALUES ($1, $2, $3, $4, $5, $6)
+        VALUES ($1, $2, $3, $4, $5, $6, $7::modalidad_venta)
         RETURNING
           id,
           usuario_id,
@@ -236,6 +246,7 @@ export class VentasRepository {
           subtotal,
           descuento,
           total,
+          modalidad,
           estado,
           anulada_en,
           anulada_por,
@@ -249,6 +260,7 @@ export class VentasRepository {
         data.subtotal,
         data.descuento,
         data.total,
+        data.modalidad,
       ],
     );
 
@@ -264,6 +276,9 @@ export class VentasRepository {
       readonly cantidad: number;
       readonly precioUnitario: number;
       readonly subtotal: number;
+      readonly precioNormal: number;
+      readonly descuento: number;
+      readonly totalFinal: number;
       readonly tipoPropiedad: string;
       readonly proveedorId: number | null;
     },
@@ -277,10 +292,13 @@ export class VentasRepository {
           cantidad,
           precio_unitario,
           subtotal,
+          precio_normal,
+          descuento,
+          total_final,
           tipo_propiedad,
           proveedor_id
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        VALUES ($1, $2, $3, $4::numeric, $5::numeric, $6::numeric, $7::numeric, $8::numeric, $9::numeric, $10, $11)
       `,
       [
         data.ventaId,
@@ -289,6 +307,9 @@ export class VentasRepository {
         data.cantidad,
         data.precioUnitario,
         data.subtotal,
+        data.precioNormal,
+        data.descuento,
+        data.totalFinal,
         data.tipoPropiedad,
         data.proveedorId,
       ],
@@ -306,10 +327,9 @@ export class VentasRepository {
       `
         UPDATE productos
         SET
-          stock = $2,
+          stock = $2::numeric,
           actualizado_en = NOW()
         WHERE id = $1
-          AND $2 >= 0
       `,
       [data.productoId, data.stockNuevo],
     );
@@ -339,7 +359,7 @@ export class VentasRepository {
           venta_id,
           motivo
         )
-        VALUES ($1, $2, 'VENTA', $3, $4, $5, $6, $7)
+        VALUES ($1, $2, 'VENTA', $3::numeric, $4::numeric, $5::numeric, $6, $7)
       `,
       [
         data.productoId,
@@ -365,6 +385,7 @@ export class VentasRepository {
           v.subtotal,
           v.descuento,
           v.total,
+          v.modalidad,
           v.estado,
           v.anulada_en,
           v.anulada_por,
@@ -396,6 +417,9 @@ export class VentasRepository {
           dv.cantidad,
           dv.precio_unitario,
           dv.subtotal,
+          dv.precio_normal,
+          dv.descuento,
+          dv.total_final,
           dv.tipo_propiedad,
           dv.proveedor_id,
           pr.nombre AS proveedor_nombre
@@ -448,6 +472,7 @@ export class VentasRepository {
           v.subtotal,
           v.descuento,
           v.total,
+          v.modalidad,
           v.estado,
           v.anulada_en,
           v.anulada_por,
@@ -498,7 +523,7 @@ export class VentasRepository {
       `
         UPDATE productos
         SET
-          stock = $2,
+          stock = $2::numeric,
           actualizado_en = NOW()
         WHERE id = $1
       `,
@@ -530,7 +555,7 @@ export class VentasRepository {
           venta_id,
           motivo
         )
-        VALUES ($1, $2, 'ANULACION', $3, $4, $5, $6, $7)
+        VALUES ($1, $2, 'ANULACION', $3::numeric, $4::numeric, $5::numeric, $6, $7)
       `,
       [
         data.productoId,

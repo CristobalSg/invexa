@@ -24,6 +24,16 @@ export class ComprasRepository {
           c.usuario_id,
           u.nombre AS usuario_nombre,
           c.total_costo,
+          CASE
+            WHEN EXISTS (
+              SELECT 1
+              FROM movimientos_inventario mi
+              WHERE mi.compra_id = c.id
+                AND mi.tipo = 'ANULACION'
+            )
+            THEN 'ANULADA'
+            ELSE 'COMPLETADA'
+          END AS estado,
           c.creado_en,
           COUNT(*) OVER() AS total_count
         FROM compras c
@@ -54,6 +64,16 @@ export class ComprasRepository {
           c.usuario_id,
           u.nombre AS usuario_nombre,
           c.total_costo,
+          CASE
+            WHEN EXISTS (
+              SELECT 1
+              FROM movimientos_inventario mi
+              WHERE mi.compra_id = c.id
+                AND mi.tipo = 'ANULACION'
+            )
+            THEN 'ANULADA'
+            ELSE 'COMPLETADA'
+          END AS estado,
           c.creado_en
         FROM compras c
         INNER JOIN usuarios u ON u.id = c.usuario_id
@@ -108,7 +128,7 @@ export class ComprasRepository {
           creado_en
         FROM movimientos_inventario
         WHERE compra_id = $1
-          AND tipo = 'COMPRA'
+          AND tipo IN ('COMPRA', 'ANULACION')
         ORDER BY id ASC
       `,
       [compraId],
@@ -130,6 +150,7 @@ export class ComprasRepository {
           usuario_id,
           '' AS usuario_nombre,
           total_costo,
+          'COMPLETADA' AS estado,
           creado_en
       `,
       [usuarioId],
@@ -148,6 +169,7 @@ export class ComprasRepository {
           p.id,
           p.nombre,
           p.stock,
+          p.modo_inventario,
           p.costo_actual,
           p.precio_venta,
           p.activo,
@@ -237,16 +259,20 @@ export class ComprasRepository {
       readonly costoActual: number;
       readonly precioVenta: number;
       readonly shouldUpdatePrecioVenta: boolean;
+      readonly shouldUpdateStock: boolean;
     },
   ): Promise<void> {
     await client.query(
       `
         UPDATE productos
         SET
-          stock = $2,
-          costo_actual = $3,
+          stock = CASE
+            WHEN $6 THEN $2::numeric
+            ELSE stock
+          END,
+          costo_actual = $3::numeric,
           precio_venta = CASE
-            WHEN $5 THEN $4
+            WHEN $5 THEN $4::numeric
             ELSE precio_venta
           END,
           actualizado_en = NOW()
@@ -258,6 +284,7 @@ export class ComprasRepository {
         data.costoActual,
         data.precioVenta,
         data.shouldUpdatePrecioVenta,
+        data.shouldUpdateStock,
       ],
     );
   }
@@ -286,7 +313,7 @@ export class ComprasRepository {
           compra_id,
           motivo
         )
-        VALUES ($1, $2, 'COMPRA', $3, $4, $5, $6, $7)
+        VALUES ($1, $2, 'COMPRA', $3::numeric, $4::numeric, $5::numeric, $6, $7)
         RETURNING
           id,
           producto_id,
@@ -330,6 +357,16 @@ export class ComprasRepository {
           c.usuario_id,
           u.nombre AS usuario_nombre,
           c.total_costo,
+          CASE
+            WHEN EXISTS (
+              SELECT 1
+              FROM movimientos_inventario mi
+              WHERE mi.compra_id = c.id
+                AND mi.tipo = 'ANULACION'
+            )
+            THEN 'ANULADA'
+            ELSE 'COMPLETADA'
+          END AS estado,
           c.creado_en
         FROM compras c
         INNER JOIN usuarios u ON u.id = c.usuario_id
@@ -390,12 +427,110 @@ export class ComprasRepository {
           creado_en
         FROM movimientos_inventario
         WHERE compra_id = $1
-          AND tipo = 'COMPRA'
+          AND tipo IN ('COMPRA', 'ANULACION')
         ORDER BY id ASC
       `,
       [compraId],
     );
 
     return result.rows;
+  }
+
+  async findCompraForUpdate(client: PoolClient, compraId: number): Promise<CompraRow | null> {
+    const result = await client.query<CompraRow>(
+      `
+        SELECT
+          c.id,
+          c.usuario_id,
+          u.nombre AS usuario_nombre,
+          c.total_costo,
+          CASE
+            WHEN EXISTS (
+              SELECT 1
+              FROM movimientos_inventario mi
+              WHERE mi.compra_id = c.id
+                AND mi.tipo = 'ANULACION'
+            )
+            THEN 'ANULADA'
+            ELSE 'COMPLETADA'
+          END AS estado,
+          c.creado_en
+        FROM compras c
+        INNER JOIN usuarios u ON u.id = c.usuario_id
+        WHERE c.id = $1
+        FOR UPDATE OF c
+      `,
+      [compraId],
+    );
+
+    return result.rows[0] ?? null;
+  }
+
+  async updateProductoStock(
+    client: PoolClient,
+    data: {
+      readonly productoId: number;
+      readonly stockNuevo: number;
+    },
+  ): Promise<void> {
+    await client.query(
+      `
+        UPDATE productos
+        SET
+          stock = $2::numeric,
+          actualizado_en = NOW()
+        WHERE id = $1
+      `,
+      [data.productoId, data.stockNuevo],
+    );
+  }
+
+  async createMovimientoAnulacionCompra(
+    client: PoolClient,
+    data: {
+      readonly productoId: number;
+      readonly usuarioId: number;
+      readonly cantidad: number;
+      readonly stockAnterior: number;
+      readonly stockNuevo: number;
+      readonly compraId: number;
+      readonly motivo: string;
+    },
+  ): Promise<MovimientoCompraRow> {
+    const result = await client.query<MovimientoCompraRow>(
+      `
+        INSERT INTO movimientos_inventario (
+          producto_id,
+          usuario_id,
+          tipo,
+          cantidad,
+          stock_anterior,
+          stock_nuevo,
+          compra_id,
+          motivo
+        )
+        VALUES ($1, $2, 'ANULACION', $3::numeric, $4::numeric, $5::numeric, $6, $7)
+        RETURNING
+          id,
+          producto_id,
+          tipo,
+          cantidad,
+          stock_anterior,
+          stock_nuevo,
+          compra_id,
+          creado_en
+      `,
+      [
+        data.productoId,
+        data.usuarioId,
+        data.cantidad,
+        data.stockAnterior,
+        data.stockNuevo,
+        data.compraId,
+        data.motivo,
+      ],
+    );
+
+    return result.rows[0] as MovimientoCompraRow;
   }
 }

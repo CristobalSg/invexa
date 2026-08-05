@@ -8,11 +8,19 @@ import {
   abrirCajaSchema,
   cajaActualSchema,
   cerrarCajaSchema,
+  crearMovimientoCajaSchema,
   getCajaSessionSchema,
+  listMovimientosCajaSchema,
   listCajaSessionsSchema,
 } from './caja.schema.js';
 import { CajaService } from './caja.service.js';
-import type { AbrirCajaBody, CajaSessionParams, CajaSessionsQuery } from './caja.types.js';
+import type {
+  AbrirCajaBody,
+  CajaSessionParams,
+  CajaSessionsQuery,
+  CerrarCajaBody,
+  CrearMovimientoCajaBody,
+} from './caja.types.js';
 
 export const cajaRoutes: FastifyPluginAsync = async (fastify) => {
   const repository = new CajaRepository(fastify.pg);
@@ -28,12 +36,30 @@ export const cajaRoutes: FastifyPluginAsync = async (fastify) => {
     },
   );
 
-  fastify.post(
+  fastify.post<{ Body: CerrarCajaBody }>(
     '/cerrar',
     { preHandler: cajaAccess, schema: cerrarCajaSchema },
     async (request, reply) => {
-      const session = await service.cerrar(request.user.id);
+      const session = await service.cerrar(request.user.id, request.body);
       return ok(reply, session);
+    },
+  );
+
+  fastify.post<{ Body: CrearMovimientoCajaBody }>(
+    '/movimientos',
+    { preHandler: cajaAccess, schema: crearMovimientoCajaSchema },
+    async (request, reply) => {
+      const movimiento = await service.crearMovimiento(request.user.id, request.body);
+      return created(reply, movimiento);
+    },
+  );
+
+  fastify.get(
+    '/movimientos/actual',
+    { preHandler: cajaAccess, schema: listMovimientosCajaSchema },
+    async (request, reply) => {
+      const movimientos = await service.listMovimientosActual(request.user.id);
+      return ok(reply, movimientos);
     },
   );
 

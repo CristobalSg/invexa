@@ -50,6 +50,7 @@ export class OfertasService {
   async create(data: CreateOfertaBody): Promise<Oferta> {
     await this.ensureProductExists(data.producto_id);
     this.validateDates(data.inicia_en, data.termina_en ?? null);
+    await this.ensureSingleActiveOffer(data.producto_id, data.activa ?? true);
 
     const oferta = await this.repository.create(data);
     return this.mapOferta(oferta);
@@ -72,6 +73,11 @@ export class OfertasService {
       : (current.termina_en?.toISOString() ?? null);
 
     this.validateDates(iniciaEn, terminaEn);
+    await this.ensureSingleActiveOffer(
+      data.producto_id ?? current.producto_id,
+      data.activa ?? current.activa,
+      id,
+    );
 
     const oferta = await this.repository.update(id, data);
 
@@ -100,6 +106,22 @@ export class OfertasService {
     }
   }
 
+  private async ensureSingleActiveOffer(
+    productId: number,
+    active: boolean,
+    ignoredId?: number,
+  ): Promise<void> {
+    if (!active) {
+      return;
+    }
+
+    const existing = await this.repository.findActiveByProductId(productId, ignoredId);
+
+    if (existing) {
+      throw new BadRequestError('El producto ya tiene una oferta activa');
+    }
+  }
+
   private validateDates(iniciaEn?: string, terminaEn?: string | null): void {
     if (!terminaEn) {
       return;
@@ -122,7 +144,9 @@ export class OfertasService {
       id: row.id,
       producto_id: row.producto_id,
       producto_nombre: row.producto_nombre,
+      producto_unidad_venta: row.producto_unidad_venta,
       nombre: row.nombre,
+      cantidad_oferta: Number(row.cantidad_oferta),
       precio_oferta: Number(row.precio_oferta),
       activa: row.activa,
       inicia_en: row.inicia_en.toISOString(),

@@ -22,7 +22,6 @@ export const ventasRoutes: FastifyPluginAsync = async (fastify) => {
   const repository = new VentasRepository(fastify.pg);
   const service = new VentasService(repository, fastify.pg);
   const posAccess = [authMiddleware, roleMiddleware(['OWNER', 'CASHIER'])];
-  const ownerOnly = [authMiddleware, roleMiddleware(['OWNER'])];
 
   fastify.post<{ Body: CreateVentaBody }>(
     '/',
@@ -44,7 +43,7 @@ export const ventasRoutes: FastifyPluginAsync = async (fastify) => {
 
   fastify.patch<{ Params: VentaParams; Body: AnularVentaBody }>(
     '/:id/anular',
-    { preHandler: ownerOnly, schema: anularVentaSchema },
+    { preHandler: posAccess, schema: anularVentaSchema },
     async (request, reply) => {
       const venta = await service.anular(request.params.id, request.user.id, request.body);
       return ok(reply, venta);

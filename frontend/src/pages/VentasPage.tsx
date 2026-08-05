@@ -1,67 +1,151 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { BanknotesIcon, FunnelIcon, ShoppingBagIcon } from "@heroicons/react/24/outline";
 import { anularVenta, getVentas } from "../services/transactionService";
-import { getStoredUser } from "../services/authService";
 import type { EstadoVenta, MetodoPago } from "../types/api";
+import ListPanel from "../components/ListPanel";
+import ModuleCard from "../components/ModuleCard";
+import { Button, FormActions, FormField, inputClassName } from "../components/FormControls";
 
 const money = (value: number) => `$${value.toLocaleString()}`;
 
 export default function VentasPage() {
   const queryClient = useQueryClient();
-  const isOwner = getStoredUser()?.rol === "OWNER";
   const [estado, setEstado] = useState<EstadoVenta | "">("");
   const [metodo, setMetodo] = useState<MetodoPago | "">("");
   const [fecha, setFecha] = useState("");
   const [message, setMessage] = useState("");
+  const [ventaAnularId, setVentaAnularId] = useState<number | null>(null);
+  const [motivoAnulacion, setMotivoAnulacion] = useState("");
+  const [masterPassword, setMasterPassword] = useState("");
   const { data, isLoading } = useQuery({
     queryKey: ["ventas", estado, metodo, fecha],
     queryFn: () => getVentas({ estado: estado || undefined, metodo_pago: metodo || undefined, fecha_desde: fecha || undefined, fecha_hasta: fecha || undefined }),
   });
   const anulacion = useMutation({
-    mutationFn: ({ id, motivo }: { id: number; motivo: string }) => anularVenta(id, motivo),
+    mutationFn: ({ id, motivo, password }: { id: number; motivo: string; password: string }) =>
+      anularVenta(id, motivo, password),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["ventas"] });
+      setVentaAnularId(null);
+      setMotivoAnulacion("");
+      setMasterPassword("");
       setMessage("Venta anulada.");
     },
     onError: (error) => setMessage(error instanceof Error ? error.message : "No se pudo anular"),
   });
 
+  const handleConfirmAnulacion = () => {
+    if (!ventaAnularId) return;
+    if (motivoAnulacion.trim().length < 3) {
+      setMessage("Ingresa un motivo de anulación.");
+      return;
+    }
+    if (!masterPassword) {
+      setMessage("Ingresa la clave maestra de administrador.");
+      return;
+    }
+
+    anulacion.mutate({
+      id: ventaAnularId,
+      motivo: motivoAnulacion.trim(),
+      password: masterPassword,
+    });
+  };
+
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Ventas</h1>
-      <div className="bg-white border rounded-lg p-4 flex flex-wrap gap-3">
-        <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} className="border rounded px-3 py-2" />
-        <select value={estado} onChange={(e) => setEstado(e.target.value as EstadoVenta | "")} className="border rounded px-3 py-2">
+      <ModuleCard title="Filtros" icon={FunnelIcon} contentClassName="p-4">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <FormField label="Fecha">
+          <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} className={inputClassName} />
+        </FormField>
+        <FormField label="Estado">
+        <select value={estado} onChange={(e) => setEstado(e.target.value as EstadoVenta | "")} className={inputClassName}>
           <option value="">Todos los estados</option><option value="COMPLETADA">Completada</option><option value="ANULADA">Anulada</option>
         </select>
-        <select value={metodo} onChange={(e) => setMetodo(e.target.value as MetodoPago | "")} className="border rounded px-3 py-2">
+        </FormField>
+        <FormField label="Método de pago">
+        <select value={metodo} onChange={(e) => setMetodo(e.target.value as MetodoPago | "")} className={inputClassName}>
           <option value="">Todos los pagos</option><option value="EFECTIVO">Efectivo</option><option value="TARJETA">Tarjeta</option><option value="TRANSFERENCIA">Transferencia</option><option value="MIXTO">Mixto</option>
         </select>
+        </FormField>
       </div>
+      </ModuleCard>
       {message && <p className="bg-white rounded border p-3 text-sm">{message}</p>}
-      <div className="bg-white rounded-lg border overflow-x-auto">
-        {isLoading ? <p className="p-4">Cargando ventas...</p> : (
-          <table className="w-full text-sm">
-            <thead className="text-left text-gray-500"><tr><th className="p-3">ID</th><th>Fecha</th><th>Usuario</th><th>Pago</th><th>Total</th><th>Estado</th><th></th></tr></thead>
-            <tbody>
-              {data?.items.map((venta) => (
-                <tr key={venta.id} className="border-t">
-                  <td className="p-3">#{venta.id}</td>
-                  <td>{new Date(venta.creado_en).toLocaleString()}</td>
-                  <td>{venta.usuario_nombre}</td>
-                  <td>{venta.metodo_pago}</td>
-                  <td>{money(venta.total)}</td>
-                  <td>{venta.estado}</td>
-                  <td>{isOwner && venta.estado === "COMPLETADA" && <button onClick={() => {
-                    const motivo = window.prompt("Motivo de anulación");
-                    if (motivo) anulacion.mutate({ id: venta.id, motivo });
-                  }} className="text-red-600 font-semibold">Anular</button>}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+      <ListPanel
+        title="Ventas registradas"
+        icon={ShoppingBagIcon}
+        isLoading={isLoading}
+        loadingMessage="Cargando ventas..."
+        emptyMessage="Sin ventas registradas."
+        items={(data?.items ?? []).map((venta) => ({
+          id: venta.id,
+          icon: BanknotesIcon,
+          title: `Venta #${venta.id}`,
+          description: venta.usuario_nombre,
+          meta: [
+            new Date(venta.creado_en).toLocaleString(),
+            venta.metodo_pago,
+            venta.estado,
+          ],
+          amount: money(venta.total),
+          action: venta.estado === "COMPLETADA" ? (
+            <button
+              onClick={() => {
+                setVentaAnularId(venta.id);
+                setMotivoAnulacion("");
+                setMasterPassword("");
+              }}
+              className="rounded-md px-3 py-1.5 text-sm font-semibold text-red-600 hover:bg-red-50"
+            >
+              Anular
+            </button>
+          ) : undefined,
+        }))}
+      />
+      {ventaAnularId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
+            <h2 className="text-xl font-bold text-gray-900">Anular venta #{ventaAnularId}</h2>
+            <FormField label="Motivo" className="mt-4">
+              <textarea
+                value={motivoAnulacion}
+                onChange={(event) => setMotivoAnulacion(event.target.value)}
+                className={`${inputClassName} min-h-24`}
+              />
+            </FormField>
+            <FormField label="Clave admin" className="mt-4">
+              <input
+                type="password"
+                value={masterPassword}
+                onChange={(event) => setMasterPassword(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") handleConfirmAnulacion();
+                  if (event.key === "Escape") setVentaAnularId(null);
+                }}
+                className={inputClassName}
+              />
+            </FormField>
+            <FormActions className="mt-1">
+              <Button
+                variant="ghost"
+                onClick={() => setVentaAnularId(null)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                variant="danger"
+                onClick={handleConfirmAnulacion}
+                disabled={anulacion.isPending}
+              >
+                {anulacion.isPending ? "Anulando..." : "Anular venta"}
+              </Button>
+            </FormActions>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

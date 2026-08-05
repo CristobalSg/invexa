@@ -2,6 +2,7 @@ export interface CompraProductoRow {
   readonly id: number;
   readonly nombre: string;
   readonly stock: string;
+  readonly modo_inventario: 'SIN_INVENTARIO' | 'FLEXIBLE' | 'ESTRICTO';
   readonly costo_actual: string | null;
   readonly precio_venta: string;
   readonly activo: boolean;
@@ -14,6 +15,7 @@ export interface CompraRow {
   readonly usuario_id: number;
   readonly usuario_nombre: string;
   readonly total_costo: string;
+  readonly estado: 'COMPLETADA' | 'ANULADA';
   readonly creado_en: Date;
 }
 
@@ -40,7 +42,7 @@ export interface DetalleCompraRow {
 export interface MovimientoCompraRow {
   readonly id: number;
   readonly producto_id: number;
-  readonly tipo: 'COMPRA';
+  readonly tipo: 'COMPRA' | 'ANULACION';
   readonly cantidad: string;
   readonly stock_anterior: string | null;
   readonly stock_nuevo: string | null;
@@ -53,6 +55,7 @@ export interface Compra {
   readonly usuario_id: number;
   readonly usuario_nombre: string;
   readonly total_costo: number;
+  readonly estado: 'COMPLETADA' | 'ANULADA';
   readonly creado_en: string;
 }
 
@@ -75,7 +78,7 @@ export interface DetalleCompra {
 export interface MovimientoCompra {
   readonly id: number;
   readonly producto_id: number;
-  readonly tipo: 'COMPRA';
+  readonly tipo: 'COMPRA' | 'ANULACION';
   readonly cantidad: number;
   readonly stock_anterior: number | null;
   readonly stock_nuevo: number | null;
@@ -98,6 +101,11 @@ export interface CreateCompraItemBody {
 
 export interface CreateCompraBody {
   readonly items: CreateCompraItemBody[];
+}
+
+export interface AnularCompraBody {
+  readonly motivo: string;
+  readonly master_password: string;
 }
 
 export interface CompraParams {

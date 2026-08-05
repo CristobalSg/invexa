@@ -31,7 +31,10 @@ const resumenSchema = {
     'tarjeta',
     'transferencia',
     'mixto',
+    'ingresos',
+    'egresos',
     'monto_esperado_cierre',
+    'diferencia_cierre',
   ],
   properties: {
     cantidad_ventas: { type: 'number' },
@@ -42,7 +45,39 @@ const resumenSchema = {
     tarjeta: { type: 'number' },
     transferencia: { type: 'number' },
     mixto: { type: 'number' },
+    ingresos: { type: 'number' },
+    egresos: { type: 'number' },
     monto_esperado_cierre: { type: 'number' },
+    diferencia_cierre: { type: ['number', 'null'] },
+  },
+} as const;
+
+const movimientoCajaSchema = {
+  type: 'object',
+  required: [
+    'id',
+    'sesion_caja_id',
+    'usuario_id',
+    'usuario_nombre',
+    'tipo',
+    'categoria',
+    'monto',
+    'descripcion',
+    'creado_en',
+  ],
+  properties: {
+    id: { type: 'number' },
+    sesion_caja_id: { type: 'number' },
+    usuario_id: { type: 'number' },
+    usuario_nombre: { type: 'string' },
+    tipo: { type: 'string', enum: ['INGRESO', 'EGRESO'] },
+    categoria: {
+      type: 'string',
+      enum: ['PAGO_PROVEEDOR', 'COMPRA_MENOR', 'RETIRO_PROPIETARIO', 'DEPOSITO', 'REPOSICION', 'OTRO'],
+    },
+    monto: { type: 'number' },
+    descripcion: { type: ['string', 'null'] },
+    creado_en: { type: 'string' },
   },
 } as const;
 
@@ -54,6 +89,8 @@ const cajaSessionSchema = {
     'usuario_nombre',
     'monto_apertura',
     'monto_cierre',
+    'monto_esperado',
+    'diferencia_cierre',
     'abierta_en',
     'cerrada_en',
     'abierta',
@@ -64,6 +101,8 @@ const cajaSessionSchema = {
     usuario_nombre: { type: 'string' },
     monto_apertura: { type: 'number' },
     monto_cierre: { type: ['number', 'null'] },
+    monto_esperado: { type: ['number', 'null'] },
+    diferencia_cierre: { type: ['number', 'null'] },
     abierta_en: { type: 'string' },
     cerrada_en: { type: ['string', 'null'] },
     abierta: { type: 'boolean' },
@@ -76,6 +115,7 @@ const cajaSessionDetalleSchema = {
   properties: {
     ...cajaSessionSchema.properties,
     resumen: resumenSchema,
+    movimientos: { type: 'array', items: movimientoCajaSchema },
   },
 } as const;
 
@@ -105,6 +145,14 @@ export const abrirCajaSchema = {
 } as const;
 
 export const cerrarCajaSchema = {
+  body: {
+    type: 'object',
+    required: ['efectivo_contado'],
+    additionalProperties: false,
+    properties: {
+      efectivo_contado: { type: 'number', minimum: 0 },
+    },
+  },
   response: {
     200: {
       type: 'object',
@@ -112,6 +160,47 @@ export const cerrarCajaSchema = {
       properties: {
         success: { type: 'boolean' },
         data: cajaSessionDetalleSchema,
+      },
+    },
+  },
+} as const;
+
+export const crearMovimientoCajaSchema = {
+  body: {
+    type: 'object',
+    required: ['tipo', 'categoria', 'monto', 'master_password'],
+    additionalProperties: false,
+    properties: {
+      tipo: { type: 'string', enum: ['INGRESO', 'EGRESO'] },
+      categoria: {
+        type: 'string',
+        enum: ['PAGO_PROVEEDOR', 'COMPRA_MENOR', 'RETIRO_PROPIETARIO', 'DEPOSITO', 'REPOSICION', 'OTRO'],
+      },
+      monto: { type: 'number', exclusiveMinimum: 0 },
+      descripcion: { type: ['string', 'null'], maxLength: 500 },
+      master_password: { type: 'string', minLength: 1, maxLength: 200 },
+    },
+  },
+  response: {
+    201: {
+      type: 'object',
+      required: ['success', 'data'],
+      properties: {
+        success: { type: 'boolean' },
+        data: movimientoCajaSchema,
+      },
+    },
+  },
+} as const;
+
+export const listMovimientosCajaSchema = {
+  response: {
+    200: {
+      type: 'object',
+      required: ['success', 'data'],
+      properties: {
+        success: { type: 'boolean' },
+        data: { type: 'array', items: movimientoCajaSchema },
       },
     },
   },

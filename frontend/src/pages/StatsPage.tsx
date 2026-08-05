@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
+import { ArchiveBoxIcon, CubeIcon, ExclamationTriangleIcon, TruckIcon } from "@heroicons/react/24/outline";
 import { Bar, BarChart, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import {
   getBajoStock,
@@ -10,6 +11,9 @@ import {
   getVentasMensual,
   getVentasResumen,
 } from "../services/reporteService";
+import ListPanel from "../components/ListPanel";
+import ModuleCard from "../components/ModuleCard";
+import { inputClassName } from "../components/FormControls";
 
 const money = (value: number) => `$${value.toLocaleString()}`;
 
@@ -31,7 +35,7 @@ export default function StatsPage() {
           type="date"
           value={selectedDate}
           onChange={(e) => setSelectedDate(e.target.value)}
-          className="border px-3 py-1 rounded"
+          className={`${inputClassName} max-w-44`}
         />
       </div>
 
@@ -43,8 +47,7 @@ export default function StatsPage() {
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <section className="bg-white p-6 rounded-lg border">
-          <h2 className="text-lg font-semibold mb-4">Ventas mensuales</h2>
+        <ModuleCard title="Ventas mensuales">
           <ResponsiveContainer width="100%" height={300}>
             <LineChart data={mensual.data ?? []}>
               <XAxis dataKey="mes" />
@@ -53,9 +56,8 @@ export default function StatsPage() {
               <Line type="monotone" dataKey="total" stroke="#2563eb" strokeWidth={2} />
             </LineChart>
           </ResponsiveContainer>
-        </section>
-        <section className="bg-white p-6 rounded-lg border">
-          <h2 className="text-lg font-semibold mb-4">Productos más vendidos</h2>
+        </ModuleCard>
+        <ModuleCard title="Productos más vendidos">
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={top.data?.items ?? []}>
               <XAxis dataKey="producto_nombre" />
@@ -64,31 +66,56 @@ export default function StatsPage() {
               <Bar dataKey="cantidad_vendida" fill="#16a34a" />
             </BarChart>
           </ResponsiveContainer>
-        </section>
+        </ModuleCard>
       </div>
 
-      <section className="bg-white p-6 rounded-lg border">
-        <h2 className="text-lg font-semibold mb-4">Inventario valorizado</h2>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="text-left text-gray-500"><tr><th>Producto</th><th>Stock</th><th>Valor venta</th><th>Estado</th></tr></thead>
-            <tbody>{inventario.data?.items.map((item) => <tr key={item.producto_id} className="border-t"><td className="py-2">{item.producto_nombre}</td><td>{item.stock}</td><td>{money(item.valor_venta)}</td><td>{item.activo ? "Activo" : "Inactivo"}</td></tr>)}</tbody>
-          </table>
-        </div>
-      </section>
+      <ListPanel
+        title="Inventario valorizado"
+        icon={ArchiveBoxIcon}
+        emptyMessage="Sin productos en inventario."
+        items={(inventario.data?.items ?? []).map((item) => ({
+          id: item.producto_id,
+          icon: CubeIcon,
+          title: item.producto_nombre,
+          description: item.categoria_nombre,
+          meta: [`Stock ${item.stock}`, item.activo ? "Activo" : "Inactivo"],
+          amount: money(item.valor_venta),
+        }))}
+      />
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <ReportList title="Bajo stock" rows={bajoStock.data?.items.map((i) => `${i.producto_nombre} · ${i.stock} unidades`) ?? []} />
-        <ReportList title="Consignación" rows={consignacion.data?.items.map((i) => `${i.proveedor_nombre} · ${i.productos} productos · comisión ${money(i.comision_estimada)}`) ?? []} />
+        <ListPanel
+          title="Bajo stock"
+          icon={ExclamationTriangleIcon}
+          emptyMessage="Sin productos bajo stock."
+          items={(bajoStock.data?.items ?? []).map((item) => ({
+            id: item.producto_id,
+            icon: ExclamationTriangleIcon,
+            title: item.producto_nombre,
+            description: item.categoria_nombre,
+            meta: [`Stock ${item.stock}`, item.activo ? "Activo" : "Inactivo"],
+            amount: money(item.valor_venta),
+            amountClassName: "text-amber-700",
+          }))}
+        />
+        <ListPanel
+          title="Consignación"
+          icon={TruckIcon}
+          emptyMessage="Sin proveedores en consignación."
+          items={(consignacion.data?.items ?? []).map((item) => ({
+            id: item.proveedor_id,
+            icon: TruckIcon,
+            title: item.proveedor_nombre,
+            description: `${item.productos} productos`,
+            meta: [`Stock ${item.stock_total}`, `Venta ${money(item.valor_venta)}`],
+            amount: money(item.comision_estimada),
+          }))}
+        />
       </div>
     </div>
   );
 }
 
 function Metric({ title, value }: { title: string; value: string }) {
-  return <div className="bg-white rounded-lg border p-5"><p className="text-sm text-gray-500">{title}</p><p className="text-2xl font-bold mt-1">{value}</p></div>;
-}
-
-function ReportList({ title, rows }: { title: string; rows: string[] }) {
-  return <section className="bg-white rounded-lg border p-5"><h2 className="font-semibold mb-3">{title}</h2><div className="space-y-2 text-sm">{rows.map((row) => <div className="border rounded p-2" key={row}>{row}</div>)}</div></section>;
+  return <ModuleCard contentClassName="p-5"><p className="text-sm text-gray-500">{title}</p><p className="text-2xl font-bold mt-1">{value}</p></ModuleCard>;
 }

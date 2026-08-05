@@ -1,5 +1,5 @@
 import api from "../lib/axios";
-import type { EstadoVenta, MetodoPago, PaginatedResult, Venta, VentaDetalle } from "../types/api";
+import type { EstadoVenta, MetodoPago, ModalidadVenta, PaginatedResult, Venta, VentaDetalle } from "../types/api";
 
 const ENDPOINT = "/ventas";
 
@@ -23,6 +23,8 @@ export async function getVentas(params: {
 export async function createVenta(input: {
   metodo_pago: MetodoPago;
   descuento?: number;
+  modalidad?: ModalidadVenta;
+  master_password?: string;
   items: { producto_id: number; cantidad: number }[];
 }) {
   const { data } = await api.post<VentaDetalle>(ENDPOINT, input);
@@ -34,7 +36,7 @@ export async function getVenta(id: number) {
   return data;
 }
 
-export async function anularVenta(id: number, motivo: string) {
-  const { data } = await api.patch<VentaDetalle>(`${ENDPOINT}/${id}/anular`, { motivo });
+export async function anularVenta(id: number, motivo: string, master_password: string) {
+  const { data } = await api.patch<VentaDetalle>(`${ENDPOINT}/${id}/anular`, { motivo, master_password });
   return data;
 }

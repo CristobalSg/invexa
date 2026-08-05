@@ -21,12 +21,13 @@ const paginationQuerySchema = {
 
 const compraResponseSchema = {
   type: 'object',
-  required: ['id', 'usuario_id', 'usuario_nombre', 'total_costo', 'creado_en'],
+  required: ['id', 'usuario_id', 'usuario_nombre', 'total_costo', 'estado', 'creado_en'],
   properties: {
     id: { type: 'number' },
     usuario_id: { type: 'number' },
     usuario_nombre: { type: 'string' },
     total_costo: { type: 'number' },
+    estado: { type: 'string', enum: ['COMPLETADA', 'ANULADA'] },
     creado_en: { type: 'string' },
   },
 } as const;
@@ -80,7 +81,7 @@ const movimientoCompraResponseSchema = {
   properties: {
     id: { type: 'number' },
     producto_id: { type: 'number' },
-    tipo: { type: 'string', enum: ['COMPRA'] },
+    tipo: { type: 'string', enum: ['COMPRA', 'ANULACION'] },
     cantidad: { type: 'number' },
     stock_anterior: { type: ['number', 'null'] },
     stock_nuevo: { type: ['number', 'null'] },
@@ -167,6 +168,29 @@ export const listComprasSchema = {
 
 export const getCompraSchema = {
   params: idParamsSchema,
+  response: {
+    200: {
+      type: 'object',
+      required: ['success', 'data'],
+      properties: {
+        success: { type: 'boolean' },
+        data: compraDetalleResponseSchema,
+      },
+    },
+  },
+} as const;
+
+export const anularCompraSchema = {
+  params: idParamsSchema,
+  body: {
+    type: 'object',
+    required: ['motivo', 'master_password'],
+    additionalProperties: false,
+    properties: {
+      motivo: { type: 'string', minLength: 3, maxLength: 500 },
+      master_password: { type: 'string', minLength: 1, maxLength: 200 },
+    },
+  },
   response: {
     200: {
       type: 'object',
