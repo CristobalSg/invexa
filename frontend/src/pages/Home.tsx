@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { StarIcon as StarIconOutline, TagIcon } from "@heroicons/react/24/outline";
+import { Link } from "react-router-dom";
+import { StarIcon as StarIconOutline, TagIcon, WalletIcon } from "@heroicons/react/24/outline";
 import { StarIcon as StarIconSolid } from "@heroicons/react/24/solid";
 import InputForm from "../components/InputForm";
 import MainList from "../components/MainList";
@@ -569,9 +570,25 @@ export default function Home() {
           featuredProductIds={featuredProductIds}
           onToggleFeatured={toggleFeaturedProduct}
         />
+        {!cajaActual?.abierta && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+            <div className="flex items-start gap-3">
+              <WalletIcon className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
+              <div>
+                <p className="font-semibold">Sin turno de caja abierto</p>
+                <p className="mt-1 text-amber-800">
+                  Puedes revisar módulos administrativos, pero no finalizar ventas ni movimientos de caja.
+                </p>
+                <Link to="/caja" className="mt-3 inline-flex font-semibold text-amber-950 hover:underline">
+                  Ir a Caja
+                </Link>
+              </div>
+            </div>
+          </div>
+        )}
         {message && <p className="text-sm bg-white rounded border p-3">{message}</p>}
         <div className="sticky bottom-4 z-10">
-          <StatsPanel total={totalFinal} onFinish={handleOpenPayment} disabled={cart.length === 0} />
+          <StatsPanel total={totalFinal} onFinish={handleOpenPayment} disabled={cart.length === 0 || !cajaActual?.abierta} />
         </div>
       </div>
       {centerAlert && (

@@ -1,5 +1,6 @@
 import api from "../lib/axios";
 import type {
+  CierreCajaDiario,
   ConsignacionItem,
   InventarioItem,
   PaginatedResult,
@@ -18,6 +19,11 @@ export async function getVentasResumen(params: DateRange = {}) {
 
 export async function getVentasMensual(params: DateRange = {}) {
   const { data } = await api.get<VentasMensual[]>("/reportes/ventas/mensual", { params });
+  return data;
+}
+
+export async function getCierreCajaDiario(params: Pick<DateRange, "fecha_desde"> = {}) {
+  const { data } = await api.get<CierreCajaDiario>("/reportes/caja/cierre-diario", { params });
   return data;
 }
 

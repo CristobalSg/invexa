@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 
 import Layout from "./components/Layout";
 import LoginPage from "./pages/auth/Login";
+import ProfilesPage from "./pages/auth/ProfilesPage";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 
 import Home from "./pages/Home";
@@ -19,6 +20,7 @@ export default function AppRouter() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/perfiles" element={<ProfilesPage />} />
 
         <Route element={<Layout />}>
           <Route

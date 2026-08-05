@@ -26,7 +26,7 @@ export class VentasService {
     private readonly pool: Pool,
   ) {}
 
-  async create(usuarioId: number, data: CreateVentaBody): Promise<VentaDetalle> {
+  async create(usuarioId: number, data: CreateVentaBody, deviceId?: string): Promise<VentaDetalle> {
     this.validateUniqueProducts(data);
     const modalidad = data.modalidad ?? 'NORMAL';
 
@@ -35,10 +35,14 @@ export class VentasService {
     }
 
     return withTransaction(this.pool, async (client) => {
-      const sesionCaja = await this.repository.findOpenCashSessionForUpdate(client, usuarioId);
+      const sesionCaja = await this.repository.findOpenCashSessionForUpdate(client, usuarioId, deviceId);
 
       if (!sesionCaja) {
-        throw new BadRequestError('El usuario no tiene una caja abierta');
+        throw new BadRequestError('Este equipo no tiene un turno de caja abierto');
+      }
+
+      if (sesionCaja.usuario_id !== usuarioId) {
+        throw new BadRequestError('El turno abierto pertenece a otro usuario');
       }
 
       const preparedItems: Array<{

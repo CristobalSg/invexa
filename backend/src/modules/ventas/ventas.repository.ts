@@ -146,6 +146,7 @@ export class VentasRepository {
   async findOpenCashSessionForUpdate(
     client: PoolClient,
     usuarioId: number,
+    deviceId?: string,
   ): Promise<SesionCajaAbiertaRow | null> {
     const result = await client.query<SesionCajaAbiertaRow>(
       `
@@ -153,14 +154,15 @@ export class VentasRepository {
           id,
           usuario_id
         FROM sesiones_caja
-        WHERE usuario_id = $1
+        WHERE ($2::uuid IS NOT NULL OR usuario_id = $1)
+          AND ($2::uuid IS NULL OR dispositivo_id = $2)
           AND abierta = TRUE
           AND cerrada_en IS NULL
         ORDER BY abierta_en DESC
         LIMIT 1
         FOR UPDATE
       `,
-      [usuarioId],
+      [usuarioId, deviceId ?? null],
     );
 
     return result.rows[0] ?? null;

@@ -3,17 +3,55 @@ import type { FastifyPluginAsync } from 'fastify';
 import { authMiddleware } from '../../middlewares/auth.middleware.js';
 import { assertValidOwnerPassword } from '../../utils/master-authorization.js';
 import { ok } from '../../utils/responses.js';
-import { authorizeOwnerSchema, loginSchema, meSchema } from './auth.schema.js';
+import {
+  authorizeDeviceSchema,
+  authorizeOwnerSchema,
+  listProfilesSchema,
+  loginSchema,
+  meSchema,
+  profileLoginSchema,
+} from './auth.schema.js';
 import { AuthService } from './auth.service.js';
-import type { LoginBody } from './auth.types.js';
+import type { AuthorizeDeviceBody, LoginBody, ProfileLoginBody } from './auth.types.js';
 
 export const authRoutes: FastifyPluginAsync = async (fastify) => {
   const service = new AuthService(fastify);
+  const getDeviceToken = (request: { headers: Record<string, string | string[] | undefined> }) => {
+    const value = request.headers['x-device-token'];
+    return Array.isArray(value) ? value[0] : value;
+  };
 
   fastify.post<{ Body: LoginBody }>('/login', { schema: loginSchema }, async (request, reply) => {
     const result = await service.login(request.body);
     return ok(reply, result);
   });
+
+  fastify.post<{ Body: AuthorizeDeviceBody }>(
+    '/dispositivo/autorizar',
+    { schema: authorizeDeviceSchema },
+    async (request, reply) => {
+      const result = await service.authorizeDevice(request.body);
+      return ok(reply, result);
+    },
+  );
+
+  fastify.get(
+    '/perfiles',
+    { schema: listProfilesSchema },
+    async (request, reply) => {
+      const result = await service.listProfiles(getDeviceToken(request));
+      return ok(reply, result);
+    },
+  );
+
+  fastify.post<{ Body: ProfileLoginBody }>(
+    '/perfiles/login',
+    { schema: profileLoginSchema },
+    async (request, reply) => {
+      const result = await service.loginProfile(getDeviceToken(request), request.body);
+      return ok(reply, result);
+    },
+  );
 
   fastify.get('/me', { preHandler: [authMiddleware], schema: meSchema }, async (request, reply) => {
     const result = await service.getProfile(request.user.id);

@@ -69,7 +69,7 @@ export const createUsuarioSchema = {
       },
       contraseña: {
         type: 'string',
-        minLength: 6,
+        minLength: 4,
         maxLength: 200,
       },
       nombre: {
@@ -107,7 +107,7 @@ export const updateUsuarioSchema = {
       },
       contraseña: {
         type: 'string',
-        minLength: 6,
+        minLength: 4,
         maxLength: 200,
       },
       nombre: {

@@ -15,6 +15,17 @@ export interface LoginBody {
   readonly contraseña: string;
 }
 
+export interface AuthorizeDeviceBody {
+  readonly nombre_usuario: string;
+  readonly contraseña: string;
+  readonly nombre_dispositivo?: string;
+}
+
+export interface ProfileLoginBody {
+  readonly usuario_id: number;
+  readonly contraseña: string;
+}
+
 export interface AuthUser {
   readonly id: number;
   readonly nombre_usuario: string;
@@ -26,4 +37,33 @@ export interface AuthUser {
 export interface LoginResult {
   readonly token: string;
   readonly usuario: AuthUser;
+}
+
+export interface DeviceAuthResult {
+  readonly device_token: string;
+  readonly dispositivo: {
+    readonly id: string;
+    readonly nombre: string;
+  };
+}
+
+export interface DeviceProfile extends AuthUser {
+  readonly activo: boolean;
+}
+
+export interface PosProfileLoginResult extends LoginResult {
+  readonly requiere_apertura_turno: boolean;
+  readonly turno_abierto: {
+    readonly id: number;
+    readonly usuario_id: number;
+    readonly usuario_nombre: string;
+  } | null;
+}
+
+export interface DeviceRow {
+  readonly id: string;
+  readonly nombre: string;
+  readonly token_hash: string;
+  readonly autorizado_por: number | null;
+  readonly activo: boolean;
 }

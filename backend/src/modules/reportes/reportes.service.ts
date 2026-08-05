@@ -2,6 +2,9 @@ import { NotFoundError } from '../../utils/errors.js';
 import type { ReportesRepository } from './reportes.repository.js';
 import type {
   BajoStockQuery,
+  CierreCajaDiario,
+  CierreCajaDiarioItem,
+  CierreCajaDiarioRow,
   ConsignacionItem,
   ConsignacionRow,
   DateRangeQuery,
@@ -30,6 +33,27 @@ export class ReportesService {
   async ventasMensual(query: DateRangeQuery): Promise<VentasMensual[]> {
     const rows = await this.repository.ventasMensual(query);
     return rows.map((row) => this.mapVentasMensual(row));
+  }
+
+  async cierreCajaDiario(query: DateRangeQuery): Promise<CierreCajaDiario> {
+    const fecha = query.fecha_desde ?? new Date().toISOString().slice(0, 10);
+    const sesiones = (await this.repository.cierreCajaDiario(fecha)).map((row) =>
+      this.mapCierreCajaDiarioItem(row),
+    );
+
+    return {
+      fecha,
+      cajas_cerradas: sesiones.length,
+      total_vendido: this.sum(sesiones, 'total_vendido'),
+      efectivo: this.sum(sesiones, 'efectivo'),
+      tarjeta: this.sum(sesiones, 'tarjeta'),
+      transferencia: this.sum(sesiones, 'transferencia'),
+      mixto: this.sum(sesiones, 'mixto'),
+      ingresos: this.sum(sesiones, 'ingresos'),
+      egresos: this.sum(sesiones, 'egresos'),
+      diferencia_total: this.sum(sesiones, 'diferencia_cierre'),
+      sesiones,
+    };
   }
 
   async productosTop(query: PaginationQuery): Promise<PaginatedResult<ProductoTop>> {
@@ -140,6 +164,29 @@ export class ReportesService {
     };
   }
 
+  private mapCierreCajaDiarioItem(row: CierreCajaDiarioRow): CierreCajaDiarioItem {
+    return {
+      sesion_caja_id: row.sesion_caja_id,
+      usuario_id: row.usuario_id,
+      usuario_nombre: row.usuario_nombre,
+      dispositivo_nombre: row.dispositivo_nombre,
+      abierta_en: row.abierta_en.toISOString(),
+      cerrada_en: row.cerrada_en.toISOString(),
+      monto_apertura: Number(row.monto_apertura),
+      monto_cierre: row.monto_cierre === null ? null : Number(row.monto_cierre),
+      monto_esperado: row.monto_esperado === null ? null : Number(row.monto_esperado),
+      diferencia_cierre: row.diferencia_cierre === null ? null : Number(row.diferencia_cierre),
+      cantidad_ventas: Number(row.cantidad_ventas),
+      total_vendido: Number(row.total_vendido),
+      efectivo: Number(row.efectivo),
+      tarjeta: Number(row.tarjeta),
+      transferencia: Number(row.transferencia),
+      mixto: Number(row.mixto),
+      ingresos: Number(row.ingresos),
+      egresos: Number(row.egresos),
+    };
+  }
+
   private mapProductoTop(row: ProductoTopRow): ProductoTop {
     return {
       producto_id: row.producto_id,
@@ -203,5 +250,20 @@ export class ReportesService {
       total_comprado: Number(row.total_comprado),
       movimientos: Number(row.movimientos),
     };
+  }
+
+  private sum(
+    items: CierreCajaDiarioItem[],
+    key:
+      | 'total_vendido'
+      | 'efectivo'
+      | 'tarjeta'
+      | 'transferencia'
+      | 'mixto'
+      | 'ingresos'
+      | 'egresos'
+      | 'diferencia_cierre',
+  ): number {
+    return items.reduce((total, item) => total + (item[key] ?? 0), 0);
   }
 }

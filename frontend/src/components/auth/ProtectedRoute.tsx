@@ -1,7 +1,7 @@
 // src/components/auth/ProtectedRoute.tsx
 import { Navigate } from "react-router-dom";
 import type { ReactNode } from "react";
-import { getStoredUser } from "../../services/authService";
+import { getDeviceToken, getStoredUser } from "../../services/authService";
 import type { UserRole } from "../../types/api";
 
 interface ProtectedRouteProps {
@@ -13,7 +13,7 @@ export default function ProtectedRoute({ children, roles }: ProtectedRouteProps)
   const token = localStorage.getItem("token");
 
   if (!token) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to={getDeviceToken() ? "/perfiles" : "/login"} replace />;
   }
 
   const user = getStoredUser();

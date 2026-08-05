@@ -3,6 +3,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import { authMiddleware } from '../../middlewares/auth.middleware.js';
 import { roleMiddleware } from '../../middlewares/role.middleware.js';
 import { created, ok } from '../../utils/responses.js';
+import { AuthService } from '../auth/auth.service.js';
 import { VentasRepository } from './ventas.repository.js';
 import {
   anularVentaSchema,
@@ -21,13 +22,25 @@ import type {
 export const ventasRoutes: FastifyPluginAsync = async (fastify) => {
   const repository = new VentasRepository(fastify.pg);
   const service = new VentasService(repository, fastify.pg);
+  const authService = new AuthService(fastify);
   const posAccess = [authMiddleware, roleMiddleware(['OWNER', 'CASHIER'])];
+  const getDeviceId = async (request: { headers: Record<string, string | string[] | undefined> }) => {
+    const token = request.headers['x-device-token'];
+    const deviceToken = Array.isArray(token) ? token[0] : token;
+
+    if (!deviceToken) {
+      return undefined;
+    }
+
+    const device = await authService.validateDevice(deviceToken);
+    return device.id;
+  };
 
   fastify.post<{ Body: CreateVentaBody }>(
     '/',
     { preHandler: posAccess, schema: createVentaSchema },
     async (request, reply) => {
-      const venta = await service.create(request.user.id, request.body);
+      const venta = await service.create(request.user.id, request.body, await getDeviceId(request));
       return created(reply, venta);
     },
   );

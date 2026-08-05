@@ -18,8 +18,8 @@ export const ProductModal: React.FC<ProductModalProps> = ({
     <Dialog open={isOpen} onClose={onClose} className="relative z-50">
       <div className="fixed inset-0 bg-black/30" aria-hidden="true" />
       <div className="fixed inset-0 flex items-center justify-center p-4">
-        <DialogPanel className="w-full max-w-5xl rounded-xl bg-white p-6 shadow-xl max-h-[90vh] overflow-auto">
-          <DialogTitle className="text-xl font-bold text-gray-900 mb-4">
+        <DialogPanel className="w-full max-w-5xl rounded-xl bg-white p-6 shadow-xl max-h-[90vh] overflow-auto dark:border dark:border-white/10 dark:bg-neutral-900">
+          <DialogTitle className="text-xl font-bold text-gray-900 mb-4 dark:text-neutral-100">
             {title}
           </DialogTitle>
           {children}

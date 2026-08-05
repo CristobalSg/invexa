@@ -6,6 +6,7 @@ import { ok } from '../../utils/responses.js';
 import { ReportesRepository } from './reportes.repository.js';
 import {
   bajoStockSchema,
+  cierreCajaDiarioSchema,
   paginatedReporteSchema,
   productoReporteSchema,
   ventasMensualSchema,
@@ -38,6 +39,15 @@ export const reportesRoutes: FastifyPluginAsync = async (fastify) => {
     { preHandler: ownerOnly, schema: ventasMensualSchema },
     async (request, reply) => {
       const result = await service.ventasMensual(request.query);
+      return ok(reply, result);
+    },
+  );
+
+  fastify.get<{ Querystring: DateRangeQuery }>(
+    '/caja/cierre-diario',
+    { preHandler: ownerOnly, schema: cierreCajaDiarioSchema },
+    async (request, reply) => {
+      const result = await service.cierreCajaDiario(request.query);
       return ok(reply, result);
     },
   );

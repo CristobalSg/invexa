@@ -15,6 +15,10 @@ export class CajaRepository {
     await client.query('SELECT pg_advisory_xact_lock($1)', [usuarioId]);
   }
 
+  async lockDeviceCashSessions(client: PoolClient, deviceId: string): Promise<void> {
+    await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [deviceId]);
+  }
+
   async findOpenByUsuarioId(client: PoolClient, usuarioId: number): Promise<CajaSessionRow | null> {
     const result = await client.query<CajaSessionRow>(
       `
@@ -22,6 +26,7 @@ export class CajaRepository {
           sc.id,
           sc.usuario_id,
           u.nombre AS usuario_nombre,
+          sc.dispositivo_id,
           sc.monto_apertura,
           sc.monto_cierre,
           sc.monto_esperado,
@@ -51,6 +56,7 @@ export class CajaRepository {
           sc.id,
           sc.usuario_id,
           u.nombre AS usuario_nombre,
+          sc.dispositivo_id,
           sc.monto_apertura,
           sc.monto_cierre,
           sc.monto_esperado,
@@ -72,22 +78,84 @@ export class CajaRepository {
     return result.rows[0] ?? null;
   }
 
+  async findOpenByDeviceId(client: PoolClient, deviceId: string): Promise<CajaSessionRow | null> {
+    const result = await client.query<CajaSessionRow>(
+      `
+        SELECT
+          sc.id,
+          sc.usuario_id,
+          u.nombre AS usuario_nombre,
+          sc.dispositivo_id,
+          sc.monto_apertura,
+          sc.monto_cierre,
+          sc.monto_esperado,
+          sc.diferencia_cierre,
+          sc.abierta_en,
+          sc.cerrada_en,
+          sc.abierta
+        FROM sesiones_caja sc
+        INNER JOIN usuarios u ON u.id = sc.usuario_id
+        WHERE sc.dispositivo_id = $1
+          AND sc.abierta = TRUE
+          AND sc.cerrada_en IS NULL
+        ORDER BY sc.abierta_en DESC
+        LIMIT 1
+        FOR UPDATE OF sc
+      `,
+      [deviceId],
+    );
+
+    return result.rows[0] ?? null;
+  }
+
+  async findOpenByDeviceIdReadOnly(deviceId: string): Promise<CajaSessionRow | null> {
+    const result = await this.pool.query<CajaSessionRow>(
+      `
+        SELECT
+          sc.id,
+          sc.usuario_id,
+          u.nombre AS usuario_nombre,
+          sc.dispositivo_id,
+          sc.monto_apertura,
+          sc.monto_cierre,
+          sc.monto_esperado,
+          sc.diferencia_cierre,
+          sc.abierta_en,
+          sc.cerrada_en,
+          sc.abierta
+        FROM sesiones_caja sc
+        INNER JOIN usuarios u ON u.id = sc.usuario_id
+        WHERE sc.dispositivo_id = $1
+          AND sc.abierta = TRUE
+          AND sc.cerrada_en IS NULL
+        ORDER BY sc.abierta_en DESC
+        LIMIT 1
+      `,
+      [deviceId],
+    );
+
+    return result.rows[0] ?? null;
+  }
+
   async create(
     client: PoolClient,
     usuarioId: number,
     montoApertura: number,
+    deviceId?: string,
   ): Promise<CajaSessionRow> {
     const result = await client.query<CajaSessionRow>(
       `
         INSERT INTO sesiones_caja (
           usuario_id,
+          dispositivo_id,
           monto_apertura
         )
-        VALUES ($1, $2)
+        VALUES ($1, $2, $3)
         RETURNING
           id,
           usuario_id,
           '' AS usuario_nombre,
+          dispositivo_id,
           monto_apertura,
           monto_cierre,
           monto_esperado,
@@ -96,7 +164,7 @@ export class CajaRepository {
           cerrada_en,
           abierta
       `,
-      [usuarioId, montoApertura],
+      [usuarioId, deviceId ?? null, montoApertura],
     );
 
     return result.rows[0] as CajaSessionRow;
@@ -123,6 +191,7 @@ export class CajaRepository {
           id,
           usuario_id,
           '' AS usuario_nombre,
+          dispositivo_id,
           monto_apertura,
           monto_cierre,
           monto_esperado,
@@ -144,6 +213,7 @@ export class CajaRepository {
           sc.id,
           sc.usuario_id,
           u.nombre AS usuario_nombre,
+          sc.dispositivo_id,
           sc.monto_apertura,
           sc.monto_cierre,
           sc.monto_esperado,
@@ -169,6 +239,7 @@ export class CajaRepository {
           sc.id,
           sc.usuario_id,
           u.nombre AS usuario_nombre,
+          sc.dispositivo_id,
           sc.monto_apertura,
           sc.monto_cierre,
           sc.monto_esperado,
@@ -198,6 +269,7 @@ export class CajaRepository {
           sc.id,
           sc.usuario_id,
           u.nombre AS usuario_nombre,
+          sc.dispositivo_id,
           sc.monto_apertura,
           sc.monto_cierre,
           sc.monto_esperado,

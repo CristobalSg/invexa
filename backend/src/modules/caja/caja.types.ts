@@ -4,6 +4,7 @@ export interface CajaSessionRow {
   readonly id: number;
   readonly usuario_id: number;
   readonly usuario_nombre: string;
+  readonly dispositivo_id: string | null;
   readonly monto_apertura: string;
   readonly monto_cierre: string | null;
   readonly monto_esperado: string | null;
@@ -34,6 +35,7 @@ export interface CajaSession {
   readonly id: number;
   readonly usuario_id: number;
   readonly usuario_nombre: string;
+  readonly dispositivo_id: string | null;
   readonly monto_apertura: number;
   readonly monto_cierre: number | null;
   readonly monto_esperado: number | null;

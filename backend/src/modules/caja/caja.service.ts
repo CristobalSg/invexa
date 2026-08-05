@@ -27,17 +27,23 @@ export class CajaService {
     private readonly pool: Pool,
   ) {}
 
-  async abrir(usuarioId: number, data: AbrirCajaBody): Promise<CajaSessionDetalle> {
+  async abrir(usuarioId: number, data: AbrirCajaBody, deviceId?: string): Promise<CajaSessionDetalle> {
     return withTransaction(this.pool, async (client) => {
-      await this.repository.lockUserCashSessions(client, usuarioId);
-
-      const openSession = await this.repository.findOpenByUsuarioId(client, usuarioId);
-
-      if (openSession) {
-        throw new BadRequestError('El usuario ya tiene una caja abierta');
+      if (deviceId) {
+        await this.repository.lockDeviceCashSessions(client, deviceId);
+      } else {
+        await this.repository.lockUserCashSessions(client, usuarioId);
       }
 
-      const created = await this.repository.create(client, usuarioId, data.monto_apertura);
+      const openSession = deviceId
+        ? await this.repository.findOpenByDeviceId(client, deviceId)
+        : await this.repository.findOpenByUsuarioId(client, usuarioId);
+
+      if (openSession) {
+        throw new BadRequestError('Este equipo ya tiene un turno de caja abierto');
+      }
+
+      const created = await this.repository.create(client, usuarioId, data.monto_apertura, deviceId);
       const session = await this.repository.findByIdWithClient(client, created.id);
 
       if (!session) {
@@ -49,14 +55,24 @@ export class CajaService {
     });
   }
 
-  async cerrar(usuarioId: number, data: CerrarCajaBody): Promise<CajaSessionDetalle> {
+  async cerrar(usuarioId: number, data: CerrarCajaBody, deviceId?: string): Promise<CajaSessionDetalle> {
     return withTransaction(this.pool, async (client) => {
-      await this.repository.lockUserCashSessions(client, usuarioId);
+      if (deviceId) {
+        await this.repository.lockDeviceCashSessions(client, deviceId);
+      } else {
+        await this.repository.lockUserCashSessions(client, usuarioId);
+      }
 
-      const openSession = await this.repository.findOpenByUsuarioId(client, usuarioId);
+      const openSession = deviceId
+        ? await this.repository.findOpenByDeviceId(client, deviceId)
+        : await this.repository.findOpenByUsuarioId(client, usuarioId);
 
       if (!openSession) {
-        throw new BadRequestError('El usuario no tiene una caja abierta');
+        throw new BadRequestError('Este equipo no tiene un turno de caja abierto');
+      }
+
+      if (openSession.usuario_id !== usuarioId) {
+        throw new ForbiddenError('Solo el usuario del turno actual puede cerrar esta caja');
       }
 
       const resumen = await this.repository.getResumenWithClient(client, openSession.id);
@@ -79,7 +95,11 @@ export class CajaService {
     });
   }
 
-  async crearMovimiento(usuarioId: number, data: CrearMovimientoCajaBody): Promise<CajaMovimiento> {
+  async crearMovimiento(
+    usuarioId: number,
+    data: CrearMovimientoCajaBody,
+    deviceId?: string,
+  ): Promise<CajaMovimiento> {
     if (data.monto <= 0) {
       throw new BadRequestError('El monto debe ser mayor a 0');
     }
@@ -87,12 +107,22 @@ export class CajaService {
     await assertValidOwnerPassword(this.pool, data.master_password);
 
     return withTransaction(this.pool, async (client) => {
-      await this.repository.lockUserCashSessions(client, usuarioId);
+      if (deviceId) {
+        await this.repository.lockDeviceCashSessions(client, deviceId);
+      } else {
+        await this.repository.lockUserCashSessions(client, usuarioId);
+      }
 
-      const openSession = await this.repository.findOpenByUsuarioId(client, usuarioId);
+      const openSession = deviceId
+        ? await this.repository.findOpenByDeviceId(client, deviceId)
+        : await this.repository.findOpenByUsuarioId(client, usuarioId);
 
       if (!openSession) {
-        throw new BadRequestError('El usuario no tiene una caja abierta');
+        throw new BadRequestError('Este equipo no tiene un turno de caja abierto');
+      }
+
+      if (openSession.usuario_id !== usuarioId) {
+        throw new ForbiddenError('Solo el usuario del turno actual puede registrar movimientos');
       }
 
       const movimiento = await this.repository.createMovimiento(client, openSession.id, usuarioId, data);
@@ -101,10 +131,12 @@ export class CajaService {
     });
   }
 
-  async listMovimientosActual(usuarioId: number): Promise<CajaMovimiento[]> {
-    const session = await this.repository.findOpenByUsuarioIdReadOnly(usuarioId);
+  async listMovimientosActual(usuarioId: number, deviceId?: string): Promise<CajaMovimiento[]> {
+    const session = deviceId
+      ? await this.repository.findOpenByDeviceIdReadOnly(deviceId)
+      : await this.repository.findOpenByUsuarioIdReadOnly(usuarioId);
 
-    if (!session) {
+    if (!session || session.usuario_id !== usuarioId) {
       return [];
     }
 
@@ -112,11 +144,17 @@ export class CajaService {
     return movimientos.map((row) => this.mapMovimiento(row));
   }
 
-  async actual(usuarioId: number): Promise<CajaSessionDetalle | null> {
-    const session = await this.repository.findOpenByUsuarioIdReadOnly(usuarioId);
+  async actual(usuarioId: number, deviceId?: string): Promise<CajaSessionDetalle | null> {
+    const session = deviceId
+      ? await this.repository.findOpenByDeviceIdReadOnly(deviceId)
+      : await this.repository.findOpenByUsuarioIdReadOnly(usuarioId);
 
     if (!session) {
       return null;
+    }
+
+    if (session.usuario_id !== usuarioId) {
+      throw new ForbiddenError('Este equipo tiene un turno abierto de otro usuario');
     }
 
     const resumen = await this.repository.getResumen(session.id);
@@ -196,6 +234,7 @@ export class CajaService {
       id: row.id,
       usuario_id: row.usuario_id,
       usuario_nombre: row.usuario_nombre,
+      dispositivo_id: row.dispositivo_id,
       monto_apertura: Number(row.monto_apertura),
       monto_cierre: row.monto_cierre === null ? null : Number(row.monto_cierre),
       monto_esperado: row.monto_esperado === null ? null : Number(row.monto_esperado),

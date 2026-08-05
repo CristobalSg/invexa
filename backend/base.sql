@@ -59,6 +59,19 @@ CREATE TABLE usuarios (
   creado_en TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE dispositivos_pos (
+  id UUID PRIMARY KEY,
+  nombre VARCHAR(150) NOT NULL,
+  token_hash TEXT NOT NULL UNIQUE,
+  autorizado_por INT,
+  activo BOOLEAN NOT NULL DEFAULT TRUE,
+  autorizado_en TIMESTAMP NOT NULL DEFAULT NOW(),
+  ultimo_uso_en TIMESTAMP,
+
+  CONSTRAINT fk_dispositivo_autorizado_por
+    FOREIGN KEY (autorizado_por) REFERENCES usuarios(id) ON DELETE SET NULL
+);
+
 CREATE TABLE categorias_producto (
   id SERIAL PRIMARY KEY,
   nombre VARCHAR(100) NOT NULL UNIQUE,
@@ -167,6 +180,7 @@ CREATE TABLE productos_destacados (
 CREATE TABLE sesiones_caja (
   id SERIAL PRIMARY KEY,
   usuario_id INT NOT NULL,
+  dispositivo_id UUID,
 
   monto_apertura NUMERIC(10,2) NOT NULL DEFAULT 0,
   monto_cierre NUMERIC(10,2),
@@ -179,7 +193,10 @@ CREATE TABLE sesiones_caja (
   abierta BOOLEAN NOT NULL DEFAULT TRUE,
 
   CONSTRAINT fk_sesion_usuario
-    FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id),
+
+  CONSTRAINT fk_sesion_caja_dispositivo
+    FOREIGN KEY (dispositivo_id) REFERENCES dispositivos_pos(id) ON DELETE SET NULL
 );
 
 CREATE TABLE movimientos_caja (
@@ -396,6 +413,15 @@ CREATE INDEX idx_detalle_compras_producto
 
 CREATE INDEX idx_sesiones_caja_usuario_abierta
   ON sesiones_caja(usuario_id, abierta);
+
+CREATE INDEX idx_sesiones_caja_dispositivo
+  ON sesiones_caja(dispositivo_id, abierta);
+
+CREATE UNIQUE INDEX uq_sesion_caja_dispositivo_abierta
+  ON sesiones_caja(dispositivo_id)
+  WHERE abierta = TRUE
+    AND cerrada_en IS NULL
+    AND dispositivo_id IS NOT NULL;
 
 CREATE INDEX idx_movimientos_caja_sesion
   ON movimientos_caja(sesion_caja_id, creado_en);

@@ -50,6 +50,62 @@ export interface VentasResumen {
   readonly mixto: number;
 }
 
+export interface CierreCajaDiarioRow {
+  readonly sesion_caja_id: number;
+  readonly usuario_id: number;
+  readonly usuario_nombre: string;
+  readonly dispositivo_nombre: string | null;
+  readonly abierta_en: Date;
+  readonly cerrada_en: Date;
+  readonly monto_apertura: string;
+  readonly monto_cierre: string | null;
+  readonly monto_esperado: string | null;
+  readonly diferencia_cierre: string | null;
+  readonly cantidad_ventas: string;
+  readonly total_vendido: string;
+  readonly efectivo: string;
+  readonly tarjeta: string;
+  readonly transferencia: string;
+  readonly mixto: string;
+  readonly ingresos: string;
+  readonly egresos: string;
+}
+
+export interface CierreCajaDiarioItem {
+  readonly sesion_caja_id: number;
+  readonly usuario_id: number;
+  readonly usuario_nombre: string;
+  readonly dispositivo_nombre: string | null;
+  readonly abierta_en: string;
+  readonly cerrada_en: string;
+  readonly monto_apertura: number;
+  readonly monto_cierre: number | null;
+  readonly monto_esperado: number | null;
+  readonly diferencia_cierre: number | null;
+  readonly cantidad_ventas: number;
+  readonly total_vendido: number;
+  readonly efectivo: number;
+  readonly tarjeta: number;
+  readonly transferencia: number;
+  readonly mixto: number;
+  readonly ingresos: number;
+  readonly egresos: number;
+}
+
+export interface CierreCajaDiario {
+  readonly fecha: string;
+  readonly cajas_cerradas: number;
+  readonly total_vendido: number;
+  readonly efectivo: number;
+  readonly tarjeta: number;
+  readonly transferencia: number;
+  readonly mixto: number;
+  readonly ingresos: number;
+  readonly egresos: number;
+  readonly diferencia_total: number;
+  readonly sesiones: CierreCajaDiarioItem[];
+}
+
 export interface VentasMensualRow {
   readonly mes: string;
   readonly cantidad_ventas: string;

@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from 'fastify';
 
 import { authMiddleware } from '../../middlewares/auth.middleware.js';
 import { roleMiddleware } from '../../middlewares/role.middleware.js';
+import { AuthService } from '../auth/auth.service.js';
 import { created, ok } from '../../utils/responses.js';
 import { CajaRepository } from './caja.repository.js';
 import {
@@ -25,13 +26,25 @@ import type {
 export const cajaRoutes: FastifyPluginAsync = async (fastify) => {
   const repository = new CajaRepository(fastify.pg);
   const service = new CajaService(repository, fastify.pg);
+  const authService = new AuthService(fastify);
   const cajaAccess = [authMiddleware, roleMiddleware(['OWNER', 'CASHIER'])];
+  const getDeviceId = async (request: { headers: Record<string, string | string[] | undefined> }) => {
+    const token = request.headers['x-device-token'];
+    const deviceToken = Array.isArray(token) ? token[0] : token;
+
+    if (!deviceToken) {
+      return undefined;
+    }
+
+    const device = await authService.validateDevice(deviceToken);
+    return device.id;
+  };
 
   fastify.post<{ Body: AbrirCajaBody }>(
     '/abrir',
     { preHandler: cajaAccess, schema: abrirCajaSchema },
     async (request, reply) => {
-      const session = await service.abrir(request.user.id, request.body);
+      const session = await service.abrir(request.user.id, request.body, await getDeviceId(request));
       return created(reply, session);
     },
   );
@@ -40,7 +53,7 @@ export const cajaRoutes: FastifyPluginAsync = async (fastify) => {
     '/cerrar',
     { preHandler: cajaAccess, schema: cerrarCajaSchema },
     async (request, reply) => {
-      const session = await service.cerrar(request.user.id, request.body);
+      const session = await service.cerrar(request.user.id, request.body, await getDeviceId(request));
       return ok(reply, session);
     },
   );
@@ -49,7 +62,11 @@ export const cajaRoutes: FastifyPluginAsync = async (fastify) => {
     '/movimientos',
     { preHandler: cajaAccess, schema: crearMovimientoCajaSchema },
     async (request, reply) => {
-      const movimiento = await service.crearMovimiento(request.user.id, request.body);
+      const movimiento = await service.crearMovimiento(
+        request.user.id,
+        request.body,
+        await getDeviceId(request),
+      );
       return created(reply, movimiento);
     },
   );
@@ -58,7 +75,7 @@ export const cajaRoutes: FastifyPluginAsync = async (fastify) => {
     '/movimientos/actual',
     { preHandler: cajaAccess, schema: listMovimientosCajaSchema },
     async (request, reply) => {
-      const movimientos = await service.listMovimientosActual(request.user.id);
+      const movimientos = await service.listMovimientosActual(request.user.id, await getDeviceId(request));
       return ok(reply, movimientos);
     },
   );
@@ -67,7 +84,7 @@ export const cajaRoutes: FastifyPluginAsync = async (fastify) => {
     '/actual',
     { preHandler: cajaAccess, schema: cajaActualSchema },
     async (request, reply) => {
-      const session = await service.actual(request.user.id);
+      const session = await service.actual(request.user.id, await getDeviceId(request));
       return ok(reply, session);
     },
   );

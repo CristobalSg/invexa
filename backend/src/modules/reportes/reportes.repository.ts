@@ -2,6 +2,7 @@ import type { Pool } from 'pg';
 
 import type {
   BajoStockQuery,
+  CierreCajaDiarioRow,
   ConsignacionRow,
   DateRangeQuery,
   InventarioRow,
@@ -63,6 +64,66 @@ export class ReportesRepository {
         ORDER BY ${localMonth('creado_en')} ASC
       `,
       [query.fecha_desde ?? null, query.fecha_hasta ?? null],
+    );
+
+    return result.rows;
+  }
+
+  async cierreCajaDiario(fecha: string): Promise<CierreCajaDiarioRow[]> {
+    const result = await this.pool.query<CierreCajaDiarioRow>(
+      `
+        WITH ventas_por_sesion AS (
+          SELECT
+            v.sesion_caja_id,
+            COUNT(v.id)::text AS cantidad_ventas,
+            COALESCE(SUM(v.total), 0)::text AS total_vendido,
+            COALESCE(SUM(v.total) FILTER (WHERE v.metodo_pago = 'EFECTIVO'), 0)::text AS efectivo,
+            COALESCE(SUM(v.total) FILTER (WHERE v.metodo_pago = 'TARJETA'), 0)::text AS tarjeta,
+            COALESCE(SUM(v.total) FILTER (WHERE v.metodo_pago = 'TRANSFERENCIA'), 0)::text AS transferencia,
+            COALESCE(SUM(v.total) FILTER (WHERE v.metodo_pago = 'MIXTO'), 0)::text AS mixto
+          FROM ventas v
+          WHERE v.estado = 'COMPLETADA'
+            AND v.sesion_caja_id IS NOT NULL
+          GROUP BY v.sesion_caja_id
+        ),
+        movimientos_por_sesion AS (
+          SELECT
+            mc.sesion_caja_id,
+            COALESCE(SUM(mc.monto) FILTER (WHERE mc.tipo = 'INGRESO'), 0)::text AS ingresos,
+            COALESCE(SUM(mc.monto) FILTER (WHERE mc.tipo = 'EGRESO'), 0)::text AS egresos
+          FROM movimientos_caja mc
+          GROUP BY mc.sesion_caja_id
+        )
+        SELECT
+          sc.id AS sesion_caja_id,
+          sc.usuario_id,
+          u.nombre AS usuario_nombre,
+          dp.nombre AS dispositivo_nombre,
+          sc.abierta_en,
+          sc.cerrada_en,
+          sc.monto_apertura,
+          sc.monto_cierre,
+          sc.monto_esperado,
+          sc.diferencia_cierre,
+          COALESCE(vps.cantidad_ventas, '0') AS cantidad_ventas,
+          COALESCE(vps.total_vendido, '0') AS total_vendido,
+          COALESCE(vps.efectivo, '0') AS efectivo,
+          COALESCE(vps.tarjeta, '0') AS tarjeta,
+          COALESCE(vps.transferencia, '0') AS transferencia,
+          COALESCE(vps.mixto, '0') AS mixto,
+          COALESCE(mps.ingresos, '0') AS ingresos,
+          COALESCE(mps.egresos, '0') AS egresos
+        FROM sesiones_caja sc
+        INNER JOIN usuarios u ON u.id = sc.usuario_id
+        LEFT JOIN dispositivos_pos dp ON dp.id = sc.dispositivo_id
+        LEFT JOIN ventas_por_sesion vps ON vps.sesion_caja_id = sc.id
+        LEFT JOIN movimientos_por_sesion mps ON mps.sesion_caja_id = sc.id
+        WHERE sc.abierta = FALSE
+          AND sc.cerrada_en IS NOT NULL
+          AND ${localDate('sc.cerrada_en')} = $1::date
+        ORDER BY sc.cerrada_en ASC, sc.id ASC
+      `,
+      [fecha],
     );
 
     return result.rows;

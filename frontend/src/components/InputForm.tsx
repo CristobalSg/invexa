@@ -16,8 +16,8 @@ const InputForm = forwardRef<HTMLInputElement, Props>(({ title, onProductFound, 
   const [error, setError] = useState("");
   const inputClass =
     size === "large"
-      ? "w-full rounded-lg border py-4 pl-5 pr-14 text-2xl font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
-      : "w-full rounded-md border py-2 pl-4 pr-10 focus:outline-none focus:ring-2 focus:ring-blue-500";
+      ? "w-full rounded-lg border border-gray-300 bg-white py-4 pl-5 pr-14 text-2xl font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-100 dark:placeholder:text-neutral-500"
+      : "w-full rounded-md border border-gray-300 bg-white py-2 pl-4 pr-10 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-100 dark:placeholder:text-neutral-500";
 
   useImperativeHandle(ref, () => inputRef.current as HTMLInputElement);
 
@@ -43,7 +43,7 @@ const InputForm = forwardRef<HTMLInputElement, Props>(({ title, onProductFound, 
 
   return (
     <div className="mb-4">
-      <label className="mb-1 block text-sm font-medium text-gray-700">
+      <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-neutral-300">
         {title}
       </label>
       <div className="relative">
@@ -64,7 +64,7 @@ const InputForm = forwardRef<HTMLInputElement, Props>(({ title, onProductFound, 
           <button
             type="button"
             onClick={clearValue}
-            className={`absolute right-2 top-1/2 -translate-y-1/2 rounded-md text-gray-400 transition-colors hover:bg-gray-100 hover:text-red-600 ${
+            className={`absolute right-2 top-1/2 -translate-y-1/2 rounded-md text-gray-400 transition-colors hover:bg-gray-100 hover:text-red-600 dark:hover:bg-white/10 dark:hover:text-red-300 ${
               size === "large" ? "p-2" : "p-1.5"
             }`}
             aria-label="Borrar código"

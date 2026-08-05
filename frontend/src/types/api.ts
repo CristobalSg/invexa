@@ -46,6 +46,27 @@ export interface LoginResult {
   usuario: AuthUser;
 }
 
+export interface DeviceAuthResult {
+  device_token: string;
+  dispositivo: {
+    id: string;
+    nombre: string;
+  };
+}
+
+export interface DeviceProfile extends AuthUser {
+  activo: boolean;
+}
+
+export interface ProfileLoginResult extends LoginResult {
+  requiere_apertura_turno: boolean;
+  turno_abierto: {
+    id: number;
+    usuario_id: number;
+    usuario_nombre: string;
+  } | null;
+}
+
 export interface Usuario extends AuthUser {
   activo: boolean;
   creado_en: string;
@@ -118,6 +139,7 @@ export interface CajaSession {
   id: number;
   usuario_id: number;
   usuario_nombre: string;
+  dispositivo_id: string | null;
   monto_apertura: number;
   monto_cierre: number | null;
   monto_esperado: number | null;
@@ -127,6 +149,41 @@ export interface CajaSession {
   abierta: boolean;
   resumen: CajaResumen;
   movimientos: CajaMovimiento[];
+}
+
+export interface CierreCajaDiarioItem {
+  sesion_caja_id: number;
+  usuario_id: number;
+  usuario_nombre: string;
+  dispositivo_nombre: string | null;
+  abierta_en: string;
+  cerrada_en: string;
+  monto_apertura: number;
+  monto_cierre: number | null;
+  monto_esperado: number | null;
+  diferencia_cierre: number | null;
+  cantidad_ventas: number;
+  total_vendido: number;
+  efectivo: number;
+  tarjeta: number;
+  transferencia: number;
+  mixto: number;
+  ingresos: number;
+  egresos: number;
+}
+
+export interface CierreCajaDiario {
+  fecha: string;
+  cajas_cerradas: number;
+  total_vendido: number;
+  efectivo: number;
+  tarjeta: number;
+  transferencia: number;
+  mixto: number;
+  ingresos: number;
+  egresos: number;
+  diferencia_total: number;
+  sesiones: CierreCajaDiarioItem[];
 }
 
 export interface Venta {

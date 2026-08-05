@@ -16,9 +16,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   onDelete
 }) => {
   return (
-    <div className="rounded-lg shadow-lg p-4 relative bg-white">
+    <div className="rounded-lg shadow-lg p-4 relative bg-white dark:border dark:border-white/10 dark:bg-neutral-900">
       <div className="flex justify-between items-start mb-1">
-        <h3 className="text-lg font-semibold">{name}</h3>
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-neutral-100">{name}</h3>
 
         {(onEdit || onDelete) && <Menu as="div" className="relative inline-block text-left">
           <MenuButton className="inline-flex justify-center rounded-md bg-black/20 px-2 py-1 text-sm font-medium text-white hover:bg-black/30 focus:outline-none">
@@ -26,14 +26,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             <ChevronDownIcon className="ml-2 h-5 w-5 text-white" aria-hidden="true" />
           </MenuButton>
 
-          <MenuItems className="absolute right-0 z-10 mt-2 w-40 origin-top-right divide-y divide-gray-100 rounded-md bg-white shadow-lg ring-1 ring-black/5 focus:outline-none">
+          <MenuItems className="absolute right-0 z-10 mt-2 w-40 origin-top-right divide-y divide-gray-100 rounded-md bg-white shadow-lg ring-1 ring-black/5 focus:outline-none dark:divide-white/10 dark:bg-neutral-900 dark:ring-white/10">
             <div className="px-1 py-1">
               <MenuItem>
                 {({ active }) => (
                   <button
                     onClick={onEdit}
                     className={`${
-                      active ? 'bg-violet-500 text-white' : 'text-gray-900'
+                      active ? 'bg-violet-500 text-white' : 'text-gray-900 dark:text-neutral-100'
                     } group flex w-full items-center rounded-md px-2 py-2 text-sm`}
                   >
                     <PencilIcon className="mr-2 h-5 w-5" aria-hidden="true" />
@@ -46,7 +46,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                   <button
                     onClick={onDelete}
                     className={`${
-                      active ? 'bg-violet-500 text-white' : 'text-gray-900'
+                      active ? 'bg-violet-500 text-white' : 'text-gray-900 dark:text-neutral-100'
                     } group flex w-full items-center rounded-md px-2 py-2 text-sm`}
                   >
                     <TrashIcon className="mr-2 h-5 w-5" aria-hidden="true" />
@@ -59,7 +59,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         </Menu>}
       </div>
 
-      <div className="text-sm text-gray-600">{description}</div>
+      <div className="text-sm text-gray-600 dark:text-neutral-400">{description}</div>
     </div>
   )
 }
