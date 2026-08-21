@@ -3,7 +3,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowDownTrayIcon,
   ArrowUpTrayIcon,
+  BanknotesIcon,
+  CheckCircleIcon,
   ClockIcon,
+  TruckIcon,
   WalletIcon,
 } from "@heroicons/react/24/outline";
 import {
@@ -17,8 +20,30 @@ import type { CategoriaMovimientoCaja, TipoMovimientoCaja } from "../types/api";
 import ListPanel from "../components/ListPanel";
 import ModuleCard from "../components/ModuleCard";
 import { Button, FormActions, FormField, inputClassName } from "../components/FormControls";
+import AdminPasswordModal from "../components/AdminPasswordModal";
 
 const money = (value: number) => `$${value.toLocaleString()}`;
+const time = (value: string | null) =>
+  value
+    ? new Date(value).toLocaleTimeString("es-CL", {
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : "-";
+
+const sessionDuration = (openedAt: string, closedAt: string | null) => {
+  const start = new Date(openedAt).getTime();
+  const end = closedAt ? new Date(closedAt).getTime() : Date.now();
+  const totalMinutes = Math.max(0, Math.round((end - start) / 60000));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+
+  if (hours === 0) {
+    return `${minutes} min`;
+  }
+
+  return `${hours} h ${minutes} min`;
+};
 
 const movimientoCategorias: Array<{ value: CategoriaMovimientoCaja; label: string }> = [
   { value: "PAGO_PROVEEDOR", label: "Pago proveedor" },
@@ -39,12 +64,14 @@ export default function CajaPage() {
   const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
   const [showCashCountInput, setShowCashCountInput] = useState(false);
   const [efectivoContado, setEfectivoContado] = useState("");
+  const [cashMatches, setCashMatches] = useState(false);
+  const [consignationSeparated, setConsignationSeparated] = useState(false);
+  const [movementPasswordOpen, setMovementPasswordOpen] = useState(false);
   const [movimientoForm, setMovimientoForm] = useState({
     tipo: "EGRESO" as TipoMovimientoCaja,
     categoria: "PAGO_PROVEEDOR" as CategoriaMovimientoCaja,
     monto: "",
     descripcion: "",
-    master_password: "",
   });
 
   const { data: actual, isLoading } = useQuery({ queryKey: ["caja-actual"], queryFn: getCajaActual });
@@ -81,17 +108,18 @@ export default function CajaPage() {
   });
 
   const crearMovimiento = useMutation({
-    mutationFn: () =>
+    mutationFn: (masterPassword: string) =>
       crearMovimientoCaja({
         tipo: movimientoForm.tipo,
         categoria: movimientoForm.categoria,
         monto: Number(movimientoForm.monto),
         descripcion: movimientoForm.descripcion || null,
-        master_password: movimientoForm.master_password,
+        master_password: masterPassword,
       }),
     onSuccess: async () => {
       setMessage("Movimiento registrado.");
-      setMovimientoForm((prev) => ({ ...prev, monto: "", descripcion: "", master_password: "" }));
+      setMovementPasswordOpen(false);
+      setMovimientoForm((prev) => ({ ...prev, monto: "", descripcion: "" }));
       await invalidateCaja();
     },
     onError: (error) => setMessage(error instanceof Error ? error.message : "No se pudo registrar el movimiento"),
@@ -106,11 +134,14 @@ export default function CajaPage() {
     if (!actual) return;
     setShowCashCountInput(false);
     setEfectivoContado("");
+    setCashMatches(false);
+    setConsignationSeparated(false);
     setCloseConfirmOpen(true);
   };
 
   const handleCloseWithExactCash = () => {
     if (!actual) return;
+    setCashMatches(true);
     cerrar.mutate(actual.resumen.monto_esperado_cierre);
   };
 
@@ -216,18 +247,9 @@ export default function CajaPage() {
                   placeholder="Descripción"
                 />
                 </FormField>
-                <FormField label="Clave admin">
-                <input
-                  type="password"
-                  value={movimientoForm.master_password}
-                  onChange={(event) => setMovimientoForm((prev) => ({ ...prev, master_password: event.target.value }))}
-                  className={inputClassName}
-                  placeholder="Clave admin"
-                />
-                </FormField>
                 <Button
-                  onClick={() => crearMovimiento.mutate()}
-                  disabled={crearMovimiento.isPending || movimientoForm.monto === "" || movimientoForm.master_password === ""}
+                  onClick={() => setMovementPasswordOpen(true)}
+                  disabled={crearMovimiento.isPending || movimientoForm.monto === ""}
                 >
                   Registrar
                 </Button>
@@ -268,6 +290,9 @@ export default function CajaPage() {
               title: `Caja #${session.id}`,
               description: session.usuario_nombre,
               meta: [
+                `Inicio ${time(session.abierta_en)}`,
+                session.cerrada_en ? `Cierre ${time(session.cerrada_en)}` : "Cierre en curso",
+                `Duración ${sessionDuration(session.abierta_en, session.cerrada_en)}`,
                 `Apertura ${money(session.monto_apertura)}`,
                 `Esperado ${money(session.monto_esperado ?? session.resumen.monto_esperado_cierre)}`,
                 `Contado ${session.monto_cierre === null ? "-" : money(session.monto_cierre)}`,
@@ -281,66 +306,145 @@ export default function CajaPage() {
       </div>
 
       {closeConfirmOpen && actual && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-2xl rounded-lg bg-white p-6 shadow-xl">
-            <h2 className="text-xl font-bold text-gray-900">Confirmar cierre de caja</h2>
-            <div className="mt-5 grid gap-4 md:grid-cols-2">
-              <div className="space-y-2 rounded-lg bg-gray-50 p-4 text-sm text-gray-700">
-                <div className="flex justify-between"><span>Caja</span><span>#{actual.id}</span></div>
-                <div className="flex justify-between"><span>Fondo inicial</span><span>{money(actual.monto_apertura)}</span></div>
-                <div className="flex justify-between"><span>Ingresos</span><span>{money(actual.resumen.ingresos)}</span></div>
-                <div className="flex justify-between"><span>Ventas efectivo</span><span>{money(actual.resumen.efectivo)}</span></div>
-                <div className="flex justify-between"><span>Egresos</span><span>{money(actual.resumen.egresos)}</span></div>
-                <div className="flex justify-between border-t pt-2 font-semibold text-gray-900">
-                  <span>Efectivo esperado</span>
-                  <span>{money(actual.resumen.monto_esperado_cierre)}</span>
-                </div>
+        <div
+          className="flow-modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setCloseConfirmOpen(false);
+              setShowCashCountInput(false);
+            }
+          }}
+        >
+          <div className="cash-close-modal">
+            <div className="cash-close-head">
+              <div>
+                <p>Cierre de caja</p>
+                <h2>Caja #{actual.id}</h2>
               </div>
-              <div className="space-y-3">
-                <p className="text-sm font-medium text-gray-700">¿El efectivo está justo?</p>
+              <span className="cash-close-status">
+                <ClockIcon className="h-5 w-5" />
+                {sessionDuration(actual.abierta_en, null)}
+              </span>
+            </div>
+
+            <div className="cash-close-grid">
+              <section className="cash-close-card highlight">
+                <div className="cash-close-card-title">
+                  <BanknotesIcon className="h-6 w-6" />
+                  <span>Efectivo esperado</span>
+                </div>
+                <strong>{money(actual.resumen.monto_esperado_cierre)}</strong>
+                <div className="cash-close-lines">
+                  <span><b>Fondo inicial</b>{money(actual.monto_apertura)}</span>
+                  <span><b>Ventas efectivo</b>{money(actual.resumen.efectivo)}</span>
+                  <span><b>Ingresos</b>{money(actual.resumen.ingresos)}</span>
+                  <span><b>Egresos</b>-{money(actual.resumen.egresos)}</span>
+                </div>
+              </section>
+
+              <section className="cash-close-card">
+                <div className="cash-close-card-title">
+                  <TruckIcon className="h-6 w-6" />
+                  <span>Ventas por tipo</span>
+                </div>
+                <div className="cash-close-split">
+                  <span>
+                    <small>Propias</small>
+                    {money(actual.resumen.ventas_propias)}
+                  </span>
+                  <span>
+                    <small>Consignación</small>
+                    {money(actual.resumen.ventas_consignacion)}
+                  </span>
+                  <span>
+                    <small>Total ventas</small>
+                    {money(actual.resumen.total_ventas)}
+                  </span>
+                </div>
+                <div className="cash-close-provider-list">
+                  {actual.resumen.consignacion_proveedores.length > 0 ? (
+                    actual.resumen.consignacion_proveedores.map((provider) => (
+                      <div key={provider.proveedor_id ?? provider.proveedor_nombre}>
+                        <span>{provider.proveedor_nombre}</span>
+                        <strong>{money(provider.total)}</strong>
+                      </div>
+                    ))
+                  ) : (
+                    <p>Sin ventas de consignación en esta caja.</p>
+                  )}
+                </div>
+              </section>
+
+              <section className="cash-close-card checklist">
+                <div className="cash-close-card-title">
+                  <CheckCircleIcon className="h-6 w-6" />
+                  <span>Checklist</span>
+                </div>
+                <label className="cash-close-check">
+                  <input
+                    type="checkbox"
+                    checked={cashMatches}
+                    onChange={(event) => setCashMatches(event.target.checked)}
+                  />
+                  <span>El efectivo calza con el monto esperado</span>
+                </label>
+                <label className="cash-close-check">
+                  <input
+                    type="checkbox"
+                    checked={consignationSeparated}
+                    onChange={(event) => setConsignationSeparated(event.target.checked)}
+                  />
+                  <span>Se separó la plata que entró por consignación</span>
+                </label>
+              </section>
+
+              <section className="cash-close-card actions">
+                <p className="cash-close-question">¿Cómo quieres cerrar?</p>
                 <button
                   type="button"
                   onClick={handleCloseWithExactCash}
                   disabled={cerrar.isPending}
-                  className="w-full rounded-lg border border-green-600 bg-green-50 px-4 py-3 text-left text-sm font-semibold text-green-800 hover:bg-green-100 disabled:opacity-60"
+                  className="cash-close-option primary"
                 >
-                  Sí, cerrar con efectivo justo
+                  Cerrar con efectivo justo
                 </button>
                 <button
                   type="button"
                   onClick={() => {
                     setEfectivoContado("");
                     setShowCashCountInput(true);
+                    setCashMatches(false);
                   }}
-                  className="w-full rounded-lg border border-gray-300 px-4 py-3 text-left text-sm font-semibold text-gray-700 hover:bg-gray-50"
+                  className="cash-close-option"
                 >
-                  No, ingresar efectivo real
+                  Ingresar efectivo real
                 </button>
 
                 {showCashCountInput && (
-                  <div className="pt-2">
+                  <div className="cash-close-count">
                     <FormField label="Efectivo real contado">
-                    <input
-                      autoFocus
-                      type="number"
-                      min={0}
-                      value={efectivoContado}
-                      onChange={(event) => setEfectivoContado(event.target.value)}
-                      className={`${inputClassName} text-lg`}
-                    />
+                      <input
+                        autoFocus
+                        type="number"
+                        min={0}
+                        value={efectivoContado}
+                        onChange={(event) => {
+                          setEfectivoContado(event.target.value);
+                          setCashMatches(Number(event.target.value) === actual.resumen.monto_esperado_cierre);
+                        }}
+                        className={`${inputClassName} text-lg`}
+                      />
                     </FormField>
-                    <div className="mt-3 rounded-md bg-gray-50 p-3 text-sm text-gray-700">
-                      Diferencia:{" "}
-                      <span className={diferenciaCierre < 0 ? "font-semibold text-red-700" : "font-semibold text-green-700"}>
-                        {money(diferenciaCierre)}
-                      </span>
+                    <div className={`cash-close-difference ${diferenciaCierre < 0 ? "negative" : ""}`}>
+                      <span>Diferencia</span>
+                      <strong>{money(diferenciaCierre)}</strong>
                     </div>
                   </div>
                 )}
-              </div>
+              </section>
             </div>
 
-            <FormActions className="mt-1">
+            <FormActions className="cash-close-footer">
               <Button
                 variant="ghost"
                 onClick={() => {
@@ -362,6 +466,16 @@ export default function CajaPage() {
             </FormActions>
           </div>
         </div>
+      )}
+
+      {movementPasswordOpen && (
+        <AdminPasswordModal
+          title="Registrar movimiento"
+          description="Ingresa la contraseña de administrador para guardar este movimiento."
+          isPending={crearMovimiento.isPending}
+          onClose={() => setMovementPasswordOpen(false)}
+          onConfirm={(password) => crearMovimiento.mutate(password)}
+        />
       )}
 
     </div>

@@ -462,8 +462,3 @@ SELECT
 FROM categorias_producto c
 WHERE c.nombre = 'Frutas y verduras'
 ON CONFLICT (codigo_barras) DO NOTHING;
-
-INSERT INTO usuarios
-(nombre_usuario, contrasena_hash, nombre, email, rol)
-VALUES
-('admin', 'CAMBIAR_HASH', 'Dueño', NULL, 'OWNER');

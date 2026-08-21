@@ -188,7 +188,9 @@ export class ReportesRepository {
           (p.stock * COALESCE(p.costo_actual, 0))::text AS valor_costo,
           (p.stock * p.precio_venta)::text AS valor_venta,
           p.activo,
-          COUNT(*) OVER() AS total_count
+          COUNT(*) OVER() AS total_count,
+          SUM(p.stock * COALESCE(p.costo_actual, 0)) OVER()::text AS valor_costo_total,
+          SUM(p.stock * p.precio_venta) OVER()::text AS valor_venta_total
         FROM productos p
         INNER JOIN categorias_producto c ON c.id = p.categoria_id
         LEFT JOIN proveedores pr ON pr.id = p.proveedor_id

@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { keepPreviousData, useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { FunnelIcon } from "@heroicons/react/24/outline";
+import { FunnelIcon, PlusIcon } from "@heroicons/react/24/outline";
 import { getProducts, deleteProduct } from "../services/productService";
 import type { ModoInventarioProducto, Producto } from "../types/api";
 
@@ -9,7 +9,7 @@ import ProductFormCreate from "../components/ProductFormCreate";
 import { getStoredUser } from "../services/authService";
 import { getCategorias } from "../services/catalogService";
 import ModuleCard from "../components/ModuleCard";
-import { Button, FormField, inputClassName } from "../components/FormControls";
+import { FormField, inputClassName } from "../components/FormControls";
 import ProductTile from "../components/ProductTile";
 
 const modoInventarioLabels: Record<ModoInventarioProducto, string> = {
@@ -83,14 +83,6 @@ export default function ProductsPage() {
     <div className="admin-page space-y-6">
       <div className="flex justify-between items-center mb-4">
         <h1 className="admin-page-title">Gestión de Inventario</h1>
-        {isOwner && <Button
-          onClick={() => {
-            setIsModalOpen(true);
-            setProductToEdit(null);
-          }}
-        >
-          Crear producto
-        </Button>}
       </div>
       <ModuleCard title="Filtros" icon={FunnelIcon} contentClassName="p-4">
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
@@ -127,7 +119,11 @@ export default function ProductsPage() {
       {error && <p className="text-sm text-red-500">Error al cargar productos</p>}
       {isFetching && <p className="text-sm text-gray-500">Actualizando productos...</p>}
 
-      <ProductModal isOpen={isModalOpen} onClose={handleCloseModal}>
+      <ProductModal
+        isOpen={isModalOpen}
+        onClose={handleCloseModal}
+        title={productToEdit ? "Editar producto" : "Agregar producto"}
+      >
         <ProductFormCreate
           initialData={productToEdit ?? undefined}
           onSuccess={handleSuccess}
@@ -150,6 +146,21 @@ export default function ProductsPage() {
           <p className="text-sm text-gray-500">No se encontraron productos.</p>
         )}
       </div>
+
+      {isOwner && (
+        <button
+          type="button"
+          onClick={() => {
+            setIsModalOpen(true);
+            setProductToEdit(null);
+          }}
+          className="inventory-fab"
+          aria-label="Agregar producto"
+          title="Agregar producto"
+        >
+          <PlusIcon className="h-8 w-8" />
+        </button>
+      )}
     </div>
   );
 }

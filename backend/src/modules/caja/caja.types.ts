@@ -27,6 +27,9 @@ export interface CajaResumenRow {
   readonly tarjeta: string;
   readonly transferencia: string;
   readonly mixto: string;
+  readonly ventas_propias: string;
+  readonly ventas_consignacion: string;
+  readonly consignacion_proveedores: string | null;
   readonly ingresos: string;
   readonly egresos: string;
 }
@@ -54,10 +57,19 @@ export interface CajaResumenFinanciero {
   readonly tarjeta: number;
   readonly transferencia: number;
   readonly mixto: number;
+  readonly ventas_propias: number;
+  readonly ventas_consignacion: number;
+  readonly consignacion_proveedores: CajaResumenConsignacionProveedor[];
   readonly ingresos: number;
   readonly egresos: number;
   readonly monto_esperado_cierre: number;
   readonly diferencia_cierre: number | null;
+}
+
+export interface CajaResumenConsignacionProveedor {
+  readonly proveedor_id: number | null;
+  readonly proveedor_nombre: string;
+  readonly total: number;
 }
 
 export interface CajaSessionDetalle extends CajaSession {

@@ -1,5 +1,13 @@
 import api from "../lib/axios";
-import type { AuthUser, DeviceAuthResult, DeviceProfile, LoginResult, ProfileLoginResult } from "../types/api";
+import type {
+  AuthUser,
+  DeviceAuthResult,
+  DeviceProfile,
+  LoginResult,
+  ProfileLoginResult,
+  SetupAdminResult,
+  SetupStatusResult,
+} from "../types/api";
 
 const TOKEN_KEY = "token";
 const USER_KEY = "usuario";
@@ -18,6 +26,26 @@ export async function authorizeDevice(input: {
   nombre_dispositivo?: string;
 }): Promise<DeviceAuthResult> {
   const { data } = await api.post<DeviceAuthResult>("/auth/dispositivo/autorizar", input);
+  localStorage.setItem(DEVICE_TOKEN_KEY, data.device_token);
+  localStorage.setItem(DEVICE_KEY, JSON.stringify(data.dispositivo));
+  return data;
+}
+
+export async function getSetupStatus(): Promise<SetupStatusResult> {
+  const { data } = await api.get<SetupStatusResult>("/auth/setup/estado");
+  return data;
+}
+
+export async function setupInitialAdmin(input: {
+  nombre_usuario: string;
+  nombre: string;
+  email?: string | null;
+  contraseña: string;
+  confirmar_contraseña: string;
+  nombre_dispositivo?: string;
+}): Promise<SetupAdminResult> {
+  const { data } = await api.post<SetupAdminResult>("/auth/setup/admin", input);
+  setUserSession(data);
   localStorage.setItem(DEVICE_TOKEN_KEY, data.device_token);
   localStorage.setItem(DEVICE_KEY, JSON.stringify(data.dispositivo));
   return data;

@@ -5,7 +5,8 @@ import { anularVenta, getVentas } from "../services/transactionService";
 import type { EstadoVenta, MetodoPago } from "../types/api";
 import ListPanel from "../components/ListPanel";
 import ModuleCard from "../components/ModuleCard";
-import { Button, FormActions, FormField, inputClassName } from "../components/FormControls";
+import { FormField, inputClassName } from "../components/FormControls";
+import AdminPasswordModal from "../components/AdminPasswordModal";
 
 const money = (value: number) => `$${value.toLocaleString()}`;
 
@@ -17,7 +18,6 @@ export default function VentasPage() {
   const [message, setMessage] = useState("");
   const [ventaAnularId, setVentaAnularId] = useState<number | null>(null);
   const [motivoAnulacion, setMotivoAnulacion] = useState("");
-  const [masterPassword, setMasterPassword] = useState("");
   const { data, isLoading } = useQuery({
     queryKey: ["ventas", estado, metodo, fecha],
     queryFn: () => getVentas({ estado: estado || undefined, metodo_pago: metodo || undefined, fecha_desde: fecha || undefined, fecha_hasta: fecha || undefined }),
@@ -29,20 +29,15 @@ export default function VentasPage() {
       queryClient.invalidateQueries({ queryKey: ["ventas"] });
       setVentaAnularId(null);
       setMotivoAnulacion("");
-      setMasterPassword("");
       setMessage("Venta anulada.");
     },
     onError: (error) => setMessage(error instanceof Error ? error.message : "No se pudo anular"),
   });
 
-  const handleConfirmAnulacion = () => {
+  const handleConfirmAnulacion = (masterPassword: string) => {
     if (!ventaAnularId) return;
     if (motivoAnulacion.trim().length < 3) {
       setMessage("Ingresa un motivo de anulación.");
-      return;
-    }
-    if (!masterPassword) {
-      setMessage("Ingresa la clave maestra de administrador.");
       return;
     }
 
@@ -96,7 +91,6 @@ export default function VentasPage() {
               onClick={() => {
                 setVentaAnularId(venta.id);
                 setMotivoAnulacion("");
-                setMasterPassword("");
               }}
               className="rounded-md px-3 py-1.5 text-sm font-semibold text-red-600 hover:bg-red-50"
             >
@@ -106,9 +100,14 @@ export default function VentasPage() {
         }))}
       />
       {ventaAnularId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
-            <h2 className="text-xl font-bold text-gray-900">Anular venta #{ventaAnularId}</h2>
+        <AdminPasswordModal
+          title={`Anular venta #${ventaAnularId}`}
+          description="Ingresa el motivo y confirma con la contraseña de administrador."
+          isPending={anulacion.isPending}
+          onClose={() => setVentaAnularId(null)}
+          onConfirm={handleConfirmAnulacion}
+        >
+          <div className="admin-password-extra">
             <FormField label="Motivo" className="mt-4">
               <textarea
                 value={motivoAnulacion}
@@ -116,35 +115,8 @@ export default function VentasPage() {
                 className={`${inputClassName} min-h-24`}
               />
             </FormField>
-            <FormField label="Clave admin" className="mt-4">
-              <input
-                type="password"
-                value={masterPassword}
-                onChange={(event) => setMasterPassword(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") handleConfirmAnulacion();
-                  if (event.key === "Escape") setVentaAnularId(null);
-                }}
-                className={inputClassName}
-              />
-            </FormField>
-            <FormActions className="mt-1">
-              <Button
-                variant="ghost"
-                onClick={() => setVentaAnularId(null)}
-              >
-                Cancelar
-              </Button>
-              <Button
-                variant="danger"
-                onClick={handleConfirmAnulacion}
-                disabled={anulacion.isPending}
-              >
-                {anulacion.isPending ? "Anulando..." : "Anular venta"}
-              </Button>
-            </FormActions>
           </div>
-        </div>
+        </AdminPasswordModal>
       )}
     </div>
   );

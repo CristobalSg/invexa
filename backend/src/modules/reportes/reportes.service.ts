@@ -9,6 +9,7 @@ import type {
   ConsignacionRow,
   DateRangeQuery,
   InventarioItem,
+  InventarioPaginatedResult,
   InventarioRow,
   PaginatedResult,
   PaginationQuery,
@@ -70,18 +71,25 @@ export class ReportesService {
     );
   }
 
-  async inventario(query: PaginationQuery): Promise<PaginatedResult<InventarioItem>> {
+  async inventario(query: PaginationQuery): Promise<InventarioPaginatedResult> {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
     const rows = await this.repository.inventario({ ...query, page, limit });
     const total = rows[0] ? Number(rows[0].total_count) : 0;
-
-    return this.paginate(
+    const result = this.paginate(
       rows.map((row) => this.mapInventario(row)),
       page,
       limit,
       total,
     );
+
+    return {
+      ...result,
+      resumen: {
+        valor_costo_total: rows[0] ? Number(rows[0].valor_costo_total) : 0,
+        valor_venta_total: rows[0] ? Number(rows[0].valor_venta_total) : 0,
+      },
+    };
   }
 
   async bajoStock(query: BajoStockQuery): Promise<PaginatedResult<InventarioItem>> {

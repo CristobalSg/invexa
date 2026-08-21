@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { createProduct, updateProduct } from "../services/productService";
 import { getCategorias, getProveedores } from "../services/catalogService";
@@ -23,6 +23,68 @@ const initialState = {
   activo: true,
 };
 
+const classificationStorageKey = "inventory-product-classification";
+
+type StoredClassification = Pick<
+  typeof initialState,
+  "categoria_id" | "tipo_propiedad" | "unidad_venta" | "modo_inventario" | "proveedor_id"
+>;
+
+const readStoredClassification = (): Partial<StoredClassification> => {
+  try {
+    const stored = window.localStorage.getItem(classificationStorageKey);
+    if (!stored) return {};
+    const parsed = JSON.parse(stored) as Partial<StoredClassification>;
+    const classification: Partial<StoredClassification> = {};
+
+    if (Number(parsed.categoria_id) > 0) {
+      classification.categoria_id = Number(parsed.categoria_id);
+    }
+
+    if (parsed.tipo_propiedad === "PROPIO" || parsed.tipo_propiedad === "CONSIGNACION") {
+      classification.tipo_propiedad = parsed.tipo_propiedad;
+    }
+
+    if (parsed.unidad_venta === "UNIDAD" || parsed.unidad_venta === "PESO") {
+      classification.unidad_venta = parsed.unidad_venta;
+    }
+
+    if (
+      parsed.modo_inventario === "SIN_INVENTARIO" ||
+      parsed.modo_inventario === "FLEXIBLE" ||
+      parsed.modo_inventario === "ESTRICTO"
+    ) {
+      classification.modo_inventario = parsed.modo_inventario;
+    }
+
+    if (typeof parsed.proveedor_id === "string") {
+      classification.proveedor_id = parsed.proveedor_id;
+    }
+
+    return classification;
+  } catch {
+    return {};
+  }
+};
+
+const createInitialFormState = () => ({
+  ...initialState,
+  ...readStoredClassification(),
+});
+
+const storeClassification = (form: typeof initialState) => {
+  window.localStorage.setItem(
+    classificationStorageKey,
+    JSON.stringify({
+      categoria_id: form.categoria_id,
+      tipo_propiedad: form.tipo_propiedad,
+      unidad_venta: form.unidad_venta,
+      modo_inventario: form.modo_inventario,
+      proveedor_id: form.tipo_propiedad === "CONSIGNACION" ? form.proveedor_id : "",
+    } satisfies StoredClassification),
+  );
+};
+
 interface ProductFormCreateProps {
   initialData?: Producto;
   onSuccess?: () => void;
@@ -32,10 +94,19 @@ export default function ProductFormCreate({
   initialData,
   onSuccess,
 }: ProductFormCreateProps) {
-  const [form, setForm] = useState(initialState);
+  const [form, setForm] = useState(createInitialFormState);
   const [message, setMessage] = useState("");
+  const barcodeInputRef = useRef<HTMLInputElement>(null);
+  const nameInputRef = useRef<HTMLInputElement>(null);
+  const priceInputRef = useRef<HTMLInputElement>(null);
+  const stockInputRef = useRef<HTMLInputElement>(null);
   const { data: categorias } = useQuery({ queryKey: ["categorias"], queryFn: () => getCategorias() });
   const { data: proveedores } = useQuery({ queryKey: ["proveedores"], queryFn: () => getProveedores({ activo: true }) });
+
+  useEffect(() => {
+    const focusTimer = window.setTimeout(() => barcodeInputRef.current?.focus(), 80);
+    return () => window.clearTimeout(focusTimer);
+  }, []);
 
   useEffect(() => {
     if (initialData) {
@@ -120,6 +191,12 @@ export default function ProductFormCreate({
     });
   }
 
+  function focusOnEnter(event: KeyboardEvent<HTMLInputElement>, nextInput: HTMLInputElement | null) {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    nextInput?.focus();
+  }
+
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (form.tipo_propiedad === "CONSIGNACION" && !form.proveedor_id) {
@@ -158,8 +235,21 @@ export default function ProductFormCreate({
         setMessage("Producto actualizado con éxito");
       } else {
         await createProduct(input);
+        storeClassification(form);
         setMessage("Producto creado con éxito");
-        setForm(initialState);
+        setForm({
+          ...createInitialFormState(),
+          nombre: "",
+          codigo_barras: "",
+          costo_actual: "",
+          precio_venta: "",
+          stock: "",
+          ingreso_por_caja: false,
+          costo_caja: "",
+          cantidad_cajas: "1",
+          cantidad_por_caja: "",
+          activo: true,
+        });
       }
 
       if (onSuccess) onSuccess();
@@ -173,189 +263,215 @@ export default function ProductFormCreate({
   const costUnitLabel = form.unidad_venta === "PESO" ? "Costo por kg" : "Costo unitario";
 
   return (
-    <form onSubmit={handleSubmit} className="grid gap-4 md:grid-cols-2">
-      <FormField label="Nombre">
-        <input
-          name="nombre"
-          value={form.nombre}
-          onChange={handleChange}
-          className={inputClassName}
-          required
-        />
-      </FormField>
+    <form onSubmit={handleSubmit} className="product-form">
+      <section className="product-form-section">
+        <div className="product-form-section-head">
+          <h3>Datos básicos</h3>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2">
+          <FormField label="Código de barra">
+            <input
+              ref={barcodeInputRef}
+              name="codigo_barras"
+              value={form.codigo_barras}
+              onChange={handleChange}
+              onKeyDown={(event) => focusOnEnter(event, nameInputRef.current)}
+              className={inputClassName}
+            />
+          </FormField>
 
-      <FormField label="Código de barra">
-        <input
-          name="codigo_barras"
-          value={form.codigo_barras}
-          onChange={handleChange}
-          className={inputClassName}
-        />
-      </FormField>
+          <FormField label="Nombre">
+            <input
+              ref={nameInputRef}
+              name="nombre"
+              value={form.nombre}
+              onChange={handleChange}
+              onKeyDown={(event) => focusOnEnter(event, priceInputRef.current)}
+              className={inputClassName}
+              required
+            />
+          </FormField>
+        </div>
+      </section>
 
-      <FormField label="Categoría">
-        <select
-          name="categoria_id"
-          value={form.categoria_id}
-          onChange={handleChange}
-          className={inputClassName}
-          required
-        >
-          {categorias?.items.map((cat) => <option key={cat.id} value={cat.id}>{cat.nombre}</option>)}
-        </select>
-      </FormField>
+      <section className="product-form-section">
+        <div className="product-form-section-head">
+          <h3>Clasificación</h3>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2">
+          <FormField label="Categoría">
+            <select
+              name="categoria_id"
+              value={form.categoria_id}
+              onChange={handleChange}
+              className={inputClassName}
+              required
+            >
+              {categorias?.items.map((cat) => <option key={cat.id} value={cat.id}>{cat.nombre}</option>)}
+            </select>
+          </FormField>
 
-      <FormField label="Tipo de propiedad" help="Si eliges proveedor, el producto se marca como consignación.">
-        <select name="tipo_propiedad" value={form.tipo_propiedad} onChange={handleChange} className={inputClassName}>
-          <option value="PROPIO">Propio</option>
-          <option value="CONSIGNACION">Consignación</option>
-        </select>
-      </FormField>
+          <FormField label="Tipo de propiedad">
+            <select name="tipo_propiedad" value={form.tipo_propiedad} onChange={handleChange} className={inputClassName}>
+              <option value="PROPIO">Propio</option>
+              <option value="CONSIGNACION">Consignación</option>
+            </select>
+          </FormField>
 
-      <FormField label="Unidad de venta">
-        <select name="unidad_venta" value={form.unidad_venta} onChange={handleChange} className={inputClassName}>
-          <option value="UNIDAD">Unidad</option>
-          <option value="PESO">Peso</option>
-        </select>
-      </FormField>
+          <FormField label="Unidad de venta">
+            <select name="unidad_venta" value={form.unidad_venta} onChange={handleChange} className={inputClassName}>
+              <option value="UNIDAD">Unidad</option>
+              <option value="PESO">Peso</option>
+            </select>
+          </FormField>
 
-      <FormField label="Modo de inventario">
-        <select name="modo_inventario" value={form.modo_inventario} onChange={handleChange} className={inputClassName}>
-          <option value="SIN_INVENTARIO">Sin inventario</option>
-          <option value="FLEXIBLE">Inventario flexible</option>
-          <option value="ESTRICTO">Inventario estricto</option>
-        </select>
-      </FormField>
+          <FormField label="Modo de inventario">
+            <select name="modo_inventario" value={form.modo_inventario} onChange={handleChange} className={inputClassName}>
+              <option value="SIN_INVENTARIO">Sin inventario</option>
+              <option value="FLEXIBLE">Inventario flexible</option>
+              <option value="ESTRICTO">Inventario estricto</option>
+            </select>
+          </FormField>
 
-      <FormField
-        label="Proveedor"
-        help={form.tipo_propiedad === "PROPIO" ? "Los productos propios no usan proveedor." : undefined}
-      >
-        <select
-          name="proveedor_id"
-          value={form.proveedor_id}
-          onChange={handleChange}
-          className={inputClassName}
-          required={form.tipo_propiedad === "CONSIGNACION"}
-          disabled={form.tipo_propiedad === "PROPIO"}
-        >
-          <option value="">Sin proveedor</option>
-          {proveedores?.items.map((prov) => <option key={prov.id} value={prov.id}>{prov.nombre}</option>)}
-        </select>
-      </FormField>
+          <FormField
+            label="Proveedor"
+            className="md:col-span-2"
+            help={form.tipo_propiedad === "PROPIO" ? "Los productos propios no usan proveedor." : undefined}
+          >
+            <select
+              name="proveedor_id"
+              value={form.proveedor_id}
+              onChange={handleChange}
+              className={inputClassName}
+              required={form.tipo_propiedad === "CONSIGNACION"}
+              disabled={form.tipo_propiedad === "PROPIO"}
+            >
+              <option value="">Sin proveedor</option>
+              {proveedores?.items.map((prov) => <option key={prov.id} value={prov.id}>{prov.nombre}</option>)}
+            </select>
+          </FormField>
+        </div>
+      </section>
 
       {!initialData && (
-        <>
-          <div className="md:col-span-2 rounded-lg border border-gray-200 bg-gray-50 p-3">
-            <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
-              <input
-                name="ingreso_por_caja"
-                type="checkbox"
-                checked={form.ingreso_por_caja}
-                onChange={handleChange}
-                className="h-4 w-4 rounded border-gray-300 text-blue-600"
-              />
-              <span>Ingresar por caja</span>
-            </div>
+        <section className="product-form-section product-form-package">
+          <label className="product-form-toggle">
+            <input
+              name="ingreso_por_caja"
+              type="checkbox"
+              checked={form.ingreso_por_caja}
+              onChange={handleChange}
+            />
+            <span>Ingresar por caja</span>
+          </label>
 
-            {form.ingreso_por_caja && (
-              <div className="mt-3 grid gap-3 md:grid-cols-3">
-                <FormField label="Costo de la caja">
-                  <input
-                    name="costo_caja"
-                    type="number"
-                    min={0}
-                    value={form.costo_caja}
-                    onChange={handleChange}
-                    className={inputClassName}
-                  />
-                </FormField>
+          {form.ingreso_por_caja && (
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              <FormField label="Costo de la caja">
+                <input
+                  name="costo_caja"
+                  type="number"
+                  min={0}
+                  value={form.costo_caja}
+                  onChange={handleChange}
+                  className={inputClassName}
+                />
+              </FormField>
 
-                <FormField label={`${stockUnitLabel} por caja`}>
-                  <input
-                    name="cantidad_por_caja"
-                    type="number"
-                    min={0}
-                    step={form.unidad_venta === "PESO" ? 1 : 0.001}
-                    value={form.cantidad_por_caja}
-                    onChange={handleChange}
-                    className={inputClassName}
-                  />
-                </FormField>
+              <FormField label={`${stockUnitLabel} por caja`}>
+                <input
+                  name="cantidad_por_caja"
+                  type="number"
+                  min={0}
+                  step={form.unidad_venta === "PESO" ? 1 : 0.001}
+                  value={form.cantidad_por_caja}
+                  onChange={handleChange}
+                  className={inputClassName}
+                />
+              </FormField>
 
-                <FormField label="Cantidad de cajas">
-                  <input
-                    name="cantidad_cajas"
-                    type="number"
-                    min={1}
-                    step={1}
-                    value={form.cantidad_cajas}
-                    onChange={handleChange}
-                    className={inputClassName}
-                  />
-                </FormField>
+              <FormField label="Cantidad de cajas">
+                <input
+                  name="cantidad_cajas"
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={form.cantidad_cajas}
+                  onChange={handleChange}
+                  className={inputClassName}
+                />
+              </FormField>
 
-                <div className="md:col-span-3 grid gap-2 text-sm text-gray-700 md:grid-cols-3">
-                  <p>Stock calculado: {packageTotalUnits || 0} {stockUnitLabel}</p>
-                  <p>{costUnitLabel}: {packageUnitCost > 0 ? `$${packageUnitCost.toFixed(2)}` : "$0"}</p>
-                  <p>Precio sugerido: {suggestedPrice > 0 ? `$${suggestedPrice}` : "$0"}</p>
-                </div>
+              <div className="product-form-calcs md:col-span-3">
+                <span>Stock calculado: {packageTotalUnits || 0} {stockUnitLabel}</span>
+                <span>{costUnitLabel}: {packageUnitCost > 0 ? `$${packageUnitCost.toFixed(2)}` : "$0"}</span>
+                <span>Precio sugerido: {suggestedPrice > 0 ? `$${suggestedPrice}` : "$0"}</span>
               </div>
-            )}
-          </div>
-        </>
+            </div>
+          )}
+        </section>
       )}
 
-      <FormField label={costUnitLabel}>
-        <input
-          name="costo_actual"
-          type="number"
-          min={0}
-          value={form.costo_actual}
-          onChange={handleChange}
-          className={inputClassName}
-        />
-      </FormField>
+      <section className="product-form-section">
+        <div className="product-form-section-head">
+          <h3>Inventario y precio</h3>
+        </div>
+        <div className="grid gap-3 md:grid-cols-3">
+          <FormField label={costUnitLabel}>
+            <input
+              name="costo_actual"
+              type="number"
+              min={0}
+              value={form.costo_actual}
+              onChange={handleChange}
+              className={inputClassName}
+            />
+          </FormField>
 
-      <FormField label="Precio venta">
-        <input
-          name="precio_venta"
-          type="number"
-          min={1}
-          value={form.precio_venta}
-          onChange={handleChange}
-          className={inputClassName}
-          placeholder="Precio de venta"
-          required
-        />
-      </FormField>
+          <FormField label="Precio venta">
+            <input
+              ref={priceInputRef}
+              name="precio_venta"
+              type="number"
+              min={1}
+              value={form.precio_venta}
+              onChange={handleChange}
+              onKeyDown={(event) => focusOnEnter(event, stockInputRef.current)}
+              className={inputClassName}
+              placeholder="Precio de venta"
+              required
+            />
+          </FormField>
 
-      {!initialData && (
-        <FormField
-          label={`Stock inicial (${stockUnitLabel})`}
-          help={form.unidad_venta === "PESO" ? "Ingresa gramos. Ejemplo: 1000 equivale a 1 kg." : undefined}
-        >
-          <input
-            name="stock"
-            type="number"
-            min={0}
-            step={form.unidad_venta === "PESO" ? 1 : 0.001}
-            value={form.stock}
-            onChange={handleChange}
-            className={inputClassName}
-            placeholder={form.unidad_venta === "PESO" ? "Ej: 1000" : "Stock inicial"}
-            disabled={form.ingreso_por_caja}
-          />
-        </FormField>
-      )}
+          {!initialData && (
+            <FormField
+              label={`Stock inicial (${stockUnitLabel})`}
+              help={form.unidad_venta === "PESO" ? "Ingresa gramos. Ejemplo: 1000 equivale a 1 kg." : undefined}
+            >
+              <input
+                ref={stockInputRef}
+                name="stock"
+                type="number"
+                min={0}
+                step={form.unidad_venta === "PESO" ? 1 : 0.001}
+                value={form.stock}
+                onChange={handleChange}
+                className={inputClassName}
+                placeholder={form.unidad_venta === "PESO" ? "Ej: 1000" : "Stock inicial"}
+                disabled={form.ingreso_por_caja}
+              />
+            </FormField>
+          )}
+        </div>
+      </section>
 
-      <FormActions className="md:col-span-2">
+      {message && <p className="product-form-message">{message}</p>}
+
+      <FormActions className="product-form-actions">
         <Button type="submit">
-          {initialData ? "Guardar" : "Crear"}
+          {initialData ? "Guardar cambios" : "Crear producto"}
         </Button>
       </FormActions>
-
-      {message && <p className="md:col-span-2 text-center text-sm text-gray-700 mt-2">{message}</p>}
     </form>
   );
 }

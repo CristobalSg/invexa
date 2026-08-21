@@ -1,8 +1,20 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { ArchiveBoxIcon, CubeIcon, ExclamationTriangleIcon, PrinterIcon, TruckIcon, WalletIcon } from "@heroicons/react/24/outline";
-import { Bar, BarChart, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import {
+  ArchiveBoxIcon,
+  BanknotesIcon,
+  CalendarDaysIcon,
+  ChartBarIcon,
+  CubeIcon,
+  ExclamationTriangleIcon,
+  PrinterIcon,
+  ShoppingBagIcon,
+  TruckIcon,
+  WalletIcon,
+} from "@heroicons/react/24/outline";
+import type { ComponentType, SVGProps } from "react";
+import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import {
   getBajoStock,
   getCierreCajaDiario,
@@ -18,6 +30,7 @@ import { Button, inputClassName } from "../components/FormControls";
 import type { CierreCajaDiario } from "../types/api";
 
 const money = (value: number) => `$${value.toLocaleString()}`;
+const number = (value: number) => value.toLocaleString("es-CL", { maximumFractionDigits: 2 });
 
 export default function StatsPage() {
   const [selectedDate, setSelectedDate] = useState(() => format(new Date(), "yyyy-MM-dd"));
@@ -29,25 +42,73 @@ export default function StatsPage() {
   const inventario = useQuery({ queryKey: ["reportes", "inventario"], queryFn: () => getReporteInventario() });
   const bajoStock = useQuery({ queryKey: ["reportes", "bajo-stock"], queryFn: () => getBajoStock() });
   const consignacion = useQuery({ queryKey: ["reportes", "consignacion"], queryFn: () => getConsignacion() });
+  const topItems = top.data?.items ?? [];
+  const consignacionItems = consignacion.data?.items ?? [];
+  const topProduct = topItems[0];
+  const inventoryValue = inventario.data?.resumen.valor_venta_total ?? 0;
+  const inventoryCost = inventario.data?.resumen.valor_costo_total ?? 0;
+  const consignationCommission = consignacionItems.reduce((total, item) => total + item.comision_estimada, 0);
+  const paymentTotal =
+    (resumen.data?.efectivo ?? 0) +
+    (resumen.data?.tarjeta ?? 0) +
+    (resumen.data?.transferencia ?? 0) +
+    (resumen.data?.mixto ?? 0);
 
   return (
     <div className="admin-page space-y-6">
-      <div className="flex items-center gap-4">
-        <h1 className="admin-page-title">Reportes</h1>
-        <input
-          type="date"
-          value={selectedDate}
-          onChange={(e) => setSelectedDate(e.target.value)}
-          className={`${inputClassName} max-w-44`}
-        />
+      <div className="reports-hero">
+        <div>
+          <p className="reports-kicker">Panel administrativo</p>
+          <h1 className="admin-page-title">Reportes</h1>
+        </div>
+        <label className="reports-date-control">
+          <CalendarDaysIcon className="h-5 w-5" />
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            className={inputClassName}
+          />
+        </label>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Metric title="Ventas del día" value={String(resumen.data?.cantidad_ventas ?? 0)} />
-        <Metric title="Total vendido" value={money(resumen.data?.total ?? 0)} />
-        <Metric title="Ticket promedio" value={money(resumen.data?.ticket_promedio ?? 0)} />
-        <Metric title="Bajo stock" value={String(bajoStock.data?.pagination.total ?? 0)} />
+      <div className="reports-metric-grid">
+        <Metric icon={ShoppingBagIcon} title="Ventas del día" value={String(resumen.data?.cantidad_ventas ?? 0)} />
+        <Metric icon={BanknotesIcon} title="Total vendido" value={money(resumen.data?.total ?? 0)} />
+        <Metric icon={WalletIcon} title="Ticket promedio" value={money(resumen.data?.ticket_promedio ?? 0)} />
+        <Metric icon={ExclamationTriangleIcon} title="Bajo stock" value={String(bajoStock.data?.pagination.total ?? 0)} tone="warning" />
+        <Metric icon={CubeIcon} title="Inventario venta" value={money(inventoryValue)} />
+        <Metric icon={ArchiveBoxIcon} title="Costo inventario" value={money(inventoryCost)} />
+        <Metric icon={TruckIcon} title="Comisión estimada" value={money(consignationCommission)} />
+        <Metric icon={ChartBarIcon} title="Producto líder" value={topProduct ? topProduct.producto_nombre : "-"} compact />
       </div>
+
+      <section className="reports-split">
+        <ModuleCard title="Medios de pago" icon={WalletIcon} contentClassName="p-5">
+          <div className="payment-stat-list">
+            <PaymentStat label="Efectivo" value={resumen.data?.efectivo ?? 0} total={paymentTotal} />
+            <PaymentStat label="Tarjeta" value={resumen.data?.tarjeta ?? 0} total={paymentTotal} />
+            <PaymentStat label="Transferencia" value={resumen.data?.transferencia ?? 0} total={paymentTotal} />
+            <PaymentStat label="Mixto" value={resumen.data?.mixto ?? 0} total={paymentTotal} />
+          </div>
+        </ModuleCard>
+
+        <ModuleCard title="Top productos" icon={ChartBarIcon} contentClassName="p-5">
+          <div className="top-product-list">
+            {topItems.slice(0, 5).map((product, index) => (
+              <div key={product.producto_id} className="top-product-row">
+                <span className="top-product-rank">{index + 1}</span>
+                <div className="min-w-0">
+                  <h3>{product.producto_nombre}</h3>
+                  <p>{number(product.cantidad_vendida)} vendidos</p>
+                </div>
+                <strong>{money(product.total_vendido)}</strong>
+              </div>
+            ))}
+            {topItems.length === 0 && <p className="reports-empty">Sin ventas de productos todavía.</p>}
+          </div>
+        </ModuleCard>
+      </section>
 
       <ModuleCard
         title={selectedDate === format(new Date(), "yyyy-MM-dd") ? "Cierre de hoy" : "Cierre diario"}
@@ -75,9 +136,9 @@ export default function StatsPage() {
               <SummaryBox label="Diferencia" value={money(cierreDiario.data.diferencia_total)} tone={cierreDiario.data.diferencia_total === 0 ? "neutral" : "warning"} />
             </div>
 
-            <div className="overflow-x-auto rounded-lg border border-gray-200">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50 text-left text-gray-500">
+            <div className="reports-table-wrap">
+              <table className="reports-table">
+                <thead>
                   <tr>
                     <th className="p-3">Caja</th>
                     <th>Usuario</th>
@@ -91,8 +152,8 @@ export default function StatsPage() {
                 </thead>
                 <tbody>
                   {cierreDiario.data.sesiones.map((session) => (
-                    <tr key={session.sesion_caja_id} className="border-t">
-                      <td className="p-3 font-semibold">#{session.sesion_caja_id}</td>
+                    <tr key={session.sesion_caja_id}>
+                      <td className="font-semibold">#{session.sesion_caja_id}</td>
                       <td>
                         <p className="font-medium text-gray-900">{session.usuario_nombre}</p>
                         <p className="text-xs text-gray-500">{session.dispositivo_nombre ?? "Sin dispositivo"}</p>
@@ -122,30 +183,32 @@ export default function StatsPage() {
       </ModuleCard>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <ModuleCard title="Ventas mensuales">
+        <ModuleCard title="Ventas mensuales" icon={ChartBarIcon}>
           <ResponsiveContainer width="100%" height={300}>
             <LineChart data={mensual.data ?? []}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#efeff2" />
               <XAxis dataKey="mes" />
               <YAxis />
               <Tooltip />
-              <Line type="monotone" dataKey="total" stroke="#2563eb" strokeWidth={2} />
+              <Line type="monotone" dataKey="total" stroke="#7652ed" strokeWidth={3} dot={{ r: 4 }} />
             </LineChart>
           </ResponsiveContainer>
         </ModuleCard>
-        <ModuleCard title="Productos más vendidos">
+        <ModuleCard title="Productos más vendidos" icon={ShoppingBagIcon}>
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={top.data?.items ?? []}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#efeff2" />
               <XAxis dataKey="producto_nombre" />
               <YAxis />
               <Tooltip />
-              <Bar dataKey="cantidad_vendida" fill="#16a34a" />
+              <Bar dataKey="cantidad_vendida" fill="#28b486" radius={[8, 8, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </ModuleCard>
       </div>
 
       <ListPanel
-        title="Inventario valorizado"
+        title={`Inventario valorizado · Total ${money(inventoryValue)}`}
         icon={ArchiveBoxIcon}
         emptyMessage="Sin productos en inventario."
         items={(inventario.data?.items ?? []).map((item) => ({
@@ -153,7 +216,7 @@ export default function StatsPage() {
           icon: CubeIcon,
           title: item.producto_nombre,
           description: item.categoria_nombre,
-          meta: [`Stock ${item.stock}`, item.activo ? "Activo" : "Inactivo"],
+          meta: [`Stock ${item.stock}`, `Costo ${money(item.valor_costo)}`, item.activo ? "Activo" : "Inactivo"],
           amount: money(item.valor_venta),
         }))}
       />
@@ -191,15 +254,54 @@ export default function StatsPage() {
   );
 }
 
-function Metric({ title, value }: { title: string; value: string }) {
-  return <ModuleCard contentClassName="p-5"><p className="text-sm text-gray-500">{title}</p><p className="text-2xl font-bold mt-1">{value}</p></ModuleCard>;
+type IconComponent = ComponentType<SVGProps<SVGSVGElement>>;
+
+function Metric({
+  icon: Icon,
+  title,
+  value,
+  tone = "neutral",
+  compact = false,
+}: {
+  icon: IconComponent;
+  title: string;
+  value: string;
+  tone?: "neutral" | "warning";
+  compact?: boolean;
+}) {
+  return (
+    <div className={`report-metric-card ${tone === "warning" ? "warning" : ""}`}>
+      <span className="report-metric-icon">
+        <Icon className="h-5 w-5" />
+      </span>
+      <p>{title}</p>
+      <strong className={compact ? "compact" : ""}>{value}</strong>
+    </div>
+  );
+}
+
+function PaymentStat({ label, value, total }: { label: string; value: number; total: number }) {
+  const percent = total > 0 ? Math.round((value / total) * 100) : 0;
+
+  return (
+    <div className="payment-stat-row">
+      <div className="flex items-center justify-between gap-3">
+        <span>{label}</span>
+        <strong>{money(value)}</strong>
+      </div>
+      <div className="payment-stat-track">
+        <i style={{ width: `${percent}%` }} />
+      </div>
+      <small>{percent}% del total</small>
+    </div>
+  );
 }
 
 function SummaryBox({ label, value, tone = "neutral" }: { label: string; value: string; tone?: "neutral" | "warning" }) {
   return (
-    <div className={tone === "warning" ? "rounded-lg border border-amber-200 bg-amber-50 p-4" : "rounded-lg border border-gray-200 bg-gray-50 p-4"}>
-      <p className={tone === "warning" ? "text-xs font-semibold uppercase text-amber-700" : "text-xs font-semibold uppercase text-gray-500"}>{label}</p>
-      <p className="mt-1 text-xl font-bold text-gray-900">{value}</p>
+    <div className={`reports-summary-box ${tone === "warning" ? "warning" : ""}`}>
+      <p>{label}</p>
+      <strong>{value}</strong>
     </div>
   );
 }

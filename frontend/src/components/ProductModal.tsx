@@ -1,5 +1,6 @@
 import React from "react";
 import { Dialog, DialogPanel, DialogTitle } from "@headlessui/react";
+import { XMarkIcon } from "@heroicons/react/24/outline";
 
 type ProductModalProps = {
   isOpen: boolean;
@@ -16,12 +17,23 @@ export const ProductModal: React.FC<ProductModalProps> = ({
 }) => {
   return (
     <Dialog open={isOpen} onClose={onClose} className="relative z-50">
-      <div className="fixed inset-0 bg-black/30" aria-hidden="true" />
+      <div className="fixed inset-0 bg-black/40" aria-hidden="true" />
       <div className="fixed inset-0 flex items-center justify-center p-4">
-        <DialogPanel className="w-full max-w-5xl rounded-xl bg-white p-6 shadow-xl max-h-[90vh] overflow-auto dark:border dark:border-white/10 dark:bg-neutral-900">
-          <DialogTitle className="text-xl font-bold text-gray-900 mb-4 dark:text-neutral-100">
-            {title}
-          </DialogTitle>
+        <DialogPanel className="product-modal-panel">
+          <div className="product-modal-head">
+            <DialogTitle className="product-modal-title">
+              {title}
+            </DialogTitle>
+            <button
+              type="button"
+              onClick={onClose}
+              className="product-modal-close"
+              aria-label="Cerrar"
+              title="Cerrar"
+            >
+              <XMarkIcon className="h-5 w-5" />
+            </button>
+          </div>
           {children}
         </DialogPanel>
       </div>

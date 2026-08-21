@@ -54,6 +54,12 @@ export interface DeviceAuthResult {
   };
 }
 
+export interface SetupStatusResult {
+  requiere_setup: boolean;
+}
+
+export interface SetupAdminResult extends LoginResult, DeviceAuthResult {}
+
 export interface DeviceProfile extends AuthUser {
   activo: boolean;
 }
@@ -117,6 +123,13 @@ export interface CajaResumen {
   tarjeta: number;
   transferencia: number;
   mixto: number;
+  ventas_propias: number;
+  ventas_consignacion: number;
+  consignacion_proveedores: Array<{
+    proveedor_id: number | null;
+    proveedor_nombre: string;
+    total: number;
+  }>;
   ingresos: number;
   egresos: number;
   monto_esperado_cierre: number;
@@ -321,6 +334,13 @@ export interface InventarioItem {
   valor_costo: number;
   valor_venta: number;
   activo: boolean;
+}
+
+export interface InventarioReporte extends PaginatedResult<InventarioItem> {
+  resumen: {
+    valor_costo_total: number;
+    valor_venta_total: number;
+  };
 }
 
 export interface ConsignacionItem {

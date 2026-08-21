@@ -7,6 +7,7 @@ import {
   getCategorias,
   getProveedores,
 } from "../services/catalogService";
+import type { Categoria, Proveedor } from "../types/api";
 import ModuleCard from "../components/ModuleCard";
 import { Button, FormField, inputClassName } from "../components/FormControls";
 
@@ -71,17 +72,77 @@ export default function CatalogosPage() {
       </section>
 
       <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <List title="Categorías" rows={categorias.data?.items.map((c) => [`#${c.id}`, c.nombre, `x${c.multiplicador_ganancia}`]) ?? []} />
-        <List title="Proveedores" rows={proveedores.data?.items.map((p) => [`#${p.id}`, p.nombre, `${p.porcentaje_comision}%`, p.activo ? "Activo" : "Inactivo"]) ?? []} />
+        <CategoryList items={categorias.data?.items ?? []} />
+        <ProviderList items={proveedores.data?.items ?? []} />
       </section>
     </div>
   );
 }
 
-function List({ title, rows }: { title: string; rows: string[][] }) {
+function CategoryList({ items }: { items: Categoria[] }) {
   return (
-    <ModuleCard title={title} contentClassName="p-4">
-      <div className="space-y-2 text-sm">{rows.map((row) => <div key={row.join("-")} className="border rounded p-2">{row.join(" · ")}</div>)}</div>
+    <ModuleCard title="Categorías" icon={BookOpenIcon} contentClassName="p-4">
+      {items.length === 0 ? (
+        <p className="catalog-list-empty">Sin categorías registradas.</p>
+      ) : (
+        <div className="catalog-card-list">
+          {items.map((category) => (
+            <article key={category.id} className="catalog-item-card">
+              <div className="catalog-item-main">
+                <span className="catalog-item-avatar">{category.nombre.trim().charAt(0).toUpperCase() || "C"}</span>
+                <div className="min-w-0">
+                  <h3>{category.nombre}</h3>
+                  <p>Categoria #{category.id}</p>
+                </div>
+              </div>
+              <div className="catalog-item-stats">
+                <span>
+                  <small>Ganancia</small>
+                  x{Number(category.multiplicador_ganancia).toFixed(2)}
+                </span>
+                <span>
+                  <small>Variación</small>
+                  {(Number(category.variacion_maxima_precio) * 100).toFixed(0)}%
+                </span>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+    </ModuleCard>
+  );
+}
+
+function ProviderList({ items }: { items: Proveedor[] }) {
+  return (
+    <ModuleCard title="Proveedores" icon={TruckIcon} contentClassName="p-4">
+      {items.length === 0 ? (
+        <p className="catalog-list-empty">Sin proveedores registrados.</p>
+      ) : (
+        <div className="catalog-card-list">
+          {items.map((provider) => (
+            <article key={provider.id} className="catalog-item-card">
+              <div className="catalog-item-main">
+                <span className="catalog-item-avatar provider">{provider.nombre.trim().charAt(0).toUpperCase() || "P"}</span>
+                <div className="min-w-0">
+                  <h3>{provider.nombre}</h3>
+                  <p>{provider.telefono ?? "Sin teléfono"} · Proveedor #{provider.id}</p>
+                </div>
+              </div>
+              <div className="catalog-item-stats">
+                <span>
+                  <small>Comisión</small>
+                  {Number(provider.porcentaje_comision).toFixed(2)}%
+                </span>
+                <span className={provider.activo ? "is-active" : "is-inactive"}>
+                  <small>Estado</small>
+                  {provider.activo ? "Activo" : "Inactivo"}
+                </span>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
     </ModuleCard>
   );
 }

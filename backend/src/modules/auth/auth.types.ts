@@ -15,6 +15,21 @@ export interface LoginBody {
   readonly contraseña: string;
 }
 
+export interface SetupAdminBody {
+  readonly nombre_usuario: string;
+  readonly nombre: string;
+  readonly email?: string | null;
+  readonly contraseña: string;
+  readonly confirmar_contraseña: string;
+  readonly nombre_dispositivo?: string;
+}
+
+export interface SetupStatusResult {
+  readonly requiere_setup: boolean;
+}
+
+export interface SetupAdminResult extends LoginResult, DeviceAuthResult {}
+
 export interface AuthorizeDeviceBody {
   readonly nombre_usuario: string;
   readonly contraseña: string;

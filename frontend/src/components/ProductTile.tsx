@@ -108,7 +108,7 @@ export default function ProductTile({
                 <EllipsisHorizontalIcon className="h-5 w-5" />
                 <span>Opciones</span>
               </MenuButton>
-              <MenuItems className="absolute right-0 z-20 mt-2 w-40 origin-top-right rounded-2xl border border-[#ececf0] bg-white p-1 shadow-[0_18px_50px_rgba(31,35,48,.16)] focus:outline-none">
+              <MenuItems className="absolute right-0 z-50 mt-2 w-40 origin-top-right rounded-2xl border border-[#ececf0] bg-white p-1 shadow-[0_18px_50px_rgba(31,35,48,.16)] focus:outline-none">
                 {onEdit && (
                   <MenuItem>
                     {({ focus }) => (

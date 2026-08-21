@@ -3,6 +3,7 @@ import type {
   CierreCajaDiario,
   ConsignacionItem,
   InventarioItem,
+  InventarioReporte,
   PaginatedResult,
   ProductoTop,
   VentasMensual,
@@ -33,7 +34,7 @@ export async function getProductosTop(params: PageRange = {}) {
 }
 
 export async function getReporteInventario(params: PageRange = {}) {
-  const { data } = await api.get<PaginatedResult<InventarioItem>>("/reportes/inventario", { params: { page: 1, limit: 50, ...params } });
+  const { data } = await api.get<InventarioReporte>("/reportes/inventario", { params: { page: 1, limit: 50, ...params } });
   return data;
 }
 

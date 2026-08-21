@@ -67,6 +67,98 @@ const turnoAbiertoResponseSchema = {
   },
 } as const;
 
+const deviceAuthResponseSchema = {
+  type: 'object',
+  required: ['device_token', 'dispositivo'],
+  properties: {
+    device_token: { type: 'string' },
+    dispositivo: {
+      type: 'object',
+      required: ['id', 'nombre'],
+      properties: {
+        id: { type: 'string' },
+        nombre: { type: 'string' },
+      },
+    },
+  },
+} as const;
+
+export const setupStatusSchema = {
+  response: {
+    200: {
+      type: 'object',
+      required: ['success', 'data'],
+      properties: {
+        success: { type: 'boolean' },
+        data: {
+          type: 'object',
+          required: ['requiere_setup'],
+          properties: {
+            requiere_setup: { type: 'boolean' },
+          },
+        },
+      },
+    },
+  },
+} as const;
+
+export const setupAdminSchema = {
+  body: {
+    type: 'object',
+    required: ['nombre_usuario', 'nombre', 'contraseña', 'confirmar_contraseña'],
+    additionalProperties: false,
+    properties: {
+      nombre_usuario: {
+        type: 'string',
+        minLength: 3,
+        maxLength: 100,
+      },
+      nombre: {
+        type: 'string',
+        minLength: 1,
+        maxLength: 150,
+      },
+      email: {
+        type: ['string', 'null'],
+        maxLength: 150,
+      },
+      contraseña: {
+        type: 'string',
+        minLength: 4,
+        maxLength: 200,
+      },
+      confirmar_contraseña: {
+        type: 'string',
+        minLength: 4,
+        maxLength: 200,
+      },
+      nombre_dispositivo: {
+        type: 'string',
+        minLength: 1,
+        maxLength: 150,
+      },
+    },
+  },
+  response: {
+    201: {
+      type: 'object',
+      required: ['success', 'data'],
+      properties: {
+        success: { type: 'boolean' },
+        data: {
+          type: 'object',
+          required: ['token', 'usuario', 'device_token', 'dispositivo'],
+          properties: {
+            token: { type: 'string' },
+            usuario: authUserResponseSchema,
+            ...deviceAuthResponseSchema.properties,
+          },
+        },
+      },
+    },
+  },
+} as const;
+
 export const authorizeDeviceSchema = {
   body: {
     type: 'object',
@@ -96,21 +188,7 @@ export const authorizeDeviceSchema = {
       required: ['success', 'data'],
       properties: {
         success: { type: 'boolean' },
-        data: {
-          type: 'object',
-          required: ['device_token', 'dispositivo'],
-          properties: {
-            device_token: { type: 'string' },
-            dispositivo: {
-              type: 'object',
-              required: ['id', 'nombre'],
-              properties: {
-                id: { type: 'string' },
-                nombre: { type: 'string' },
-              },
-            },
-          },
-        },
+        data: deviceAuthResponseSchema,
       },
     },
   },

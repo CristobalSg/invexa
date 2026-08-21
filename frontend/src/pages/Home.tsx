@@ -8,6 +8,7 @@ import MainList from "../components/MainList";
 import SideList from "../components/SideList";
 import StatsPanel from "../components/StatsPanel";
 import { Button, FormActions, FormField, inputClassName } from "../components/FormControls";
+import AdminPasswordModal from "../components/AdminPasswordModal";
 import type { MetodoPago, ModalidadVenta, Oferta, Producto } from "../types/api";
 import { createVenta } from "../services/transactionService";
 import { getCajaActual } from "../services/cajaService";
@@ -124,6 +125,15 @@ const getCategoryVisual = (name: string) => {
   return name.trim().charAt(0).toUpperCase() || "•";
 };
 
+const getCategorySortPriority = (name: string) => {
+  const normalized = normalizeText(name);
+
+  if (normalized.includes("fruta") && normalized.includes("verdura")) return 0;
+  if (normalized.includes("abarrote")) return 1;
+
+  return 2;
+};
+
 const categoryImageModules = import.meta.glob("../assets/images/categories/*.{png,jpg,jpeg,webp,avif}", {
   eager: true,
   query: "?url",
@@ -236,7 +246,7 @@ export default function Home() {
   const [quickProductsModal, setQuickProductsModal] = useState<QuickProductsModal | null>(null);
   const [featuredProductIds, setFeaturedProductIds] = useState<number[]>(readFeaturedProductIds);
   const [modalidadVenta, setModalidadVenta] = useState<ModalidadVenta>("NORMAL");
-  const [masterPassword, setMasterPassword] = useState("");
+  const [salePasswordOpen, setSalePasswordOpen] = useState(false);
   const [metodoPago, setMetodoPago] = useState<MetodoPago>("EFECTIVO");
   const [cashReceived, setCashReceived] = useState("");
   const [mixedMethods, setMixedMethods] = useState<MixedPaymentMethod[]>(["EFECTIVO", "TARJETA"]);
@@ -266,7 +276,11 @@ export default function Home() {
   const activeOffers = ofertasActivas?.items ?? [];
   const activeOffersByProductId = new Map(activeOffers.map((offer) => [offer.producto_id, offer]));
   const allCategoryButtons = (categorias?.items ?? [])
-    .map((category) => ({ id: category.id, name: category.nombre }));
+    .map((category, index) => ({ id: category.id, name: category.nombre, index }))
+    .sort((first, second) => {
+      const priorityDiff = getCategorySortPriority(first.name) - getCategorySortPriority(second.name);
+      return priorityDiff === 0 ? first.index - second.index : priorityDiff;
+    });
   const categoryButtons = allCategoryButtons.slice(0, 4);
   const extraCategoryButtons = allCategoryButtons.slice(4);
   const quickCategoryId = quickProductsModal?.startsWith("categoria-")
@@ -380,9 +394,7 @@ export default function Home() {
   const mixedTotal = mixedMethods.reduce((sum, method) => sum + toAmount(mixedAmounts[method]), 0);
   const cashSuggestions = createCashSuggestions(totalFinal);
   const canConfirmSale =
-    modalidadVenta !== "NORMAL" && !masterPassword
-      ? false
-      : modalidadVenta === "RETIRO_DUENO"
+    modalidadVenta === "RETIRO_DUENO"
         ? true
         : metodoPago === "EFECTIVO"
           ? cashReceivedAmount >= totalFinal
@@ -398,7 +410,7 @@ export default function Home() {
     }
     setMetodoPago("EFECTIVO");
     setModalidadVenta("NORMAL");
-    setMasterPassword("");
+    setSalePasswordOpen(false);
     setCashReceived(toInputAmount(totalFinal));
     setMixedMethods(["EFECTIVO", "TARJETA"]);
     setMixedAmounts(createMixedAmounts(["EFECTIVO", "TARJETA"], totalFinal));
@@ -440,7 +452,7 @@ export default function Home() {
     });
   };
 
-  const handleFinishSale = async () => {
+  const handleFinishSale = async (adminPassword?: string) => {
     if (metodoPago === "EFECTIVO" && cashReceivedAmount < totalFinal) {
       setMessage("El monto recibido no alcanza para pagar la venta.");
       return;
@@ -449,12 +461,16 @@ export default function Home() {
       setMessage("La combinación de pagos no alcanza para pagar la venta.");
       return;
     }
+    if (modalidadVenta !== "NORMAL" && !adminPassword) {
+      setSalePasswordOpen(true);
+      return;
+    }
 
     try {
       await createVenta({
         metodo_pago: metodoPago,
         modalidad: modalidadVenta,
-        master_password: modalidadVenta === "NORMAL" ? undefined : masterPassword,
+        master_password: modalidadVenta === "NORMAL" ? undefined : adminPassword,
         items: aggregateSaleItems(cart),
       });
       queryClient.invalidateQueries({ queryKey: ["products"] });
@@ -462,9 +478,10 @@ export default function Home() {
       queryClient.invalidateQueries({ queryKey: ["caja-actual"] });
       queryClient.invalidateQueries({ queryKey: ["reportes"] });
       setCart([]);
+      setProductListFilter({ type: "all" });
       setPaymentModalOpen(false);
+      setSalePasswordOpen(false);
       setCashReceived("");
-      setMasterPassword("");
       setModalidadVenta("NORMAL");
       setMixedAmounts({ EFECTIVO: "", TARJETA: "", TRANSFERENCIA: "" });
       setMessage("Venta registrada correctamente.");
@@ -604,7 +621,7 @@ export default function Home() {
           ? totalCosto
           : total - descuentoOfertas;
     setModalidadVenta(modalidad);
-    setMasterPassword("");
+    setSalePasswordOpen(false);
     setCashReceived(toInputAmount(nextTotal));
     setMixedAmounts(createMixedAmounts(mixedMethods, nextTotal));
   };
@@ -666,7 +683,16 @@ export default function Home() {
               <span className="pos-kicker">Categorías</span>
               <h2 className="pos-subtitle">Explora productos</h2>
             </div>
-            <span className="pos-category-count">{allCategoryButtons.length} categorías</span>
+            <div className="pos-category-actions">
+              <button
+                type="button"
+                onClick={() => setProductListFilter({ type: "all" })}
+                className={`pos-category-reset ${productListFilter.type === "all" ? "active" : ""}`}
+              >
+                General
+              </button>
+              <span className="pos-category-count">{allCategoryButtons.length} categorías</span>
+            </div>
           </div>
 
           <div className="pos-category-strip">
@@ -941,7 +967,14 @@ export default function Home() {
         </div>
       )}
       {categoryModalOpen && (
-        <div className="flow-modal-backdrop">
+        <div
+          className="flow-modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setCategoryModalOpen(false);
+            }
+          }}
+        >
           <div className="flow-modal max-w-3xl">
             <div className="pos-section-row">
               <div>
@@ -988,8 +1021,16 @@ export default function Home() {
         </div>
       )}
       {paymentModalOpen && (
-        <div className="flow-modal-backdrop">
-          <div className="flow-modal max-w-4xl">
+        <div
+          className="flow-modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setPaymentModalOpen(false);
+              focusBarcodeInput();
+            }
+          }}
+        >
+          <div className="flow-modal payment-modal max-w-4xl">
             <div className="pos-section-row">
               <div>
                 <span className="pos-kicker">Pago</span>
@@ -1073,16 +1114,6 @@ export default function Home() {
                       Vender a precio costo
                     </button>
                   </div>
-                  {modalidadVenta !== "NORMAL" && (
-                    <FormField label="Clave admin" className="mt-3">
-                      <input
-                        type="password"
-                        value={masterPassword}
-                        onChange={(event) => setMasterPassword(event.target.value)}
-                        className={inputClassName}
-                      />
-                    </FormField>
-                  )}
                 </div>
               </div>
 
@@ -1190,7 +1221,7 @@ export default function Home() {
                 Cancelar
               </Button>
               <Button
-                onClick={handleFinishSale}
+                onClick={() => handleFinishSale()}
                 disabled={!canConfirmSale}
               >
                 {modalidadVenta === "RETIRO_DUENO" ? "Registrar retiro" : "Confirmar venta"}
@@ -1198,6 +1229,18 @@ export default function Home() {
             </FormActions>
           </div>
         </div>
+      )}
+      {salePasswordOpen && (
+        <AdminPasswordModal
+          title="Confirmar venta administrativa"
+          description={
+            modalidadVenta === "RETIRO_DUENO"
+              ? "Ingresa la contraseña de administrador para registrar el retiro."
+              : "Ingresa la contraseña de administrador para vender a precio costo."
+          }
+          onClose={() => setSalePasswordOpen(false)}
+          onConfirm={(password) => handleFinishSale(password)}
+        />
       )}
     </div>
   );

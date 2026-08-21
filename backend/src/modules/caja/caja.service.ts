@@ -260,11 +260,40 @@ export class CajaService {
       tarjeta: Number(row.tarjeta),
       transferencia: Number(row.transferencia),
       mixto: Number(row.mixto),
+      ventas_propias: Number(row.ventas_propias),
+      ventas_consignacion: Number(row.ventas_consignacion),
+      consignacion_proveedores: this.parseConsignacionProveedores(row.consignacion_proveedores),
       ingresos,
       egresos,
       monto_esperado_cierre: montoEsperadoCierre,
       diferencia_cierre: null,
     };
+  }
+
+  private parseConsignacionProveedores(value: string | null): CajaResumenFinanciero['consignacion_proveedores'] {
+    if (!value) {
+      return [];
+    }
+
+    try {
+      const parsed = JSON.parse(value) as Array<{
+        proveedor_id?: number | null;
+        proveedor_nombre?: string;
+        total?: string | number;
+      }>;
+
+      if (!Array.isArray(parsed)) {
+        return [];
+      }
+
+      return parsed.map((item) => ({
+        proveedor_id: item.proveedor_id ?? null,
+        proveedor_nombre: item.proveedor_nombre ?? 'Sin proveedor',
+        total: Number(item.total ?? 0),
+      }));
+    } catch {
+      return [];
+    }
   }
 
   private mapMovimiento(row: CajaMovimientoRow): CajaMovimiento {

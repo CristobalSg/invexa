@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ClipboardDocumentListIcon, ReceiptRefundIcon } from "@heroicons/react/24/outline";
+import { ClipboardDocumentListIcon, DevicePhoneMobileIcon, ReceiptRefundIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { anularCompra, createCompra, getCompra, getCompras } from "../services/compraService";
 import { authorizeAdmin } from "../services/authService";
 import { getCategorias } from "../services/catalogService";
@@ -8,7 +8,8 @@ import { getProductByBarcode, getProducts } from "../services/productService";
 import type { Producto } from "../types/api";
 import ListPanel from "../components/ListPanel";
 import ModuleCard from "../components/ModuleCard";
-import { Button, FormActions, FormField, inputClassName } from "../components/FormControls";
+import { Button, FormField, inputClassName } from "../components/FormControls";
+import AdminPasswordModal from "../components/AdminPasswordModal";
 
 type CompraItemForm = {
   producto: Producto;
@@ -64,8 +65,8 @@ export default function ComprasPage() {
   const [items, setItems] = useState<CompraItemForm[]>([]);
   const [message, setMessage] = useState("");
   const [masterAction, setMasterAction] = useState<MasterAction | null>(null);
-  const [masterPassword, setMasterPassword] = useState("");
   const [expandedCompraId, setExpandedCompraId] = useState<number | null>(null);
+  const [mobilePurchasesOpen, setMobilePurchasesOpen] = useState(false);
 
   const compraDetalle = useQuery({
     queryKey: ["compra", expandedCompraId],
@@ -146,7 +147,6 @@ export default function ComprasPage() {
 
   const closeMasterModal = () => {
     setMasterAction(null);
-    setMasterPassword("");
   };
 
   const mutation = useMutation({
@@ -185,7 +185,7 @@ export default function ComprasPage() {
     items.length > 0 &&
     items.every((item) => createItemValidationMessage(item) === null);
 
-  const confirmMasterAction = async () => {
+  const confirmMasterAction = async (masterPassword: string) => {
     if (!masterAction || !masterPassword) return;
 
     try {
@@ -237,7 +237,19 @@ export default function ComprasPage() {
 
   return (
     <div className="admin-page space-y-6">
-      <h1 className="admin-page-title">Compras</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="admin-page-title">Compras</h1>
+        <button
+          type="button"
+          onClick={() => setMobilePurchasesOpen(true)}
+          className="inline-flex h-12 items-center gap-2 rounded-[16px] border border-[#ececf0] bg-white px-4 text-sm font-black text-[#5f626b] shadow-[0_8px_20px_rgba(33,35,48,.04)] transition hover:border-[#d8d1ff] hover:bg-[#faf9ff] hover:text-[#7652ed]"
+          aria-label="Compras hechas con celular"
+          title="Compras hechas con celular"
+        >
+          <DevicePhoneMobileIcon className="h-6 w-6" />
+          <span>Compras celular</span>
+        </button>
+      </div>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(360px,1fr)]">
         <div className="xl:sticky xl:top-6 xl:self-start">
@@ -310,93 +322,123 @@ export default function ComprasPage() {
           ))}
         </div>
 
-        <div className="overflow-x-auto rounded-lg border">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-left text-gray-500">
-              <tr>
-                <th className="p-3">Producto</th>
-                <th>Cantidad</th>
-                <th>Costo unitario</th>
-                <th>Precio venta</th>
-                <th>Actualizar precio</th>
-                <th>Subtotal</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
+        <div className="purchase-items-panel">
+          <div className="purchase-items-head">
+            <div>
+              <p className="purchase-items-kicker">Productos comprados</p>
+              <h3>{items.length} producto{items.length === 1 ? "" : "s"} en esta compra</h3>
+            </div>
+            <strong>{money(totalCompra)}</strong>
+          </div>
+
+          {items.length === 0 ? (
+            <div className="purchase-items-empty">Agrega productos a la compra.</div>
+          ) : (
+            <div className="purchase-items-list">
               {items.map((item) => {
                 const subtotal = quantityForBackend(item) * toNumber(item.costo_unitario);
+                const category = categorias?.items.find((currentCategory) => currentCategory.id === item.producto.categoria_id);
+                const multiplier = Number(category?.multiplicador_ganancia ?? 1);
+                const suggestedSalePrice = Math.round(toNumber(item.costo_unitario) * multiplier);
+                const currentPriceBelowSuggested = suggestedSalePrice > item.producto.precio_venta;
 
                 return (
-                  <tr key={item.producto.id} className="border-t">
-                    <td className="p-3">
-                      <p className="font-medium text-gray-900">{item.producto.nombre}</p>
-                      <p className="text-xs text-gray-500">
-                        {item.producto.codigo_barras ?? "Sin código"} · {item.producto.unidad_venta === "PESO" ? "Peso" : "Unidad"}
-                      </p>
-                    </td>
-                    <td>
-                      <input
-                        type="number"
-                        min={quantityMin(item.producto)}
-                        step={quantityStep(item.producto)}
-                        value={item.cantidad}
-                        onChange={(event) => updateItem(item.producto.id, { cantidad: event.target.value })}
-                        disabled={!item.unlocked}
-                        className="w-24 border rounded px-2 py-1 disabled:bg-gray-100 disabled:text-gray-500"
-                        aria-label={quantityLabel(item.producto)}
-                      />
-                      <p className="mt-1 text-xs text-gray-500">{quantityLabel(item.producto)}</p>
-                    </td>
-                    <td>
-                      <input
-                        type="number"
-                        min={0}
-                        value={item.costo_unitario}
-                        onChange={(event) => updateItem(item.producto.id, { costo_unitario: event.target.value })}
-                        disabled={!item.unlocked}
-                        className="w-32 border rounded px-2 py-1 disabled:bg-gray-100 disabled:text-gray-500"
-                        placeholder="Costo"
-                      />
-                    </td>
-                    <td>
-                      <input
-                        type="number"
-                        min={0}
-                        value={item.precio_final}
-                        onChange={(event) => updateItem(item.producto.id, { precio_final: event.target.value })}
-                        disabled={!item.unlocked}
-                        className="w-32 border rounded px-2 py-1 disabled:bg-gray-100 disabled:text-gray-500"
-                        placeholder="Precio"
-                      />
-                    </td>
-                    <td>
-                      <input
-                        type="checkbox"
-                        checked={item.actualizar_precio_venta}
-                        onChange={(event) => updateItem(item.producto.id, { actualizar_precio_venta: event.target.checked })}
-                        disabled={!item.unlocked}
-                      />
-                    </td>
-                    <td className="font-semibold">{money(subtotal)}</td>
-                    <td>
-                      <div className="flex gap-2">
+                  <article key={item.producto.id} className={`purchase-item-card ${item.unlocked ? "" : "locked"}`}>
+                    <div className="purchase-item-main">
+                      <div className="purchase-item-avatar">
+                        {item.producto.nombre.trim().charAt(0).toUpperCase() || "P"}
+                      </div>
+                      <div className="min-w-0">
+                        <h4>{item.producto.nombre}</h4>
+                        <div className="purchase-item-meta">
+                          <span>{item.producto.codigo_barras ?? "Sin código"}</span>
+                          <span>{item.producto.unidad_venta === "PESO" ? "Peso" : "Unidad"}</span>
+                          <span>Stock {item.producto.stock}{item.producto.unidad_venta === "PESO" ? " kg" : ""}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="purchase-item-controls">
+                      <label>
+                        <span>{quantityLabel(item.producto)}</span>
+                        <input
+                          type="number"
+                          min={quantityMin(item.producto)}
+                          step={quantityStep(item.producto)}
+                          value={item.cantidad}
+                          onChange={(event) => updateItem(item.producto.id, { cantidad: event.target.value })}
+                          disabled={!item.unlocked}
+                          aria-label={quantityLabel(item.producto)}
+                        />
+                      </label>
+                      <label>
+                        <span>Costo</span>
+                        <input
+                          type="number"
+                          min={0}
+                          value={item.costo_unitario}
+                          onChange={(event) => updateItem(item.producto.id, { costo_unitario: event.target.value })}
+                          disabled={!item.unlocked}
+                          placeholder="Costo"
+                        />
+                      </label>
+                      <label>
+                        <span>Venta</span>
+                        <input
+                          type="number"
+                          min={0}
+                          value={item.precio_final}
+                          onChange={(event) => updateItem(item.producto.id, { precio_final: event.target.value })}
+                          disabled={!item.unlocked}
+                          placeholder="Precio"
+                        />
+                      </label>
+                    </div>
+
+                    <div className="purchase-item-side">
+                      <label className="purchase-price-toggle">
+                        <input
+                          type="checkbox"
+                          checked={item.actualizar_precio_venta}
+                          onChange={(event) => updateItem(item.producto.id, { actualizar_precio_venta: event.target.checked })}
+                          disabled={!item.unlocked}
+                        />
+                        <span>Actualizar precio</span>
+                      </label>
+                      <div className="purchase-price-info">
+                        <span className={currentPriceBelowSuggested ? "warning" : ""}>
+                          <small>Actual</small>
+                          {money(item.producto.precio_venta)}
+                        </span>
+                        <span>
+                          <small>Sugerido x{multiplier.toFixed(2)}</small>
+                          {money(suggestedSalePrice)}
+                        </span>
+                      </div>
+                      <div className="purchase-item-subtotal">
+                        <span>Subtotal</span>
+                        <strong>{money(subtotal)}</strong>
+                      </div>
+                      <div className="purchase-item-actions">
                         {item.unlocked ? (
                           <button
+                            type="button"
                             onClick={() => updateItem(item.producto.id, { unlocked: false })}
-                            className="text-blue-700 font-semibold"
+                            className="purchase-action-primary"
                           >
                             Listo
                           </button>
                         ) : (
                           <button
+                            type="button"
                             onClick={() => setMasterAction({ type: "unlock-item", productId: item.producto.id })}
-                            className="text-blue-700 font-semibold"
+                            className="purchase-action-primary"
                           >
                             Modificar
                           </button>
                         )}
                         <button
+                          type="button"
                           onClick={() => {
                             if (item.unlocked) {
                               removeItem(item.producto.id);
@@ -404,20 +446,17 @@ export default function ComprasPage() {
                             }
                             setMasterAction({ type: "remove-item", productId: item.producto.id });
                           }}
-                          className="text-red-600 font-semibold"
+                          className="purchase-action-danger"
                         >
                           Quitar
                         </button>
                       </div>
-                    </td>
-                  </tr>
+                    </div>
+                  </article>
                 );
               })}
-              {items.length === 0 && (
-                <tr><td colSpan={7} className="py-8 text-center text-gray-500">Agrega productos a la compra.</td></tr>
-              )}
-            </tbody>
-          </table>
+            </div>
+          )}
         </div>
 
         <div className="flex justify-between gap-3">
@@ -504,36 +543,43 @@ export default function ComprasPage() {
       </div>
 
       {masterAction && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
-            <h2 className="text-xl font-bold text-gray-900">Autorización requerida</h2>
-            <p className="mt-2 text-sm text-gray-600">
-              Ingresa la contraseña maestra de un administrador para continuar.
-            </p>
-            <FormField label="Contraseña admin" className="mt-5">
-              <input
-                autoFocus
-                type="password"
-                value={masterPassword}
-                onChange={(event) => setMasterPassword(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") confirmMasterAction();
-                  if (event.key === "Escape") closeMasterModal();
-                }}
-                className={inputClassName}
-              />
-            </FormField>
-            <FormActions className="mt-1">
-              <Button variant="ghost" onClick={closeMasterModal}>
-                Cancelar
-              </Button>
-              <Button
-                onClick={confirmMasterAction}
-                disabled={!masterPassword || anulacion.isPending}
+        <AdminPasswordModal
+          title="Autorización requerida"
+          description="Ingresa la contraseña de administrador para continuar."
+          isPending={anulacion.isPending}
+          onClose={closeMasterModal}
+          onConfirm={confirmMasterAction}
+        />
+      )}
+
+      {mobilePurchasesOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setMobilePurchasesOpen(false);
+            }
+          }}
+        >
+          <div className="w-full max-w-3xl rounded-[28px] border border-white/90 bg-white shadow-[0_24px_70px_rgba(18,19,24,.24)]">
+            <div className="flex items-center justify-between gap-4 border-b border-[#efeff2] px-6 py-5">
+              <div className="flex items-center gap-3">
+                <span className="flex h-12 w-12 items-center justify-center rounded-[16px] bg-[#faf9ff] text-[#7652ed]">
+                  <DevicePhoneMobileIcon className="h-6 w-6" />
+                </span>
+                <h2 className="text-xl font-black tracking-[-0.02em] text-[#17181d]">Compras celular</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMobilePurchasesOpen(false)}
+                className="flex h-11 w-11 items-center justify-center rounded-[16px] border border-[#ececf0] bg-white text-[#5f626b] transition hover:border-[#d8d1ff] hover:bg-[#faf9ff] hover:text-[#7652ed]"
+                aria-label="Cerrar"
+                title="Cerrar"
               >
-                Autorizar
-              </Button>
-            </FormActions>
+                <XMarkIcon className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="min-h-[320px] p-6" />
           </div>
         </div>
       )}

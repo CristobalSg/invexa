@@ -323,10 +323,47 @@ export class CajaRepository {
             COALESCE(SUM(mc.monto) FILTER (WHERE mc.tipo = 'EGRESO'), 0)::text AS egresos
           FROM movimientos_caja mc
           WHERE mc.sesion_caja_id = $1
+        ),
+        detalle_resumen AS (
+          SELECT
+            COALESCE(SUM(dv.total_final) FILTER (WHERE dv.tipo_propiedad = 'PROPIO'), 0)::text AS ventas_propias,
+            COALESCE(SUM(dv.total_final) FILTER (WHERE dv.tipo_propiedad = 'CONSIGNACION'), 0)::text AS ventas_consignacion
+          FROM detalle_ventas dv
+          INNER JOIN ventas v ON v.id = dv.venta_id
+          WHERE v.sesion_caja_id = $1
+            AND v.estado = 'COMPLETADA'
+        ),
+        consignacion_proveedores AS (
+          SELECT COALESCE(
+            json_agg(
+              json_build_object(
+                'proveedor_id', proveedor_id,
+                'proveedor_nombre', proveedor_nombre,
+                'total', total
+              )
+              ORDER BY total DESC, proveedor_nombre ASC
+            ),
+            '[]'::json
+          )::text AS consignacion_proveedores
+          FROM (
+            SELECT
+              dv.proveedor_id,
+              COALESCE(pr.nombre, 'Sin proveedor') AS proveedor_nombre,
+              SUM(dv.total_final)::numeric AS total
+            FROM detalle_ventas dv
+            INNER JOIN ventas v ON v.id = dv.venta_id
+            LEFT JOIN proveedores pr ON pr.id = dv.proveedor_id
+            WHERE v.sesion_caja_id = $1
+              AND v.estado = 'COMPLETADA'
+              AND dv.tipo_propiedad = 'CONSIGNACION'
+            GROUP BY dv.proveedor_id, pr.nombre
+          ) proveedores_consignacion
         )
         SELECT *
         FROM ventas_resumen
         CROSS JOIN movimientos_resumen
+        CROSS JOIN detalle_resumen
+        CROSS JOIN consignacion_proveedores
       `,
       [sessionId],
     );
@@ -357,10 +394,47 @@ export class CajaRepository {
             COALESCE(SUM(mc.monto) FILTER (WHERE mc.tipo = 'EGRESO'), 0)::text AS egresos
           FROM movimientos_caja mc
           WHERE mc.sesion_caja_id = $1
+        ),
+        detalle_resumen AS (
+          SELECT
+            COALESCE(SUM(dv.total_final) FILTER (WHERE dv.tipo_propiedad = 'PROPIO'), 0)::text AS ventas_propias,
+            COALESCE(SUM(dv.total_final) FILTER (WHERE dv.tipo_propiedad = 'CONSIGNACION'), 0)::text AS ventas_consignacion
+          FROM detalle_ventas dv
+          INNER JOIN ventas v ON v.id = dv.venta_id
+          WHERE v.sesion_caja_id = $1
+            AND v.estado = 'COMPLETADA'
+        ),
+        consignacion_proveedores AS (
+          SELECT COALESCE(
+            json_agg(
+              json_build_object(
+                'proveedor_id', proveedor_id,
+                'proveedor_nombre', proveedor_nombre,
+                'total', total
+              )
+              ORDER BY total DESC, proveedor_nombre ASC
+            ),
+            '[]'::json
+          )::text AS consignacion_proveedores
+          FROM (
+            SELECT
+              dv.proveedor_id,
+              COALESCE(pr.nombre, 'Sin proveedor') AS proveedor_nombre,
+              SUM(dv.total_final)::numeric AS total
+            FROM detalle_ventas dv
+            INNER JOIN ventas v ON v.id = dv.venta_id
+            LEFT JOIN proveedores pr ON pr.id = dv.proveedor_id
+            WHERE v.sesion_caja_id = $1
+              AND v.estado = 'COMPLETADA'
+              AND dv.tipo_propiedad = 'CONSIGNACION'
+            GROUP BY dv.proveedor_id, pr.nombre
+          ) proveedores_consignacion
         )
         SELECT *
         FROM ventas_resumen
         CROSS JOIN movimientos_resumen
+        CROSS JOIN detalle_resumen
+        CROSS JOIN consignacion_proveedores
       `,
       [sessionId],
     );

@@ -122,28 +122,22 @@ docker compose up -d frontend
 
 ## Seed Inicial
 
-PostgreSQL ejecuta `scripts/init.sql` al crear el volumen por primera vez. Ese script carga `backend/base.sql` y reemplaza el hash del usuario `admin`.
+PostgreSQL ejecuta `scripts/init.sql` al crear el volumen por primera vez. Ese script carga `backend/base.sql` con catalogos y datos base, pero no crea un administrador provisional.
 
-Credenciales de prueba:
+En una instalacion nueva, abre el frontend y el sistema mostrara la pantalla para crear la cuenta administradora. La contraseña se ingresa dos veces y queda guardada como hash bcrypt. Esa misma contraseña del usuario administrador se usa despues para autorizar acciones restringidas cuando no estas operando con el perfil admin.
 
-```text
-usuario: admin
-contraseña: 123456
-rol: OWNER
-```
-
-Si `base.sql` contiene `CAMBIAR_HASH`, genera un hash bcrypt así:
+Tambien puedes crear el administrador inicial por API:
 
 ```bash
-node -e "const bcrypt=require('bcrypt'); console.log(bcrypt.hashSync('123456',10))"
-```
-
-Luego reemplaza el valor en `scripts/init.sql` o actualízalo en PostgreSQL:
-
-```sql
-UPDATE usuarios
-SET contrasena_hash = 'HASH_GENERADO'
-WHERE nombre_usuario = 'admin';
+curl -X POST "$API_URL/auth/setup/admin" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "nombre_usuario": "admin",
+    "nombre": "Administrador",
+    "contraseña": "TU_CONTRASEÑA",
+    "confirmar_contraseña": "TU_CONTRASEÑA",
+    "nombre_dispositivo": "Caja POS"
+  }'
 ```
 
 ## Pruebas Con Curl
@@ -167,7 +161,7 @@ curl -s -X POST "$API_URL/auth/login" \
   -H "Content-Type: application/json" \
   -d '{
     "nombre_usuario": "admin",
-    "contraseña": "123456"
+    "contraseña": "TU_CONTRASEÑA"
   }'
 ```
 
@@ -176,7 +170,7 @@ Guardar token:
 ```bash
 export TOKEN=$(curl -s -X POST "$API_URL/auth/login" \
   -H "Content-Type: application/json" \
-  -d '{"nombre_usuario":"admin","contraseña":"123456"}' \
+  -d '{"nombre_usuario":"admin","contraseña":"TU_CONTRASEÑA"}' \
   | node -pe "JSON.parse(require('fs').readFileSync(0,'utf8')).data.token")
 ```
 

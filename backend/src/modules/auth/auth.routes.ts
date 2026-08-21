@@ -2,7 +2,7 @@ import type { FastifyPluginAsync } from 'fastify';
 
 import { authMiddleware } from '../../middlewares/auth.middleware.js';
 import { assertValidOwnerPassword } from '../../utils/master-authorization.js';
-import { ok } from '../../utils/responses.js';
+import { created, ok } from '../../utils/responses.js';
 import {
   authorizeDeviceSchema,
   authorizeOwnerSchema,
@@ -10,9 +10,11 @@ import {
   loginSchema,
   meSchema,
   profileLoginSchema,
+  setupAdminSchema,
+  setupStatusSchema,
 } from './auth.schema.js';
 import { AuthService } from './auth.service.js';
-import type { AuthorizeDeviceBody, LoginBody, ProfileLoginBody } from './auth.types.js';
+import type { AuthorizeDeviceBody, LoginBody, ProfileLoginBody, SetupAdminBody } from './auth.types.js';
 
 export const authRoutes: FastifyPluginAsync = async (fastify) => {
   const service = new AuthService(fastify);
@@ -25,6 +27,20 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
     const result = await service.login(request.body);
     return ok(reply, result);
   });
+
+  fastify.get('/setup/estado', { schema: setupStatusSchema }, async (_request, reply) => {
+    const result = await service.setupStatus();
+    return ok(reply, result);
+  });
+
+  fastify.post<{ Body: SetupAdminBody }>(
+    '/setup/admin',
+    { schema: setupAdminSchema },
+    async (request, reply) => {
+      const result = await service.setupInitialAdmin(request.body);
+      return created(reply, result);
+    },
+  );
 
   fastify.post<{ Body: AuthorizeDeviceBody }>(
     '/dispositivo/autorizar',

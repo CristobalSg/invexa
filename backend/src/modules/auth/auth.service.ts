@@ -2,7 +2,8 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import bcrypt from 'bcrypt';
 import type { FastifyInstance } from 'fastify';
 
-import { ConflictError, UnauthorizedError } from '../../utils/errors.js';
+import { env } from '../../config/env.js';
+import { BadRequestError, ConflictError, UnauthorizedError } from '../../utils/errors.js';
 import { AuthRepository } from './auth.repository.js';
 import type {
   AuthUser,
@@ -14,6 +15,9 @@ import type {
   LoginResult,
   PosProfileLoginResult,
   ProfileLoginBody,
+  SetupAdminBody,
+  SetupAdminResult,
+  SetupStatusResult,
   UsuarioAuthRow,
 } from './auth.types.js';
 
@@ -22,6 +26,58 @@ export class AuthService {
 
   constructor(private readonly fastify: FastifyInstance) {
     this.repository = new AuthRepository(fastify.pg);
+  }
+
+  async setupStatus(): Promise<SetupStatusResult> {
+    const owners = await this.repository.countActiveOwners();
+    return { requiere_setup: owners === 0 };
+  }
+
+  async setupInitialAdmin(data: SetupAdminBody): Promise<SetupAdminResult> {
+    const owners = await this.repository.countActiveOwners();
+
+    if (owners > 0) {
+      throw new ConflictError('El administrador inicial ya fue configurado');
+    }
+
+    if (data.contraseña !== data.confirmar_contraseña) {
+      throw new BadRequestError('Las contraseñas no coinciden');
+    }
+
+    const nombreUsuario = data.nombre_usuario.trim();
+    const nombre = data.nombre.trim();
+    const email = data.email?.trim() || null;
+    const contrasenaHash = await bcrypt.hash(data.contraseña, env.bcryptSaltRounds);
+    const usuario = await this.repository.createInitialOwner({
+      nombreUsuario,
+      contrasenaHash,
+      nombre,
+      email,
+    });
+
+    if (!usuario) {
+      throw new ConflictError('El administrador inicial ya fue configurado');
+    }
+
+    const authUser = this.mapAuthUser(usuario);
+    const token = this.fastify.jwt.sign({
+      id: authUser.id,
+      rol: authUser.rol,
+      nombre_usuario: authUser.nombre_usuario,
+    });
+    const deviceToken = randomBytes(32).toString('hex');
+    const device = await this.repository.createDevice({
+      id: randomUUID(),
+      nombre: data.nombre_dispositivo?.trim() || 'Caja POS',
+      tokenHash: this.hashDeviceToken(deviceToken),
+      autorizadoPor: usuario.id,
+    });
+
+    return {
+      token,
+      usuario: authUser,
+      ...this.mapDeviceAuth(deviceToken, device),
+    };
   }
 
   async login(credentials: LoginBody): Promise<LoginResult> {

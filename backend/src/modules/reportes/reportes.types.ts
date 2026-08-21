@@ -151,6 +151,8 @@ export interface InventarioRow {
   readonly valor_venta: string;
   readonly activo: boolean;
   readonly total_count: string;
+  readonly valor_costo_total: string;
+  readonly valor_venta_total: string;
 }
 
 export interface InventarioItem {
@@ -166,6 +168,15 @@ export interface InventarioItem {
   readonly valor_costo: number;
   readonly valor_venta: number;
   readonly activo: boolean;
+}
+
+export interface InventarioResumen {
+  readonly valor_costo_total: number;
+  readonly valor_venta_total: number;
+}
+
+export interface InventarioPaginatedResult extends PaginatedResult<InventarioItem> {
+  readonly resumen: InventarioResumen;
 }
 
 export interface ConsignacionRow {
