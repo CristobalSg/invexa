@@ -1,4 +1,4 @@
-import { forwardRef, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { XMarkIcon } from "@heroicons/react/24/outline";
 import { getProductByBarcode } from "../services/productService";
 import type { Producto } from "../types/api";
@@ -7,17 +7,28 @@ interface Props {
   title: string;
   onProductFound?: (product: Producto) => void;
   onSearchChange?: (text: string) => void;
+  onBlur?: (event: React.FocusEvent<HTMLInputElement>) => void;
+  clearSignal?: number;
+  showClearButton?: boolean;
   size?: "normal" | "large";
 }
 
-const InputForm = forwardRef<HTMLInputElement, Props>(({ title, onProductFound, onSearchChange, size = "normal" }, ref) => {
+const InputForm = forwardRef<HTMLInputElement, Props>(({
+  title,
+  onProductFound,
+  onSearchChange,
+  onBlur,
+  clearSignal = 0,
+  showClearButton = true,
+  size = "normal",
+}, ref) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const [value, setValue] = useState("");
   const [error, setError] = useState("");
   const inputClass =
     size === "large"
-      ? "w-full rounded-lg border border-gray-300 bg-white py-4 pl-5 pr-14 text-2xl font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-100 dark:placeholder:text-neutral-500"
-      : "w-full rounded-md border border-gray-300 bg-white py-2 pl-4 pr-10 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-100 dark:placeholder:text-neutral-500";
+      ? "h-[52px] w-full rounded-[15px] border border-[#ececf0] bg-[#f7f7f9] px-4 pr-12 text-sm font-medium text-[#24252a] placeholder:text-[#a3a5ad] focus:border-[#cfc3ff] focus:bg-white focus:outline-none focus:ring-4 focus:ring-[#8657ff]/10"
+      : "h-[46px] w-full rounded-[14px] border border-[#ececf0] bg-[#f7f7f9] px-4 pr-10 text-sm text-[#24252a] placeholder:text-[#a3a5ad] focus:border-[#cfc3ff] focus:bg-white focus:outline-none focus:ring-4 focus:ring-[#8657ff]/10";
 
   useImperativeHandle(ref, () => inputRef.current as HTMLInputElement);
 
@@ -27,6 +38,11 @@ const InputForm = forwardRef<HTMLInputElement, Props>(({ title, onProductFound, 
     onSearchChange?.("");
     window.setTimeout(() => inputRef.current?.focus(), 0);
   };
+
+  useEffect(() => {
+    if (clearSignal === 0) return;
+    clearValue();
+  }, [clearSignal]);
 
   const handleKeyDown = async (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && value.trim()) {
@@ -42,8 +58,8 @@ const InputForm = forwardRef<HTMLInputElement, Props>(({ title, onProductFound, 
   };
 
   return (
-    <div className="mb-4">
-      <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-neutral-300">
+    <div>
+      <label className="sr-only">
         {title}
       </label>
       <div className="relative">
@@ -58,9 +74,10 @@ const InputForm = forwardRef<HTMLInputElement, Props>(({ title, onProductFound, 
             setError("");
             onSearchChange?.(e.target.value);
           }}
+          onBlur={onBlur}
           onKeyDown={handleKeyDown}
         />
-        {value && (
+        {showClearButton && value && (
           <button
             type="button"
             onClick={clearValue}

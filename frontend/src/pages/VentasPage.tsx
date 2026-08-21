@@ -54,8 +54,8 @@ export default function VentasPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Ventas</h1>
+    <div className="admin-page space-y-6">
+      <h1 className="admin-page-title">Ventas</h1>
       <ModuleCard title="Filtros" icon={FunnelIcon} contentClassName="p-4">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         <FormField label="Fecha">
@@ -73,7 +73,7 @@ export default function VentasPage() {
         </FormField>
       </div>
       </ModuleCard>
-      {message && <p className="bg-white rounded border p-3 text-sm">{message}</p>}
+      {message && <p className="admin-message">{message}</p>}
       <ListPanel
         title="Ventas registradas"
         icon={ShoppingBagIcon}

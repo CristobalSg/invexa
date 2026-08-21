@@ -35,9 +35,9 @@ export default function CatalogosPage() {
     onError: (error) => setMessage(error instanceof Error ? error.message : "Error"),
   });
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Catálogos</h1>
-      {message && <p className="bg-white rounded border p-3 text-sm">{message}</p>}
+    <div className="admin-page space-y-6">
+      <h1 className="admin-page-title">Catálogos</h1>
+      {message && <p className="admin-message">{message}</p>}
 
       <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <ModuleCard title="Nueva categoría" icon={BookOpenIcon} contentClassName="p-4">

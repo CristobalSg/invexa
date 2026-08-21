@@ -121,8 +121,8 @@ export default function CajaPage() {
   if (isLoading) return <p>Cargando caja...</p>;
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Caja</h1>
+    <div className="admin-page space-y-6">
+      <h1 className="admin-page-title">Caja</h1>
 
       <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
         <div className="space-y-6 xl:sticky xl:top-6 xl:self-start">

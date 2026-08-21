@@ -236,8 +236,8 @@ export default function ComprasPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Compras</h1>
+    <div className="admin-page space-y-6">
+      <h1 className="admin-page-title">Compras</h1>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(360px,1fr)]">
         <div className="xl:sticky xl:top-6 xl:self-start">

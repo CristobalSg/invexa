@@ -20,14 +20,14 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 export const inputClassName =
-  "mt-1 block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:bg-gray-100 disabled:text-gray-500 dark:border-white/10 dark:bg-neutral-950 dark:text-neutral-100 dark:placeholder:text-neutral-500 dark:focus:border-blue-400 dark:focus:ring-blue-950 dark:disabled:bg-neutral-800 dark:disabled:text-neutral-500";
+  "mt-1 block w-full rounded-[14px] border border-[#ececf0] bg-[#f7f7f9] px-3 py-2.5 text-sm text-[#24252a] placeholder:text-[#a3a5ad] focus:border-[#cfc3ff] focus:bg-white focus:outline-none focus:ring-4 focus:ring-[#8657ff]/10 disabled:bg-gray-100 disabled:text-gray-500";
 
 export function FormField({ label, children, help, error, className }: FormFieldProps) {
   return (
-    <label className={clsx("block text-sm font-medium text-gray-700 dark:text-neutral-300", className)}>
+    <label className={clsx("block text-sm font-semibold text-[#5f626b]", className)}>
       {label}
       {children}
-      {help && <p className="mt-1 text-xs font-normal text-gray-500 dark:text-neutral-400">{help}</p>}
+      {help && <p className="mt-1 text-xs font-normal text-[#8b8e98]">{help}</p>}
       {error && <p className="mt-1 text-xs font-semibold text-red-600">{error}</p>}
     </label>
   );
@@ -51,12 +51,12 @@ export function Button({
   return (
     <button
       className={clsx(
-        "inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-white dark:disabled:bg-neutral-700 dark:disabled:text-neutral-400",
+        "inline-flex items-center justify-center rounded-[14px] px-4 py-2.5 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-45",
         fullWidth && "w-full",
-        variant === "primary" && "bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-400",
-        variant === "secondary" && "border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:border-gray-200 dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:bg-white/10",
-        variant === "danger" && "bg-red-600 text-white hover:bg-red-700",
-        variant === "ghost" && "text-gray-700 hover:bg-gray-100 disabled:bg-transparent disabled:text-gray-300 dark:text-neutral-200 dark:hover:bg-white/10 dark:disabled:text-neutral-600",
+        variant === "primary" && "bg-[#1d1f25] text-white shadow-[0_12px_25px_rgba(26,28,34,.16)] hover:-translate-y-0.5 hover:bg-[#121318]",
+        variant === "secondary" && "border border-[#ececf0] bg-white text-[#5f626b] hover:-translate-y-0.5 hover:border-[#d8d1ff] hover:bg-[#faf9ff] hover:text-[#7652ed]",
+        variant === "danger" && "bg-red-600 text-white shadow-[0_12px_25px_rgba(220,38,38,.16)] hover:-translate-y-0.5 hover:bg-red-700",
+        variant === "ghost" && "text-[#5f626b] hover:bg-[#f7f7f9] disabled:bg-transparent",
         className,
       )}
       {...props}

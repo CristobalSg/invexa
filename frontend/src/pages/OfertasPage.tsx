@@ -76,9 +76,9 @@ export default function OfertasPage() {
   });
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Ofertas</h1>
-      {message && <p className="bg-white rounded border p-3 text-sm">{message}</p>}
+    <div className="admin-page space-y-6">
+      <h1 className="admin-page-title">Ofertas</h1>
+      {message && <p className="admin-message">{message}</p>}
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(360px,1fr)]">
         <div className="xl:sticky xl:top-6 xl:self-start">

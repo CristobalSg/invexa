@@ -24,18 +24,18 @@ export default function ModuleCard({
   const hasHeader = title || description || Icon || action;
 
   return (
-    <section className={`overflow-hidden rounded-lg border border-gray-200 bg-white dark:border-white/10 dark:bg-neutral-900 ${className}`}>
+    <section className={`overflow-hidden rounded-[28px] border border-white/90 bg-white shadow-[0_18px_50px_rgba(31,35,48,.08)] ${className}`}>
       {hasHeader && (
-        <div className="flex items-start justify-between gap-4 border-b border-gray-100 px-5 py-4 dark:border-white/10">
+        <div className="flex items-start justify-between gap-4 border-b border-[#efeff2] px-5 py-4">
           <div className="flex min-w-0 items-start gap-3">
             {Icon && (
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] bg-[#f7f7f9] text-[#7652ed] shadow-[0_7px_15px_rgba(89,77,49,.06)]">
                 <Icon className="h-5 w-5" />
               </span>
             )}
             <div className="min-w-0">
-              {title && <h2 className="font-semibold text-gray-900 dark:text-neutral-100">{title}</h2>}
-              {description && <p className="mt-0.5 text-sm text-gray-500 dark:text-neutral-400">{description}</p>}
+              {title && <h2 className="font-bold tracking-[-0.02em] text-[#17181d]">{title}</h2>}
+              {description && <p className="mt-0.5 text-sm text-[#8b8e98]">{description}</p>}
             </div>
           </div>
           {action && <div className="shrink-0">{action}</div>}

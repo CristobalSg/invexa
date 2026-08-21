@@ -3,11 +3,11 @@ import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 import {
   ArrowLeftOnRectangleIcon,
-  Bars3Icon,
   BookOpenIcon,
   ChartBarIcon,
   ClipboardDocumentListIcon,
   CubeIcon,
+  ChevronRightIcon,
   MoonIcon,
   ShoppingBagIcon,
   ShoppingCartIcon,
@@ -15,19 +15,12 @@ import {
   TagIcon,
   UserGroupIcon,
   WalletIcon,
-  XMarkIcon,
 } from "@heroicons/react/24/outline";
 import { getStoredUser, logout } from "../services/authService";
 import { getStoredTheme, setStoredTheme, type ThemeMode } from "../services/themeService";
 
-const sidebarLinkClass = (isOpen: boolean) => ({ isActive }: { isActive: boolean }) =>
-  `flex h-11 items-center gap-3 rounded-lg px-3 text-sm font-semibold transition-colors ${
-    isOpen ? "justify-start" : "justify-center"
-  } ${
-    isActive
-      ? "bg-blue-600 text-white shadow-sm dark:bg-blue-500"
-      : "text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-neutral-300 dark:hover:bg-white/10 dark:hover:text-white"
-  }`;
+const sidebarLinkClass = () => ({ isActive }: { isActive: boolean }) =>
+  `flowly-nav-item ${isActive ? "active" : ""}`;
 
 export default function Layout() {
   const navigate = useNavigate();
@@ -35,8 +28,6 @@ export default function Layout() {
   const [theme, setTheme] = useState<ThemeMode>(() => getStoredTheme());
   const user = getStoredUser();
   const isOwner = user?.rol === "OWNER";
-  const sidebarWidth = isOpen ? "w-64" : "w-20";
-  const contentOffset = isOpen ? "lg:pl-64" : "lg:pl-20";
   const iconClass = "h-5 w-5 shrink-0";
 
   const handleLogout = () => {
@@ -61,33 +52,46 @@ export default function Layout() {
     { to: "/usuarios", label: "Usuarios", icon: UserGroupIcon, visible: isOwner },
     { to: "/reportes", label: "Reportes", icon: ChartBarIcon, visible: isOwner },
   ];
+  const mainLinks = links.filter((link) => ["POS", "Ventas", "Caja"].includes(link.label));
+  const inventoryLinks = links.filter((link) => ["Productos", "Compras", "Catálogos", "Ofertas", "Usuarios", "Reportes"].includes(link.label));
 
   return (
-    <div className="min-h-screen bg-slate-100 text-gray-900 dark:bg-neutral-950 dark:text-neutral-100">
-      <aside
-        className={`fixed inset-y-0 left-0 z-20 hidden border-r border-gray-200 bg-white shadow-sm transition-[width] duration-200 dark:border-white/10 dark:bg-neutral-900 lg:flex ${sidebarWidth}`}
-      >
-        <div className="flex min-h-0 w-full flex-col px-3 py-4">
-          <div className={`flex h-12 items-center ${isOpen ? "justify-between" : "justify-center"}`}>
-            {isOpen && (
-              <div className="min-w-0">
-                <p className="truncate text-xl font-semibold text-blue-700 dark:text-blue-300">Invexa</p>
-                {user && <p className="truncate text-xs text-gray-500 dark:text-neutral-400">{user.nombre} · {user.rol}</p>}
-              </div>
-            )}
+    <div className={`flowly-shell ${theme === "dark" ? "dark" : ""}`}>
+      <aside className={`flowly-sidebar hidden lg:block ${isOpen ? "" : "collapsed"}`} aria-label="Navegación principal">
+        <div className="flowly-brand">
+          <button
+            type="button"
+            onClick={() => {
+              if (!isOpen) setIsOpen(true);
+            }}
+            className="flowly-logo"
+            aria-label={isOpen ? "Invexa" : "Abrir sidebar"}
+            title={isOpen ? "Invexa" : "Abrir sidebar"}
+          />
+          <div className="flowly-brand-copy">
+            <strong>Invexa</strong>
+            <span>{user ? `${user.nombre} · ${user.rol}` : "Point of Sale"}</span>
+          </div>
+          {isOpen && (
             <button
               type="button"
-              onClick={() => setIsOpen((current) => !current)}
-              className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-neutral-400 dark:hover:bg-white/10 dark:hover:text-white"
-              aria-label={isOpen ? "Cerrar sidebar" : "Abrir sidebar"}
-              title={isOpen ? "Cerrar sidebar" : "Abrir sidebar"}
+              onClick={() => setIsOpen(false)}
+              className="flowly-collapse"
+              aria-label="Cerrar sidebar"
+              aria-expanded={isOpen}
+              title="Cerrar sidebar"
             >
-              {isOpen ? <XMarkIcon className={iconClass} /> : <Bars3Icon className={iconClass} />}
+              <ChevronRightIcon className={iconClass} />
             </button>
-          </div>
+          )}
+        </div>
 
-          <nav className="mt-6 flex flex-1 flex-col gap-1 overflow-y-auto">
-            {links.filter((link) => link.visible).map((link) => {
+        <div className="flowly-separator" />
+
+        <nav className="flowly-nav">
+          <div className="flowly-nav-section">
+            <div className="flowly-section-title">MAIN</div>
+            {mainLinks.filter((link) => link.visible).map((link) => {
               const Icon = link.icon;
 
               return (
@@ -95,51 +99,73 @@ export default function Layout() {
                   key={link.to}
                   to={link.to}
                   end
-                  className={sidebarLinkClass(isOpen)}
+                  className={sidebarLinkClass()}
                   title={link.label}
                   aria-label={link.label}
+                  data-label={link.label}
                 >
-                  <Icon className={iconClass} />
-                  {isOpen && <span className="truncate">{link.label}</span>}
+                  <span className="flowly-nav-icon"><Icon /></span>
+                  <span className="flowly-nav-label">{link.label}</span>
                 </NavLink>
               );
             })}
-          </nav>
+          </div>
 
-          <div className="mt-4 space-y-2 border-t border-gray-200 pt-3 dark:border-white/10">
+          <div className="flowly-nav-section">
+            <div className="flowly-section-title">INVENTARIO</div>
+            {inventoryLinks.filter((link) => link.visible).map((link) => {
+              const Icon = link.icon;
+
+              return (
+                <NavLink
+                  key={link.to}
+                  to={link.to}
+                  end
+                  className={sidebarLinkClass()}
+                  title={link.label}
+                  aria-label={link.label}
+                  data-label={link.label}
+                >
+                  <span className="flowly-nav-icon"><Icon /></span>
+                  <span className="flowly-nav-label">{link.label}</span>
+                </NavLink>
+              );
+            })}
+          </div>
+
+          <div className="flowly-nav-section">
+            <div className="flowly-section-title">SOPORTE</div>
             <button
               type="button"
               onClick={handleToggleTheme}
-              className={`flex h-11 w-full items-center gap-3 rounded-lg px-3 text-sm font-semibold text-gray-700 hover:bg-gray-100 dark:text-neutral-200 dark:hover:bg-white/10 ${
-                isOpen ? "justify-start" : "justify-center"
-              }`}
+              className="flowly-nav-item"
               aria-label={theme === "dark" ? "Activar modo claro" : "Activar modo noche"}
               title={theme === "dark" ? "Modo claro" : "Modo noche"}
             >
-              {theme === "dark" ? <SunIcon className={iconClass} /> : <MoonIcon className={iconClass} />}
-              {isOpen && <span className="truncate">{theme === "dark" ? "Modo claro" : "Modo noche"}</span>}
+              <span className="flowly-nav-icon">
+                {theme === "dark" ? <SunIcon /> : <MoonIcon />}
+              </span>
+              <span className="flowly-nav-label">{theme === "dark" ? "Modo claro" : "Modo noche"}</span>
             </button>
             <button
               type="button"
               onClick={handleLogout}
-              className={`flex h-11 w-full items-center gap-3 rounded-lg px-3 text-sm font-semibold text-red-700 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-950/40 ${
-                isOpen ? "justify-start" : "justify-center"
-              }`}
+              className="flowly-nav-item"
               aria-label="Cambiar usuario"
               title="Cambiar usuario"
             >
-              <ArrowLeftOnRectangleIcon className={iconClass} />
-              {isOpen && <span className="truncate">Cambiar usuario</span>}
+              <span className="flowly-nav-icon"><ArrowLeftOnRectangleIcon /></span>
+              <span className="flowly-nav-label">Cambiar usuario</span>
             </button>
           </div>
-        </div>
+        </nav>
       </aside>
 
-      <div className="border-b border-gray-200 bg-white px-4 py-3 shadow-sm dark:border-white/10 dark:bg-neutral-900 lg:hidden">
+      <div className="rounded-3xl border border-white bg-white px-4 py-3 shadow-sm lg:hidden">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="text-xl font-semibold text-blue-700 dark:text-blue-300">Invexa</p>
-            {user && <p className="text-xs text-gray-500 dark:text-neutral-400">{user.nombre} · {user.rol}</p>}
+            <p className="text-xl font-semibold text-gray-900">Invexa</p>
+            {user && <p className="text-xs text-gray-500">{user.nombre} · {user.rol}</p>}
           </div>
           <button
             type="button"
@@ -156,7 +182,7 @@ export default function Layout() {
             const Icon = link.icon;
 
             return (
-              <NavLink key={link.to} to={link.to} end className={sidebarLinkClass(true)}>
+              <NavLink key={link.to} to={link.to} end className="flex h-11 items-center gap-2 rounded-xl bg-gray-50 px-3 text-sm font-semibold">
                 <Icon className={iconClass} />
                 <span>{link.label}</span>
               </NavLink>
@@ -165,8 +191,8 @@ export default function Layout() {
         </nav>
       </div>
 
-      <main className={`min-h-screen transition-[padding] duration-200 ${contentOffset}`}>
-        <div className="mx-auto max-w-screen-2xl px-4 py-6">
+      <main className="flowly-page">
+        <div className="flowly-outlet">
           <Outlet />
         </div>
       </main>

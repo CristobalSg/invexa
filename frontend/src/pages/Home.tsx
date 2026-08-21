@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { StarIcon as StarIconOutline, TagIcon, WalletIcon } from "@heroicons/react/24/outline";
+import { EllipsisHorizontalIcon, MagnifyingGlassIcon, PlusIcon, StarIcon as StarIconOutline, TagIcon, WalletIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { StarIcon as StarIconSolid } from "@heroicons/react/24/solid";
 import InputForm from "../components/InputForm";
 import MainList from "../components/MainList";
@@ -12,13 +12,18 @@ import type { MetodoPago, ModalidadVenta, Oferta, Producto } from "../types/api"
 import { createVenta } from "../services/transactionService";
 import { getCajaActual } from "../services/cajaService";
 import { getProducts } from "../services/productService";
-import { getOfertasActivas } from "../services/catalogService";
+import { getCategorias, getOfertasActivas } from "../services/catalogService";
 
 type CartProduct = Producto & { quantity: number; cartItemId: string };
 type CartSession = { id: string; name: string; items: CartProduct[] };
 type MixedPaymentMethod = "EFECTIVO" | "TARJETA" | "TRANSFERENCIA";
 type PaymentAmounts = Record<MixedPaymentMethod, string>;
-type QuickProductsModal = "frutas-verduras" | "destacados" | "ofertas";
+type QuickProductsModal = "frutas-verduras" | "destacados" | "ofertas" | `categoria-${number}`;
+type ProductListFilter =
+  | { type: "all" }
+  | { type: "category"; categoryId: number; categoryName: string }
+  | { type: "featured" }
+  | { type: "offers" };
 
 const isWeighableProduct = (product: Producto) =>
   product.unidad_venta === "PESO";
@@ -97,25 +102,6 @@ const paymentMethodLabels: Record<MetodoPago, string> = {
   MIXTO: "Mixto",
 };
 
-const paymentMethodClasses: Record<MetodoPago, { selected: string; idle: string }> = {
-  EFECTIVO: {
-    selected: "border-emerald-600 bg-emerald-600 text-white shadow-sm",
-    idle: "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100",
-  },
-  TARJETA: {
-    selected: "border-sky-600 bg-sky-600 text-white shadow-sm",
-    idle: "border-sky-200 bg-sky-50 text-sky-800 hover:bg-sky-100",
-  },
-  TRANSFERENCIA: {
-    selected: "border-indigo-600 bg-indigo-600 text-white shadow-sm",
-    idle: "border-indigo-200 bg-indigo-50 text-indigo-800 hover:bg-indigo-100",
-  },
-  MIXTO: {
-    selected: "border-amber-500 bg-amber-500 text-white shadow-sm",
-    idle: "border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100",
-  },
-};
-
 const cashSuggestionAmounts = [1000, 2000, 5000, 10000, 20000];
 const featuredProductsStorageKey = "pos-featured-products";
 
@@ -127,6 +113,44 @@ const formatOfferQuantity = (offer: Oferta) =>
   offer.producto_unidad_venta === "PESO"
     ? `${Number((offer.cantidad_oferta * 1000).toFixed(0))} g`
     : `${offer.cantidad_oferta} un.`;
+
+const getCategoryVisual = (name: string) => {
+  const normalized = normalizeText(name);
+  if (normalized.includes("fruta")) return "🍊";
+  if (normalized.includes("verdura")) return "🥦";
+  if (normalized.includes("lact")) return "🥛";
+  if (normalized.includes("bebida")) return "🧃";
+  if (normalized.includes("carne")) return "🥩";
+  return name.trim().charAt(0).toUpperCase() || "•";
+};
+
+const categoryImageModules = import.meta.glob("../assets/images/categories/*.{png,jpg,jpeg,webp,avif}", {
+  eager: true,
+  query: "?url",
+  import: "default",
+}) as Record<string, string>;
+
+const slugifyAssetName = (value: string) =>
+  normalizeText(value)
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+const categoryImagesBySlug = Object.entries(categoryImageModules).reduce<Record<string, string>>((acc, [path, src]) => {
+  const filename = path.split("/").pop()?.replace(/\.[^.]+$/, "") ?? "";
+  const matchingCategory = [
+    "frutas-y-verduras",
+    "congelados",
+    "abarrotes",
+    "bebidas",
+    "consignacion",
+  ].find((slug) => filename === slug || filename.startsWith(`${slug}-`));
+
+  if (matchingCategory && !acc[matchingCategory]) {
+    acc[matchingCategory] = src;
+  }
+
+  return acc;
+}, {});
 
 const calculateOfferLine = (product: Producto, quantity: number, offer?: Oferta) => {
   const normalTotal = product.precio_venta * quantity;
@@ -196,7 +220,11 @@ const readFeaturedProductIds = () => {
 export default function Home() {
   const queryClient = useQueryClient();
   const barcodeInputRef = useRef<HTMLInputElement>(null);
+  const productSearchInputRef = useRef<HTMLInputElement>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [isProductSearchOpen, setIsProductSearchOpen] = useState(false);
+  const [barcodeClearSignal, setBarcodeClearSignal] = useState(0);
+  const [productListFilter, setProductListFilter] = useState<ProductListFilter>({ type: "all" });
   const [carts, setCarts] = useState<CartSession[]>(() => [createCartSession(1)]);
   const [activeCartId] = useState(() => "");
   const [message, setMessage] = useState("");
@@ -204,6 +232,7 @@ export default function Home() {
   const [weighableProduct, setWeighableProduct] = useState<Producto | null>(null);
   const [grams, setGrams] = useState("");
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [categoryModalOpen, setCategoryModalOpen] = useState(false);
   const [quickProductsModal, setQuickProductsModal] = useState<QuickProductsModal | null>(null);
   const [featuredProductIds, setFeaturedProductIds] = useState<number[]>(readFeaturedProductIds);
   const [modalidadVenta, setModalidadVenta] = useState<ModalidadVenta>("NORMAL");
@@ -225,6 +254,10 @@ export default function Home() {
     queryKey: ["products"],
     queryFn: () => getProducts({ activo: true }),
   });
+  const { data: categorias } = useQuery({
+    queryKey: ["categorias"],
+    queryFn: () => getCategorias(),
+  });
   const { data: ofertasActivas } = useQuery({
     queryKey: ["ofertas", "activas"],
     queryFn: () => getOfertasActivas(),
@@ -232,6 +265,14 @@ export default function Home() {
 
   const activeOffers = ofertasActivas?.items ?? [];
   const activeOffersByProductId = new Map(activeOffers.map((offer) => [offer.producto_id, offer]));
+  const allCategoryButtons = (categorias?.items ?? [])
+    .map((category) => ({ id: category.id, name: category.nombre }));
+  const categoryButtons = allCategoryButtons.slice(0, 4);
+  const extraCategoryButtons = allCategoryButtons.slice(4);
+  const quickCategoryId = quickProductsModal?.startsWith("categoria-")
+    ? Number(quickProductsModal.replace("categoria-", ""))
+    : null;
+  const quickCategoryName = allCategoryButtons.find((category) => category.id === quickCategoryId)?.name;
 
   const produceProducts = (productos?.items ?? []).filter(
     (product) =>
@@ -242,18 +283,39 @@ export default function Home() {
   );
   const featuredProducts = (productos?.items ?? []).filter((product) => featuredProductIds.includes(product.id));
   const offerProducts = (productos?.items ?? []).filter((product) => activeOffersByProductId.has(product.id));
+  const listedProducts =
+    productListFilter.type === "category"
+      ? (productos?.items ?? []).filter((product) => product.categoria_id === productListFilter.categoryId)
+      : productListFilter.type === "featured"
+        ? featuredProducts
+        : productListFilter.type === "offers"
+          ? offerProducts
+          : productos?.items ?? [];
+  const listedProductsTitle =
+    productListFilter.type === "category"
+      ? productListFilter.categoryName
+      : productListFilter.type === "featured"
+        ? "Favoritos"
+        : productListFilter.type === "offers"
+          ? "Ofertas"
+          : "Productos";
+  const categoryProducts = quickCategoryId
+    ? (productos?.items ?? []).filter((product) => product.categoria_id === quickCategoryId)
+    : [];
   const quickProducts =
     quickProductsModal === "destacados"
       ? featuredProducts
       : quickProductsModal === "ofertas"
         ? offerProducts
-        : produceProducts;
+        : quickCategoryId
+          ? categoryProducts
+          : produceProducts;
   const quickProductsTitle =
     quickProductsModal === "destacados"
       ? "Productos destacados"
       : quickProductsModal === "ofertas"
         ? "Productos en oferta"
-        : "Frutas y verduras";
+        : quickCategoryName ?? "Frutas y verduras";
   const resolvedActiveCartId = activeCartId || carts[0]?.id || "";
   const activeCart = carts.find((cartSession) => cartSession.id === resolvedActiveCartId) ?? carts[0];
   const cart = activeCart?.items ?? [];
@@ -265,6 +327,12 @@ export default function Home() {
   useEffect(() => {
     focusBarcodeInput();
   }, []);
+
+  useEffect(() => {
+    if (isProductSearchOpen) {
+      window.setTimeout(() => productSearchInputRef.current?.focus(), 0);
+    }
+  }, [isProductSearchOpen]);
 
   useEffect(() => {
     window.sessionStorage.setItem(featuredProductsStorageKey, JSON.stringify(featuredProductIds));
@@ -467,6 +535,15 @@ export default function Home() {
     focusBarcodeInput();
   };
 
+  const handleWeightKeypadPress = (key: string) => {
+    setGrams((current) => {
+      if (key === "clear") return "";
+      if (key === "backspace") return current.slice(0, -1);
+      if (/^\d$/.test(key)) return `${current}${key}`.replace(/^0+(?=\d)/, "");
+      return current;
+    });
+  };
+
 
   const handleDecreaseQuantity = (cartItemId: string) => {
     setCart((prev) =>
@@ -502,6 +579,23 @@ export default function Home() {
     setCart((prev) => prev.filter((p) => p.cartItemId !== cartItemId));
   };
 
+  const handleCloseProductSearch = () => {
+    setIsProductSearchOpen(false);
+    setSearchTerm("");
+    focusBarcodeInput();
+  };
+
+  const handleProductSearchBlur = (event: React.FocusEvent<HTMLInputElement>) => {
+    const nextTarget = event.relatedTarget as HTMLElement | null;
+    if (nextTarget?.getAttribute("aria-label") === "Borrar código") return;
+
+    window.setTimeout(handleCloseProductSearch, 120);
+  };
+
+  const handleClearBarcodeInput = () => {
+    setBarcodeClearSignal((current) => current + 1);
+  };
+
   const handleModalidadChange = (modalidad: ModalidadVenta) => {
     const nextTotal =
       modalidad === "RETIRO_DUENO"
@@ -516,62 +610,158 @@ export default function Home() {
   };
 
   return (
-    <div className="grid grid-cols-1 gap-6 pb-28 lg:grid-cols-3 lg:pb-6">
-      <div className="md:col-span-2 space-y-4">
-        <InputForm
-          ref={barcodeInputRef}
-          title="Código de barra..."
-          onProductFound={handleProductFound}
-          size="large"
+    <div className="pos-main-content">
+      <section className="pos-catalog-panel">
+        <header className="pos-header-row">
+          <div>
+            <p className="pos-kicker">Venta actual</p>
+            <h1 className="pos-title">Punto de venta</h1>
+          </div>
+          <div className="pos-status-pill">
+            <span className="pos-status-dot" />
+            {cajaActual?.abierta ? "Caja abierta" : "Caja cerrada"}
+          </div>
+        </header>
+
+        <div className="pos-barcode-row">
+          <InputForm
+            ref={barcodeInputRef}
+            title="Escanear o ingresar código de barra"
+            onProductFound={handleProductFound}
+            clearSignal={barcodeClearSignal}
+            showClearButton={false}
+            size="large"
+          />
+          <button
+            type="button"
+            onClick={() => setIsProductSearchOpen(true)}
+            className="pos-tool-btn"
+            aria-label="Buscar producto"
+            title="Buscar producto"
+          >
+            <MagnifyingGlassIcon className="h-6 w-6" />
+          </button>
+          <button
+            type="button"
+            className="pos-tool-btn"
+            aria-label="Agregar"
+            title="Agregar"
+          >
+            <PlusIcon className="h-6 w-6" />
+          </button>
+          <button
+            type="button"
+            onClick={handleClearBarcodeInput}
+            className="pos-tool-btn"
+            aria-label="Borrar código"
+            title="Borrar código"
+          >
+            <XMarkIcon className="h-6 w-6" />
+          </button>
+        </div>
+
+        <section className="pos-category-block">
+          <div className="pos-section-row">
+            <div>
+              <span className="pos-kicker">Categorías</span>
+              <h2 className="pos-subtitle">Explora productos</h2>
+            </div>
+            <span className="pos-category-count">{allCategoryButtons.length} categorías</span>
+          </div>
+
+          <div className="pos-category-strip">
+            {categoryButtons.map((category) => (
+              <button
+                key={category.id}
+                type="button"
+                onClick={() => setProductListFilter({ type: "category", categoryId: category.id, categoryName: category.name })}
+                className={`pos-category-card ${productListFilter.type === "category" && productListFilter.categoryId === category.id ? "active" : ""}`}
+              >
+                <span className="pos-category-visual">
+                  {categoryImagesBySlug[slugifyAssetName(category.name)] ? (
+                    <img src={categoryImagesBySlug[slugifyAssetName(category.name)]} alt="" />
+                  ) : (
+                    getCategoryVisual(category.name)
+                  )}
+                </span>
+                <span className="pos-category-label">{category.name}</span>
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => setCategoryModalOpen(true)}
+              className="pos-category-card"
+              aria-label="Ver más categorías"
+              title="Ver más categorías"
+            >
+              <span className="pos-category-visual">
+                <EllipsisHorizontalIcon className="h-8 w-8 text-[#6fab89]" />
+              </span>
+              <span className="pos-category-label">Más</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setProductListFilter({ type: "featured" })}
+              className={`pos-category-card ${productListFilter.type === "featured" ? "active" : ""}`}
+              aria-label="Productos destacados"
+              title="Productos destacados"
+            >
+              <span className="pos-category-visual"><StarIconSolid className="h-7 w-7 text-amber-500" /></span>
+              <span className="pos-category-label">Favoritos</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setProductListFilter({ type: "offers" })}
+              className={`pos-category-card ${productListFilter.type === "offers" ? "active" : ""}`}
+              aria-label="Productos en oferta"
+              title="Productos en oferta"
+            >
+              <span className="pos-category-visual"><TagIcon className="h-7 w-7 text-sky-600" /></span>
+              <span className="pos-category-label">Ofertas</span>
+            </button>
+          </div>
+        </section>
+
+        {isProductSearchOpen && (
+          <div className="pos-search-wrap">
+            <InputForm
+              ref={productSearchInputRef}
+              title="Buscar producto"
+              onSearchChange={setSearchTerm}
+              onBlur={handleProductSearchBlur}
+            />
+          </div>
+        )}
+
+        <SideList
+          searchTerm={searchTerm}
+          onProductClick={handleProductFound}
+          featuredProductIds={featuredProductIds}
+          onToggleFeatured={toggleFeaturedProduct}
+          productsOverride={listedProducts}
+          isLoadingOverride={!productos}
+          title={listedProductsTitle}
         />
+      </section>
+
+      <aside className="pos-checkout-panel">
+        <div className="pos-cart-head">
+          <div>
+            <span className="pos-kicker">Pedido</span>
+            <h2 className="pos-subtitle">Carrito de compras</h2>
+          </div>
+          <button type="button" onClick={() => setCart([])} className="border-0 bg-transparent px-2 py-1 text-xs text-[#8b8e97] hover:text-[#494b53]">
+            Vaciar
+          </button>
+        </div>
         <MainList
           products={cart}
           onDecrease={handleDecreaseQuantity}
           onIncrease={handleIncreaseQuantity}
           onRemove={handleRemoveProduct}
         />
-      </div>
-
-      <div className="md:col-span-1 space-y-4">
-        <InputForm
-          title="Buscar producto"
-          onSearchChange={setSearchTerm}
-        />
-        <div className="grid grid-cols-[1fr_auto_auto] gap-2">
-          <button
-            type="button"
-            onClick={() => setQuickProductsModal("frutas-verduras")}
-            className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-left text-sm font-semibold text-emerald-800 hover:bg-emerald-100"
-          >
-            Frutas y verduras
-          </button>
-          <button
-            type="button"
-            onClick={() => setQuickProductsModal("destacados")}
-            className="flex h-full min-w-14 items-center justify-center rounded-lg border border-amber-200 bg-amber-50 px-4 text-amber-700 hover:bg-amber-100"
-            aria-label="Productos destacados"
-            title="Productos destacados"
-          >
-            <StarIconSolid className="h-5 w-5" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setQuickProductsModal("ofertas")}
-            className="flex h-full min-w-14 items-center justify-center rounded-lg border border-sky-200 bg-sky-50 px-4 text-sky-700 hover:bg-sky-100"
-            aria-label="Productos en oferta"
-            title="Productos en oferta"
-          >
-            <TagIcon className="h-5 w-5" />
-          </button>
-        </div>
-        <SideList
-          searchTerm={searchTerm}
-          onProductClick={handleProductFound}
-          featuredProductIds={featuredProductIds}
-          onToggleFeatured={toggleFeaturedProduct}
-        />
         {!cajaActual?.abierta && (
-          <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          <div className="mb-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
             <div className="flex items-start gap-3">
               <WalletIcon className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
               <div>
@@ -586,11 +776,9 @@ export default function Home() {
             </div>
           </div>
         )}
-        {message && <p className="text-sm bg-white rounded border p-3">{message}</p>}
-        <div className="sticky bottom-4 z-10">
-          <StatsPanel total={totalFinal} onFinish={handleOpenPayment} disabled={cart.length === 0 || !cajaActual?.abierta} />
-        </div>
-      </div>
+        {message && <p className="mb-3 rounded-xl border border-[#ececf0] bg-white p-3 text-sm">{message}</p>}
+        <StatsPanel total={totalFinal} onFinish={handleOpenPayment} disabled={cart.length === 0 || !cajaActual?.abierta} />
+      </aside>
       {centerAlert && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-sm rounded-lg bg-white p-6 text-center shadow-xl">
@@ -611,34 +799,56 @@ export default function Home() {
         </div>
       )}
       {weighableProduct && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
-            <h2 className="text-xl font-bold text-gray-900">{weighableProduct.nombre}</h2>
-            <p className="mt-1 text-sm text-gray-500">
-              Precio por kilo: ${weighableProduct.precio_venta.toLocaleString()} · Stock: {weighableProduct.stock} kg
-            </p>
-            <FormField label="Peso en gramos" className="mt-5">
-            <input
-              autoFocus
-              type="number"
-              min={1}
-              step={1}
-              value={grams}
-              onChange={(event) => setGrams(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") handleConfirmWeight();
-                if (event.key === "Escape") {
-                  setWeighableProduct(null);
-                  focusBarcodeInput();
-                }
-              }}
-              className={`${inputClassName} text-lg`}
-            />
-            </FormField>
-            <div className="mt-3 rounded-md bg-gray-50 p-3 text-sm text-gray-700">
-              {(Number(grams) / 1000).toFixed(3)} kg · Total ${Math.max(0, (Number(grams) / 1000) * weighableProduct.precio_venta).toLocaleString()}
+        <div className="flow-modal-backdrop">
+          <div className="flow-modal weight-modal max-w-md p-0">
+            <div className="p-6 pb-4">
+              <span className="pos-kicker">Producto por peso</span>
+              <h2 className="flow-modal-title">{weighableProduct.nombre}</h2>
+              <p className="mt-2 text-sm text-[#8b8e98]">
+                ${weighableProduct.precio_venta.toLocaleString()}/kg · Stock {weighableProduct.stock} kg
+              </p>
+              <FormField label="Peso en gramos" className="mt-5">
+                <input
+                  autoFocus
+                  inputMode="numeric"
+                  type="text"
+                  value={grams}
+                  onChange={(event) => setGrams(event.target.value.replace(/\D/g, ""))}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") handleConfirmWeight();
+                    if (event.key === "Escape") {
+                      setWeighableProduct(null);
+                      focusBarcodeInput();
+                    }
+                  }}
+                  className={`${inputClassName} text-center text-3xl font-bold`}
+                  placeholder="0"
+                />
+              </FormField>
+              <div className="mt-3 flow-total-card text-sm text-[#5f626b]">
+                <div className="flex justify-between">
+                  <span>Peso</span>
+                  <strong>{(Number(grams) / 1000).toFixed(3)} kg</strong>
+                </div>
+                <div className="pos-grand-total">
+                  <span>Total</span>
+                  <strong>${Math.max(0, (Number(grams) / 1000) * weighableProduct.precio_venta).toLocaleString()}</strong>
+                </div>
+              </div>
             </div>
-            <FormActions className="mt-1">
+
+            <div className="weight-keypad">
+              {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((key) => (
+                <button key={key} type="button" onClick={() => handleWeightKeypadPress(key)}>
+                  {key}
+                </button>
+              ))}
+              <button type="button" onClick={() => handleWeightKeypadPress("clear")}>C</button>
+              <button type="button" onClick={() => handleWeightKeypadPress("0")}>0</button>
+              <button type="button" onClick={() => handleWeightKeypadPress("backspace")}>⌫</button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 border-t border-[#ececf0] bg-white p-4">
               <Button
                 variant="ghost"
                 onClick={() => {
@@ -651,7 +861,7 @@ export default function Home() {
               <Button onClick={handleConfirmWeight}>
                 Agregar
               </Button>
-            </FormActions>
+            </div>
           </div>
         </div>
       )}
@@ -730,14 +940,70 @@ export default function Home() {
           </div>
         </div>
       )}
+      {categoryModalOpen && (
+        <div className="flow-modal-backdrop">
+          <div className="flow-modal max-w-3xl">
+            <div className="pos-section-row">
+              <div>
+                <span className="pos-kicker">Categorías</span>
+                <h2 className="flow-modal-title">Más categorías</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCategoryModalOpen(false)}
+                className="rounded-xl border border-[#ececf0] bg-white px-3 py-2 text-sm font-bold text-[#5f626b] hover:bg-[#f7f7f9]"
+              >
+                Cerrar
+              </button>
+            </div>
+
+            <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+              {extraCategoryButtons.map((category) => (
+                <button
+                  key={category.id}
+                  type="button"
+                  onClick={() => {
+                    setProductListFilter({ type: "category", categoryId: category.id, categoryName: category.name });
+                    setCategoryModalOpen(false);
+                  }}
+                  className={`pos-category-card ${productListFilter.type === "category" && productListFilter.categoryId === category.id ? "active" : ""}`}
+                >
+                  <span className="pos-category-visual">
+                    {categoryImagesBySlug[slugifyAssetName(category.name)] ? (
+                      <img src={categoryImagesBySlug[slugifyAssetName(category.name)]} alt="" />
+                    ) : (
+                      getCategoryVisual(category.name)
+                    )}
+                  </span>
+                  <span className="pos-category-label">{category.name}</span>
+                </button>
+              ))}
+              {extraCategoryButtons.length === 0 && (
+                <p className="col-span-full rounded-2xl border border-[#ececf0] bg-[#fafafa] p-6 text-center text-sm text-[#8b8e98]">
+                  No hay más categorías disponibles.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
       {paymentModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-4xl rounded-lg bg-white p-6 shadow-xl">
-            <h2 className="text-xl font-bold text-gray-900">Finalizar venta</h2>
+        <div className="flow-modal-backdrop">
+          <div className="flow-modal max-w-4xl">
+            <div className="pos-section-row">
+              <div>
+                <span className="pos-kicker">Pago</span>
+                <h2 className="flow-modal-title">Finalizar venta</h2>
+              </div>
+              <div className="pos-status-pill">
+                <span className="pos-status-dot" />
+                {cart.length} productos
+              </div>
+            </div>
             <div className="mt-4 grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
               <div>
-                <div className="rounded-md bg-gray-50 p-4">
-                  <div className="flex justify-between text-sm text-gray-500">
+                <div className="flow-total-card">
+                  <div className="flex justify-between text-sm text-[#84868e]">
                     <span>Subtotal</span>
                     <span>${total.toLocaleString()}</span>
                   </div>
@@ -748,34 +1014,32 @@ export default function Home() {
                     </div>
                   )}
                   {modalidadVenta === "PRECIO_COSTO" && (
-                    <div className="mt-1 flex justify-between text-sm text-gray-500">
+                    <div className="mt-1 flex justify-between text-sm text-[#84868e]">
                       <span>Venta precio costo</span>
                       <span>{formatMoney(totalCosto)}</span>
                     </div>
                   )}
                   {modalidadVenta === "RETIRO_DUENO" && (
-                    <div className="mt-1 flex justify-between text-sm text-gray-500">
+                    <div className="mt-1 flex justify-between text-sm text-[#84868e]">
                       <span>Retiro dueño</span>
                       <span>Costo ref. {formatMoney(totalCosto)}</span>
                     </div>
                   )}
-                  <p className="mt-3 text-sm text-gray-500">Total a pagar</p>
-                  <p className="text-3xl font-bold text-gray-900">${totalFinal.toLocaleString()}</p>
+                  <div className="pos-grand-total">
+                    <span>Total a pagar</span>
+                    <strong>${totalFinal.toLocaleString()}</strong>
+                  </div>
                 </div>
 
-                <label className="mt-5 block text-sm font-medium text-gray-700">Método de pago</label>
+                <label className="mt-5 block text-sm font-bold text-[#5f626b]">Método de pago</label>
                 <div className="mt-2 grid grid-cols-2 gap-2">
                   {(["EFECTIVO", "TARJETA", "TRANSFERENCIA", "MIXTO"] as MetodoPago[]).map((method) => {
-                    const colorClass = metodoPago === method
-                      ? paymentMethodClasses[method].selected
-                      : paymentMethodClasses[method].idle;
-
                     return (
                       <button
                         key={method}
                         type="button"
                         onClick={() => handlePaymentMethodChange(method)}
-                        className={`rounded-lg border px-3 py-3 text-sm font-semibold transition-colors ${colorClass}`}
+                        className={`flow-payment-option ${metodoPago === method ? "active" : ""}`}
                       >
                         {paymentMethodLabels[method]}
                       </button>
@@ -784,15 +1048,15 @@ export default function Home() {
                 </div>
 
                 <div className="mt-5">
-                  <p className="text-sm font-medium text-gray-700">Administrador</p>
+                  <p className="text-sm font-bold text-[#5f626b]">Administrador</p>
                   <div className="mt-2 grid grid-cols-1 gap-2">
                     <button
                       type="button"
                       onClick={() => handleModalidadChange(modalidadVenta === "RETIRO_DUENO" ? "NORMAL" : "RETIRO_DUENO")}
-                      className={`rounded-lg border px-3 py-2 text-left text-sm font-semibold ${
+                      className={`flow-payment-option ${
                         modalidadVenta === "RETIRO_DUENO"
-                          ? "border-blue-600 bg-blue-50 text-blue-700"
-                          : "border-gray-300 text-gray-700 hover:bg-gray-50"
+                          ? "active"
+                          : ""
                       }`}
                     >
                       Retiro de dueño
@@ -800,10 +1064,10 @@ export default function Home() {
                     <button
                       type="button"
                       onClick={() => handleModalidadChange(modalidadVenta === "PRECIO_COSTO" ? "NORMAL" : "PRECIO_COSTO")}
-                      className={`rounded-lg border px-3 py-2 text-left text-sm font-semibold ${
+                      className={`flow-payment-option ${
                         modalidadVenta === "PRECIO_COSTO"
-                          ? "border-blue-600 bg-blue-50 text-blue-700"
-                          : "border-gray-300 text-gray-700 hover:bg-gray-50"
+                          ? "active"
+                          : ""
                       }`}
                     >
                       Vender a precio costo
@@ -842,21 +1106,21 @@ export default function Home() {
                       className={`${inputClassName} text-lg`}
                     />
                     </FormField>
-                    <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-center">
+                    <div className="mt-3 rounded-[20px] border border-emerald-200 bg-emerald-50 p-4 text-center">
                       <p className="text-sm font-semibold uppercase text-emerald-700">Vuelto</p>
                       <p className="mt-1 text-4xl font-bold leading-tight text-emerald-800">
                         ${Math.max(0, cashReceivedAmount - totalFinal).toLocaleString()}
                       </p>
                     </div>
                     <div className="mt-4">
-                      <p className="text-sm font-medium text-gray-700">Sugeridos</p>
+                      <p className="text-sm font-bold text-[#5f626b]">Sugeridos</p>
                       <div className="mt-2 grid grid-cols-2 gap-2">
                         {cashSuggestions.map((amount, index) => (
                           <button
                             key={amount}
                             type="button"
                             onClick={() => setCashReceived(toInputAmount(amount))}
-                            className="rounded-lg border border-gray-300 px-3 py-2 text-left text-sm font-semibold text-gray-700 hover:bg-gray-50"
+                            className="flow-payment-option"
                           >
                             {index === 0 ? "Pago justo" : formatMoney(amount)}
                           </button>
@@ -869,17 +1133,17 @@ export default function Home() {
                 {modalidadVenta !== "RETIRO_DUENO" && metodoPago === "MIXTO" && (
                   <div className="space-y-4">
                     <div>
-                      <p className="text-sm font-medium text-gray-700">Combinación de pagos</p>
+                      <p className="text-sm font-bold text-[#5f626b]">Combinación de pagos</p>
                       <div className="mt-2 grid grid-cols-2 gap-2">
                         {mixedPaymentOptions.map((option) => (
                           <button
                             key={option.label}
                             type="button"
                             onClick={() => handleMixedOptionChange(option.methods)}
-                            className={`rounded-lg border px-3 py-2 text-left text-sm font-medium ${
+                            className={`flow-payment-option ${
                               option.methods.join("-") === mixedMethods.join("-")
-                                ? "border-blue-600 bg-blue-50 text-blue-700"
-                                : "border-gray-300 text-gray-700 hover:bg-gray-50"
+                                ? "active"
+                                : ""
                             }`}
                           >
                             {option.label}
@@ -902,13 +1166,13 @@ export default function Home() {
                       ))}
                     </div>
 
-                    <div className="rounded-md bg-gray-50 p-3 text-sm text-gray-700">
+                    <div className="rounded-[16px] border border-[#ececf0] bg-[#fafafa] p-3 text-sm text-[#5f626b]">
                       Pagado: ${mixedTotal.toLocaleString()} · Falta: ${Math.max(0, totalFinal - mixedTotal).toLocaleString()}
                     </div>
                   </div>
                 )}
                 {modalidadVenta === "RETIRO_DUENO" && (
-                  <div className="rounded-md bg-gray-50 p-4 text-sm text-gray-700">
+                  <div className="rounded-[20px] border border-[#ececf0] bg-[#fafafa] p-4 text-sm text-[#5f626b]">
                     Este registro descontará stock y quedará marcado como retiro de dueño. No suma efectivo al cierre de caja.
                   </div>
                 )}

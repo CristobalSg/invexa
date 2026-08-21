@@ -65,40 +65,40 @@ export default function ListPanel({
   }, [page, totalPages]);
 
   return (
-    <section className="overflow-hidden rounded-lg border border-gray-200 bg-white dark:border-white/10 dark:bg-neutral-900">
-      <div className="flex items-center gap-3 border-b border-gray-100 px-4 py-3 dark:border-white/10">
+    <section className="overflow-hidden rounded-[28px] border border-white/90 bg-white shadow-[0_18px_50px_rgba(31,35,48,.08)]">
+      <div className="flex items-center gap-3 border-b border-[#efeff2] px-5 py-4">
         {HeaderIcon && (
-          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300">
+          <span className="flex h-10 w-10 items-center justify-center rounded-[14px] bg-[#f7f7f9] text-[#7652ed]">
             <HeaderIcon className="h-5 w-5" />
           </span>
         )}
-        <h2 className="font-semibold text-gray-900 dark:text-neutral-100">{title}</h2>
+        <h2 className="font-bold tracking-[-0.02em] text-[#17181d]">{title}</h2>
       </div>
 
       {isLoading ? (
-        <p className="px-4 py-6 text-sm text-gray-500 dark:text-neutral-400">{loadingMessage}</p>
+        <p className="px-5 py-6 text-sm text-[#8b8e98]">{loadingMessage}</p>
       ) : items.length === 0 ? (
-        <p className="px-4 py-6 text-center text-sm text-gray-500 dark:text-neutral-400">{emptyMessage}</p>
+        <p className="px-5 py-8 text-center text-sm text-[#8b8e98]">{emptyMessage}</p>
       ) : (
         <>
-        <div className="divide-y divide-gray-100 dark:divide-white/10">
+        <div className="divide-y divide-[#f0f0f2]">
           {visibleItems.map((item) => {
             const ItemIcon = item.icon;
 
             return (
               <div key={item.id}>
-                <div className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-white/5">
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-600 dark:bg-neutral-800 dark:text-neutral-300">
+                <div className="flex items-center gap-3 px-5 py-3.5 hover:bg-[#fbfaf7]">
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] bg-[#faf8f1] text-[#747780]">
                     {ItemIcon && <ItemIcon className="h-5 w-5" />}
                   </span>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="truncate text-sm font-semibold text-gray-900 dark:text-neutral-100">{item.title}</p>
+                      <p className="truncate text-sm font-bold text-[#17181d]">{item.title}</p>
                       {item.badge}
                     </div>
-                    {item.description && <p className="mt-0.5 text-sm text-gray-500 dark:text-neutral-400">{item.description}</p>}
+                    {item.description && <p className="mt-0.5 text-sm text-[#8b8e98]">{item.description}</p>}
                     {item.meta && item.meta.length > 0 && (
-                      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-500 dark:text-neutral-400">
+                      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-[#8b8e98]">
                         {item.meta.map((meta, index) => (
                           <span key={index}>{meta}</span>
                         ))}
@@ -106,14 +106,14 @@ export default function ListPanel({
                     )}
                   </div>
                   {item.amount && (
-                    <div className={`shrink-0 text-right text-sm font-semibold ${item.amountClassName ?? "text-gray-900 dark:text-neutral-100"}`}>
+                    <div className={`shrink-0 text-right text-sm font-bold ${item.amountClassName ?? "text-[#17181d]"}`}>
                       {item.amount}
                     </div>
                   )}
                   {item.action && <div className="shrink-0">{item.action}</div>}
                 </div>
                 {item.expandedContent && (
-                  <div className="border-t border-gray-100 bg-gray-50 px-4 py-3 dark:border-white/10 dark:bg-neutral-950/60">
+                  <div className="border-t border-[#f0f0f2] bg-[#fbfaf7] px-5 py-3">
                     {item.expandedContent}
                   </div>
                 )}
@@ -122,7 +122,7 @@ export default function ListPanel({
           })}
         </div>
         {paginated && items.length > 0 && (
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 px-4 py-3 text-sm text-gray-600 dark:border-white/10 dark:text-neutral-400">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#efeff2] px-5 py-3 text-sm text-[#747780]">
             <span>
               {paginationStart}-{paginationEnd} de {items.length}
             </span>
@@ -132,7 +132,7 @@ export default function ListPanel({
                 <select
                   value={pageSize}
                   onChange={(event) => setPageSize(Number(event.target.value))}
-                  className="rounded-md border border-gray-300 bg-white px-2 py-1 text-sm dark:border-white/10 dark:bg-neutral-950 dark:text-neutral-100"
+                  className="rounded-lg border border-[#ececf0] bg-white px-2 py-1 text-sm"
                 >
                   {pageSizeOptions.map((option) => (
                     <option key={option} value={option}>{option}</option>
@@ -143,7 +143,7 @@ export default function ListPanel({
                 type="button"
                 onClick={() => setPage((current) => Math.max(1, current - 1))}
                 disabled={page === 1}
-                className="rounded-md border border-gray-300 px-2 py-1 font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:text-neutral-200 dark:hover:bg-white/10"
+                className="rounded-lg border border-[#ececf0] bg-white px-2 py-1 font-semibold text-[#5f626b] hover:bg-[#f7f7f9] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Anterior
               </button>
@@ -152,7 +152,7 @@ export default function ListPanel({
                 type="button"
                 onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
                 disabled={page === totalPages}
-                className="rounded-md border border-gray-300 px-2 py-1 font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:text-neutral-200 dark:hover:bg-white/10"
+                className="rounded-lg border border-[#ececf0] bg-white px-2 py-1 font-semibold text-[#5f626b] hover:bg-[#f7f7f9] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Siguiente
               </button>

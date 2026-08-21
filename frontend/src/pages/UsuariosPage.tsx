@@ -27,8 +27,8 @@ export default function UsuariosPage() {
   });
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Usuarios</h1>
+    <div className="admin-page space-y-6">
+      <h1 className="admin-page-title">Usuarios</h1>
       <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
         <div className="xl:sticky xl:top-6 xl:self-start">
       <ModuleCard title="Crear usuario" icon={UserCircleIcon} contentClassName="p-5">

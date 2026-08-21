@@ -31,9 +31,9 @@ export default function StatsPage() {
   const consignacion = useQuery({ queryKey: ["reportes", "consignacion"], queryFn: () => getConsignacion() });
 
   return (
-    <div className="space-y-6">
+    <div className="admin-page space-y-6">
       <div className="flex items-center gap-4">
-        <h1 className="text-2xl font-bold">Reportes</h1>
+        <h1 className="admin-page-title">Reportes</h1>
         <input
           type="date"
           value={selectedDate}

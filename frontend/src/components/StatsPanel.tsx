@@ -6,14 +6,38 @@ interface StatsPanelProps {
 
 export default function StatsPanel({ total, onFinish, disabled }: StatsPanelProps) {
   return (
-    <button
-      type="button"
-      onClick={onFinish}
-      disabled={disabled}
-      className="w-full rounded-xl bg-blue-600 p-6 text-center text-white shadow-md transition-all hover:-translate-y-0.5 hover:bg-blue-700 hover:shadow-lg disabled:translate-y-0 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:shadow-none dark:bg-blue-500 dark:hover:bg-blue-400 dark:disabled:bg-neutral-700 dark:disabled:text-neutral-400"
-    >
-      <span className="block text-sm font-medium text-blue-100">Finalizar venta</span>
-      <span className="mt-2 block text-3xl font-bold">${total.toLocaleString()}</span>
-    </button>
+    <div className="pos-checkout-bottom">
+      <div className="pos-order-details">
+        <div className="pos-section-row mb-3">
+          <h3 className="m-0 text-[15px] font-bold tracking-[-0.02em] text-[#17181d]">Detalle del pedido</h3>
+          <span className="text-[10px] text-[#9a9ca5]">Venta actual</span>
+        </div>
+        <div className="pos-totals-row">
+          <span>Subtotal</span>
+          <strong>${total.toLocaleString()}</strong>
+        </div>
+        <div className="pos-totals-row">
+          <span>Descuento</span>
+          <strong>-$0</strong>
+        </div>
+        <div className="pos-totals-row">
+          <span>IVA incluido</span>
+          <strong>$0</strong>
+        </div>
+        <div className="pos-grand-total">
+          <span>Total</span>
+          <strong>${total.toLocaleString()}</strong>
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={onFinish}
+        disabled={disabled}
+        className="pos-finish-btn"
+      >
+        <span>Finalizar venta</span>
+        <span className="pos-finish-icon">→</span>
+      </button>
+    </div>
   );
 }

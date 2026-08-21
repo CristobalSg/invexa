@@ -5,12 +5,12 @@ import { getProducts, deleteProduct } from "../services/productService";
 import type { ModoInventarioProducto, Producto } from "../types/api";
 
 import { ProductModal } from "../components/ProductModal";
-import { ProductCard } from "../components/ProductCard";
 import ProductFormCreate from "../components/ProductFormCreate";
 import { getStoredUser } from "../services/authService";
 import { getCategorias } from "../services/catalogService";
 import ModuleCard from "../components/ModuleCard";
 import { Button, FormField, inputClassName } from "../components/FormControls";
+import ProductTile from "../components/ProductTile";
 
 const modoInventarioLabels: Record<ModoInventarioProducto, string> = {
   SIN_INVENTARIO: "Sin inventario",
@@ -80,9 +80,9 @@ export default function ProductsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="admin-page space-y-6">
       <div className="flex justify-between items-center mb-4">
-        <h1 className="text-2xl font-bold">Gestión de Inventario</h1>
+        <h1 className="admin-page-title">Gestión de Inventario</h1>
         {isOwner && <Button
           onClick={() => {
             setIsModalOpen(true);
@@ -134,32 +134,14 @@ export default function ProductsPage() {
         />
       </ProductModal>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="pos-product-grid inventory-product-grid">
         {isLoading && <p>Cargando productos...</p>}
         {productosFiltrados.map((product) => (
-          <ProductCard
+          <ProductTile
             key={product.id}
-            name={product.nombre}
-            description={
-              <div>
-                <p className="text-sm text-gray-500">
-                  Código de barras: {product.codigo_barras ?? "Sin código"}
-                </p>
-                <p className="text-sm text-gray-500">
-                  Categoría: {product.categoria_nombre}
-                </p>
-                <p className="text-sm text-gray-500">Propiedad: {product.tipo_propiedad}</p>
-                <p className="text-sm text-gray-500">
-                  Unidad venta: {product.unidad_venta === "PESO" ? "Peso" : "Unidad"}
-                </p>
-                <p className="text-sm text-gray-500">
-                  Modo inventario: {modoInventarioLabels[product.modo_inventario]}
-                </p>
-                <p className="text-sm text-gray-500">Proveedor: {product.proveedor_nombre ?? "No aplica"}</p>
-                <p className="font-semibold mt-2">Stock: {product.stock}{product.unidad_venta === "PESO" ? " kg" : ""}</p>
-                <p className="font-semibold">Precio: ${product.precio_venta.toLocaleString()}</p>
-              </div>
-            }
+            product={product}
+            mode="inventory"
+            inventoryModeLabel={modoInventarioLabels[product.modo_inventario]}
             onEdit={isOwner ? () => handleEdit(product) : undefined}
             onDelete={isOwner ? () => handleDelete(product.id.toString()) : undefined}
           />
