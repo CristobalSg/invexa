@@ -29,6 +29,12 @@ body {
   color: var(--app-text);
 }
 
+*,
+*::before,
+*::after {
+  cursor: none !important;
+}
+
 .dark .bg-white {
   background-color: var(--app-surface);
 }
