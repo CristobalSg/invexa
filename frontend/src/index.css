@@ -885,6 +885,42 @@ body {
   font-weight: 800;
 }
 
+.product-form-touch-keypad {
+  position: sticky;
+  bottom: 82px;
+  z-index: 3;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 -8px;
+  border: 1px solid #ececf0;
+  border-radius: 22px;
+  background: #f7f7f9;
+  padding: 10px;
+  box-shadow: 0 16px 42px rgba(31, 35, 48, 0.12);
+}
+
+.product-form-touch-keypad button {
+  min-height: 54px;
+  border: 1px solid #ececf0;
+  border-radius: 16px;
+  background: #fff;
+  color: #25262c;
+  font-size: 20px;
+  font-weight: 900;
+  box-shadow: 0 5px 15px rgba(33,35,48,.03);
+  transition: .16s ease;
+}
+
+.product-form-touch-keypad button:hover,
+.product-form-touch-keypad button:focus-visible {
+  transform: translateY(-1px);
+  border-color: #d8d1ff;
+  background: #faf9ff;
+  color: #7652ed;
+  outline: none;
+}
+
 .product-form-actions {
   position: sticky;
   bottom: 0;

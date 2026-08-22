@@ -23,10 +23,19 @@ const initialState = {
   activo: true,
 };
 
+type ProductFormState = typeof initialState;
+type NumericFieldName =
+  | "costo_actual"
+  | "precio_venta"
+  | "stock"
+  | "costo_caja"
+  | "cantidad_cajas"
+  | "cantidad_por_caja";
+
 const classificationStorageKey = "inventory-product-classification";
 
 type StoredClassification = Pick<
-  typeof initialState,
+  ProductFormState,
   "categoria_id" | "tipo_propiedad" | "unidad_venta" | "modo_inventario" | "proveedor_id"
 >;
 
@@ -72,7 +81,7 @@ const createInitialFormState = () => ({
   ...readStoredClassification(),
 });
 
-const storeClassification = (form: typeof initialState) => {
+const storeClassification = (form: ProductFormState) => {
   window.localStorage.setItem(
     classificationStorageKey,
     JSON.stringify({
@@ -93,6 +102,8 @@ const toStockFormValue = (product: Producto) => {
   return String(product.stock);
 };
 
+const decimalNumericFields = new Set<NumericFieldName>(["costo_actual", "precio_venta", "stock", "costo_caja", "cantidad_por_caja"]);
+
 interface ProductFormCreateProps {
   initialData?: Producto;
   onSuccess?: () => void;
@@ -104,6 +115,7 @@ export default function ProductFormCreate({
 }: ProductFormCreateProps) {
   const [form, setForm] = useState(createInitialFormState);
   const [message, setMessage] = useState("");
+  const [activeNumericField, setActiveNumericField] = useState<NumericFieldName | null>(null);
   const barcodeInputRef = useRef<HTMLInputElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
   const priceInputRef = useRef<HTMLInputElement>(null);
@@ -203,6 +215,34 @@ export default function ProductFormCreate({
     if (event.key !== "Enter") return;
     event.preventDefault();
     nextInput?.focus();
+  }
+
+  function handleNumericFieldFocus(fieldName: NumericFieldName) {
+    setActiveNumericField(fieldName);
+  }
+
+  function handleNumericKeypadPress(key: string) {
+    if (!activeNumericField) return;
+
+    setForm((prev) => {
+      const current = String(prev[activeNumericField] ?? "");
+      let next = current;
+
+      if (key === "clear") {
+        next = "";
+      } else if (key === "backspace") {
+        next = current.slice(0, -1);
+      } else if (key === "." && decimalNumericFields.has(activeNumericField) && !current.includes(".")) {
+        next = current ? `${current}.` : "0.";
+      } else if (/^\d$/.test(key)) {
+        next = `${current}${key}`.replace(/^0+(?=\d)/, "");
+      }
+
+      return {
+        ...prev,
+        [activeNumericField]: next,
+      };
+    });
   }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -382,6 +422,7 @@ export default function ProductFormCreate({
                   min={0}
                   value={form.costo_caja}
                   onChange={handleChange}
+                  onFocus={() => handleNumericFieldFocus("costo_caja")}
                   className={inputClassName}
                 />
               </FormField>
@@ -394,6 +435,7 @@ export default function ProductFormCreate({
                   step={form.unidad_venta === "PESO" ? 1 : 0.001}
                   value={form.cantidad_por_caja}
                   onChange={handleChange}
+                  onFocus={() => handleNumericFieldFocus("cantidad_por_caja")}
                   className={inputClassName}
                 />
               </FormField>
@@ -406,6 +448,7 @@ export default function ProductFormCreate({
                   step={1}
                   value={form.cantidad_cajas}
                   onChange={handleChange}
+                  onFocus={() => handleNumericFieldFocus("cantidad_cajas")}
                   className={inputClassName}
                 />
               </FormField>
@@ -432,6 +475,7 @@ export default function ProductFormCreate({
               min={0}
               value={form.costo_actual}
               onChange={handleChange}
+              onFocus={() => handleNumericFieldFocus("costo_actual")}
               className={inputClassName}
             />
           </FormField>
@@ -444,6 +488,7 @@ export default function ProductFormCreate({
               min={1}
               value={form.precio_venta}
               onChange={handleChange}
+              onFocus={() => handleNumericFieldFocus("precio_venta")}
               onKeyDown={(event) => focusOnEnter(event, stockInputRef.current)}
               className={inputClassName}
               placeholder="Precio de venta"
@@ -463,6 +508,7 @@ export default function ProductFormCreate({
               step={form.unidad_venta === "PESO" ? 1 : 0.001}
               value={form.stock}
               onChange={handleChange}
+              onFocus={() => handleNumericFieldFocus("stock")}
               className={inputClassName}
               placeholder={form.unidad_venta === "PESO" ? "Ej: 1000" : "Stock inicial"}
               disabled={!initialData && form.ingreso_por_caja}
@@ -472,6 +518,49 @@ export default function ProductFormCreate({
       </section>
 
       {message && <p className="product-form-message">{message}</p>}
+
+      {activeNumericField && (
+        <div className="product-form-touch-keypad">
+          {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((key) => (
+            <button
+              key={key}
+              type="button"
+              onPointerDown={(event) => event.preventDefault()}
+              onClick={() => handleNumericKeypadPress(key)}
+            >
+              {key}
+            </button>
+          ))}
+          <button
+            type="button"
+            onPointerDown={(event) => event.preventDefault()}
+            onClick={() => handleNumericKeypadPress("clear")}
+          >
+            C
+          </button>
+          <button
+            type="button"
+            onPointerDown={(event) => event.preventDefault()}
+            onClick={() => handleNumericKeypadPress("0")}
+          >
+            0
+          </button>
+          <button
+            type="button"
+            onPointerDown={(event) => event.preventDefault()}
+            onClick={() => handleNumericKeypadPress(".")}
+          >
+            .
+          </button>
+          <button
+            type="button"
+            onPointerDown={(event) => event.preventDefault()}
+            onClick={() => handleNumericKeypadPress("backspace")}
+          >
+            ⌫
+          </button>
+        </div>
+      )}
 
       <FormActions className="product-form-actions">
         <Button type="submit">
