@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { keepPreviousData, useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { FunnelIcon, PlusIcon } from "@heroicons/react/24/outline";
-import { getProducts, deleteProduct } from "../services/productService";
+import { getProducts, deleteProduct, reactivateProduct } from "../services/productService";
 import type { ModoInventarioProducto, Producto } from "../types/api";
 
 import { ProductModal } from "../components/ProductModal";
@@ -30,7 +30,7 @@ export default function ProductsPage() {
 
   const { data: products, isLoading, isFetching, error } = useQuery({
     queryKey: ["products"],
-    queryFn: () => getProducts({ activo: true, limit: 100 }),
+    queryFn: () => getProducts({ limit: 100 }),
     placeholderData: keepPreviousData,
   });
   const { data: categorias } = useQuery({ queryKey: ["categorias"], queryFn: () => getCategorias() });
@@ -58,6 +58,13 @@ export default function ProductsPage() {
     },
   });
 
+  const reactivateMutation = useMutation({
+    mutationFn: (id: string) => reactivateProduct(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+    },
+  });
+
   const handleEdit = (product: Producto) => {
     setProductToEdit(product);
     setIsModalOpen(true);
@@ -67,6 +74,10 @@ export default function ProductsPage() {
     if (confirm("¿Estás seguro de que deseas eliminar este producto?")) {
       deleteMutation.mutate(id);
     }
+  };
+
+  const handleReactivate = (id: string) => {
+    reactivateMutation.mutate(id);
   };
 
   const handleCloseModal = () => {
@@ -139,7 +150,8 @@ export default function ProductsPage() {
             mode="inventory"
             inventoryModeLabel={modoInventarioLabels[product.modo_inventario]}
             onEdit={isOwner ? () => handleEdit(product) : undefined}
-            onDelete={isOwner ? () => handleDelete(product.id.toString()) : undefined}
+            onDelete={isOwner && product.activo ? () => handleDelete(product.id.toString()) : undefined}
+            onReactivate={isOwner && !product.activo ? () => handleReactivate(product.id.toString()) : undefined}
           />
         ))}
         {!isLoading && productosFiltrados.length === 0 && (

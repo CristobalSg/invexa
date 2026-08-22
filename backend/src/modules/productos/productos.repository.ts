@@ -120,6 +120,7 @@ export class ProductosRepository {
         INNER JOIN categorias_producto c ON c.id = p.categoria_id
         LEFT JOIN proveedores pr ON pr.id = p.proveedor_id
         WHERE p.codigo_barras = $1
+          AND p.activo = TRUE
         LIMIT 1
       `,
       [codigo],
@@ -269,7 +270,8 @@ export class ProductosRepository {
             ELSE costo_actual
           END,
           precio_venta = COALESCE($13, precio_venta),
-          activo = COALESCE($14, activo),
+          stock = COALESCE($14, stock),
+          activo = COALESCE($15, activo),
           actualizado_en = NOW()
         WHERE id = $1
         RETURNING id
@@ -288,6 +290,7 @@ export class ProductosRepository {
         Object.hasOwn(data, 'costo_actual'),
         data.costo_actual ?? null,
         data.precio_venta ?? null,
+        data.stock ?? null,
         data.activo ?? null,
       ],
     );

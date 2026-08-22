@@ -675,9 +675,33 @@ body {
   z-index: 1;
 }
 
+.inventory-product-card.inactive {
+  border-color: #e4e6eb;
+  background: #f7f7f9;
+}
+
+.inventory-product-card.inactive .pos-product-visual {
+  filter: grayscale(0.55);
+  opacity: 0.74;
+}
+
 .inventory-product-card:hover,
 .inventory-product-card:focus-within {
   z-index: 30;
+}
+
+.inventory-status-badge {
+  display: inline-flex;
+  width: fit-content;
+  margin-top: 7px;
+  border-radius: 999px;
+  background: #3e4149;
+  padding: 4px 8px;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .02em;
+  text-transform: uppercase;
 }
 
 .inventory-product-meta {

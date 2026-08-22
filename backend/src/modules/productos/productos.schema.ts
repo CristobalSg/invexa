@@ -164,6 +164,7 @@ export const updateProductoSchema = {
       proveedor_id: { type: ['integer', 'null'], minimum: 1 },
       costo_actual: { type: ['number', 'null'], minimum: 0 },
       precio_venta: { type: 'number', exclusiveMinimum: 0 },
+      stock: { type: 'number', minimum: 0 },
       activo: { type: 'boolean' },
     },
   },

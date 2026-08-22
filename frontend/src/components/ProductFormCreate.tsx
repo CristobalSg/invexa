@@ -85,6 +85,14 @@ const storeClassification = (form: typeof initialState) => {
   );
 };
 
+const toStockFormValue = (product: Producto) => {
+  if (product.unidad_venta === "PESO") {
+    return String(Number((product.stock * 1000).toFixed(3)));
+  }
+
+  return String(product.stock);
+};
+
 interface ProductFormCreateProps {
   initialData?: Producto;
   onSuccess?: () => void;
@@ -120,7 +128,7 @@ export default function ProductFormCreate({
         proveedor_id: initialData.proveedor_id ? String(initialData.proveedor_id) : "",
         costo_actual: initialData.costo_actual === null ? "" : String(initialData.costo_actual),
         precio_venta: String(initialData.precio_venta),
-        stock: String(initialData.stock),
+        stock: toStockFormValue(initialData),
         ingreso_por_caja: false,
         costo_caja: "",
         cantidad_cajas: "1",
@@ -227,7 +235,7 @@ export default function ProductFormCreate({
         proveedor_id: form.tipo_propiedad === "CONSIGNACION" && form.proveedor_id ? Number(form.proveedor_id) : null,
         costo_actual: form.costo_actual === "" ? null : Number(form.costo_actual),
         precio_venta: Number(form.precio_venta),
-        ...(initialData ? {} : { stock: stockInicial }),
+        stock: stockInicial,
         activo: form.activo,
       };
       if (initialData) {
@@ -443,25 +451,23 @@ export default function ProductFormCreate({
             />
           </FormField>
 
-          {!initialData && (
-            <FormField
-              label={`Stock inicial (${stockUnitLabel})`}
-              help={form.unidad_venta === "PESO" ? "Ingresa gramos. Ejemplo: 1000 equivale a 1 kg." : undefined}
-            >
-              <input
-                ref={stockInputRef}
-                name="stock"
-                type="number"
-                min={0}
-                step={form.unidad_venta === "PESO" ? 1 : 0.001}
-                value={form.stock}
-                onChange={handleChange}
-                className={inputClassName}
-                placeholder={form.unidad_venta === "PESO" ? "Ej: 1000" : "Stock inicial"}
-                disabled={form.ingreso_por_caja}
-              />
-            </FormField>
-          )}
+          <FormField
+            label={`${initialData ? "Stock actual" : "Stock inicial"} (${stockUnitLabel})`}
+            help={form.unidad_venta === "PESO" ? "Ingresa gramos. Ejemplo: 1000 equivale a 1 kg." : undefined}
+          >
+            <input
+              ref={stockInputRef}
+              name="stock"
+              type="number"
+              min={0}
+              step={form.unidad_venta === "PESO" ? 1 : 0.001}
+              value={form.stock}
+              onChange={handleChange}
+              className={inputClassName}
+              placeholder={form.unidad_venta === "PESO" ? "Ej: 1000" : "Stock inicial"}
+              disabled={!initialData && form.ingreso_por_caja}
+            />
+          </FormField>
         </div>
       </section>
 

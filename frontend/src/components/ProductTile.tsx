@@ -1,5 +1,12 @@
 import { Menu, MenuButton, MenuItem, MenuItems } from "@headlessui/react";
-import { EllipsisHorizontalIcon, PencilIcon, PlusIcon, StarIcon as StarIconOutline, TrashIcon } from "@heroicons/react/24/outline";
+import {
+  ArrowPathIcon,
+  EllipsisHorizontalIcon,
+  PencilIcon,
+  PlusIcon,
+  StarIcon as StarIconOutline,
+  TrashIcon,
+} from "@heroicons/react/24/outline";
 import { StarIcon as StarIconSolid } from "@heroicons/react/24/solid";
 import type { Producto } from "../types/api";
 
@@ -12,6 +19,7 @@ interface ProductTileProps {
   onToggleFeatured?: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
+  onReactivate?: () => void;
 }
 
 const productImageModules = import.meta.glob("../assets/images/products/*.{png,jpg,jpeg,webp,avif}", {
@@ -56,6 +64,7 @@ export default function ProductTile({
   onToggleFeatured,
   onEdit,
   onDelete,
+  onReactivate,
 }: ProductTileProps) {
   const productImage = productImagesBySlug[slugifyAssetName(product.nombre)];
   const content = (
@@ -85,6 +94,9 @@ export default function ProductTile({
         </span>
       )}
       <div className="pos-product-name">{product.nombre}</div>
+      {mode === "inventory" && !product.activo && (
+        <span className="inventory-status-badge">Desactivado</span>
+      )}
       <div className="pos-product-unit">
         {product.categoria_nombre} · {product.stock} {isWeighableProduct(product) ? "kg" : "un."}
       </div>
@@ -102,7 +114,7 @@ export default function ProductTile({
           ${product.precio_venta.toLocaleString()}{isWeighableProduct(product) ? "/kg" : ""}
         </span>
         {mode === "inventory" ? (
-          (onEdit || onDelete) && (
+          (onEdit || onDelete || onReactivate) && (
             <Menu as="span" className="relative inline-block text-left">
               <MenuButton className="pos-options-btn" onClick={(event) => event.stopPropagation()}>
                 <EllipsisHorizontalIcon className="h-5 w-5" />
@@ -119,6 +131,20 @@ export default function ProductTile({
                       >
                         <PencilIcon className="h-4 w-4" />
                         Editar
+                      </button>
+                    )}
+                  </MenuItem>
+                )}
+                {onReactivate && (
+                  <MenuItem>
+                    {({ focus }) => (
+                      <button
+                        type="button"
+                        onClick={onReactivate}
+                        className={`${focus ? "bg-emerald-50 text-emerald-700" : "text-emerald-700"} flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold`}
+                      >
+                        <ArrowPathIcon className="h-4 w-4" />
+                        Reactivar
                       </button>
                     )}
                   </MenuItem>
@@ -150,7 +176,11 @@ export default function ProductTile({
   );
 
   if (mode === "inventory") {
-    return <div className="pos-product-card inventory-product-card text-left">{content}</div>;
+    return (
+      <div className={`pos-product-card inventory-product-card text-left ${product.activo ? "" : "inactive"}`}>
+        {content}
+      </div>
+    );
   }
 
   return (

@@ -35,6 +35,11 @@ export async function deleteProduct(id: string | number): Promise<Producto> {
   return data;
 }
 
+export async function reactivateProduct(id: string | number): Promise<Producto> {
+  const { data } = await api.patch<Producto>(`${ENDPOINT}/${id}`, { activo: true });
+  return data;
+}
+
 export async function getProductByBarcode(barcode: string): Promise<Producto | null> {
   try {
     const { data } = await api.get<Producto>(`${ENDPOINT}/codigo/${encodeURIComponent(barcode)}`);

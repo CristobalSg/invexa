@@ -97,5 +97,6 @@ export interface UpdateProductoBody {
   readonly proveedor_id?: number | null;
   readonly costo_actual?: number | null;
   readonly precio_venta?: number;
+  readonly stock?: number;
   readonly activo?: boolean;
 }
