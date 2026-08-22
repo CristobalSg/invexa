@@ -493,6 +493,12 @@ export default function Home() {
 
   const addProductToCart = (product: Producto, quantity: number) => {
     setMessage("");
+    if (!product.activo) {
+      setMessage("Este producto está deshabilitado y no se puede vender.");
+      focusBarcodeInput();
+      return;
+    }
+
     setCart((prev) => {
       const limitsByStock = blocksSalesByStock(product);
       const currentProductQuantity = prev
@@ -529,6 +535,12 @@ export default function Home() {
   };
 
   const handleProductFound = (product: Producto) => {
+    if (!product.activo) {
+      setMessage("Este producto está deshabilitado y no se puede vender.");
+      focusBarcodeInput();
+      return;
+    }
+
     if (isWeighableProduct(product)) {
       setWeighableProduct(product);
       setGrams("");

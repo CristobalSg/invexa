@@ -18,12 +18,15 @@ const modoInventarioLabels: Record<ModoInventarioProducto, string> = {
   ESTRICTO: "Inventario estricto",
 };
 
+type EstadoProductoFiltro = "ACTIVOS" | "DESHABILITADOS" | "TODOS";
+
 export default function ProductsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [productToEdit, setProductToEdit] = useState<Producto | null>(null);
   const [codigo, setCodigo] = useState("");
   const [nombre, setNombre] = useState("");
   const [categoriaId, setCategoriaId] = useState("");
+  const [estado, setEstado] = useState<EstadoProductoFiltro>("ACTIVOS");
   const isOwner = getStoredUser()?.rol === "OWNER";
 
   const queryClient = useQueryClient();
@@ -40,6 +43,10 @@ export default function ProductsPage() {
     const normalizedNombre = nombre.trim().toLowerCase();
 
     return (products?.items ?? [])
+      .filter((product) => {
+        if (estado === "TODOS") return true;
+        return estado === "ACTIVOS" ? product.activo : !product.activo;
+      })
       .filter((product) => !categoriaId || product.categoria_id === Number(categoriaId))
       .filter((product) => {
         if (!normalizedCodigo) return true;
@@ -49,7 +56,7 @@ export default function ProductsPage() {
         if (!normalizedNombre) return true;
         return product.nombre.toLowerCase().includes(normalizedNombre);
       });
-  }, [categoriaId, codigo, nombre, products?.items]);
+  }, [categoriaId, codigo, estado, nombre, products?.items]);
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteProduct(id),
@@ -96,7 +103,7 @@ export default function ProductsPage() {
         <h1 className="admin-page-title">Gestión de Inventario</h1>
       </div>
       <ModuleCard title="Filtros" icon={FunnelIcon} contentClassName="p-4">
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
           <FormField label="Código de barra">
             <input
               value={codigo}
@@ -123,6 +130,17 @@ export default function ProductsPage() {
               {categorias?.items.map((category) => (
                 <option key={category.id} value={category.id}>{category.nombre}</option>
               ))}
+            </select>
+          </FormField>
+          <FormField label="Estado">
+            <select
+              value={estado}
+              onChange={(event) => setEstado(event.target.value as EstadoProductoFiltro)}
+              className={inputClassName}
+            >
+              <option value="ACTIVOS">Activos</option>
+              <option value="DESHABILITADOS">Deshabilitados</option>
+              <option value="TODOS">Todos</option>
             </select>
           </FormField>
         </div>
