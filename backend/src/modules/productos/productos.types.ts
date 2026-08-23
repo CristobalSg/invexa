@@ -48,6 +48,8 @@ export interface PaginationQuery {
   readonly page?: number;
   readonly limit?: number;
   readonly search?: string;
+  readonly codigo?: string;
+  readonly nombre?: string;
   readonly activo?: boolean;
   readonly categoria_id?: number;
   readonly proveedor_id?: number;

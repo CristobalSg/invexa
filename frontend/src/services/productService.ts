@@ -8,6 +8,8 @@ export interface ProductFilters {
   page?: number;
   limit?: number;
   search?: string;
+  codigo?: string;
+  nombre?: string;
   activo?: boolean;
   categoria_id?: number;
   proveedor_id?: number;

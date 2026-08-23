@@ -29,9 +29,9 @@ body {
   color: var(--app-text);
 }
 
-*,
-*::before,
-*::after {
+html.hide-cursor *,
+html.hide-cursor *::before,
+html.hide-cursor *::after {
   cursor: none !important;
 }
 
@@ -288,6 +288,105 @@ body {
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.flowly-settings-menu {
+  position: relative;
+}
+
+.flowly-settings-panel {
+  z-index: 70;
+  width: 260px;
+  border: 1px solid #ececf0;
+  border-radius: 20px;
+  background: #fff;
+  padding: 8px;
+  box-shadow: 0 22px 60px rgba(31, 35, 48, 0.18);
+  transform-origin: left center;
+}
+
+.flowly-settings-option {
+  width: 100%;
+  min-height: 72px;
+  border: 0;
+  border-radius: 16px;
+  background: transparent;
+  color: #25262c;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) 48px;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  text-align: left;
+  transition: .16s ease;
+}
+
+.flowly-settings-option.active,
+.flowly-settings-option:hover {
+  background: #f7f7f9;
+}
+
+.flowly-settings-option-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 14px;
+  background: #fbfaf7;
+  color: #7652ed;
+  display: grid;
+  place-items: center;
+}
+
+.flowly-settings-option-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.flowly-settings-option strong,
+.flowly-settings-option small {
+  display: block;
+}
+
+.flowly-settings-option strong {
+  color: var(--flow-ink);
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.flowly-settings-option small {
+  margin-top: 3px;
+  color: #8b8e98;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.flowly-switch {
+  width: 46px;
+  height: 28px;
+  border-radius: 999px;
+  background: #dfe2e8;
+  position: relative;
+  transition: .18s ease;
+}
+
+.flowly-switch::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 3px 8px rgba(31,35,48,.18);
+  transition: .18s ease;
+}
+
+.flowly-switch.on {
+  background: var(--flow-green);
+}
+
+.flowly-switch.on::after {
+  transform: translateX(18px);
 }
 
 .flowly-sidebar.collapsed .flowly-brand {
@@ -2111,6 +2210,70 @@ body {
   display: grid;
   place-items: center;
   font-size: 18px;
+}
+
+.flow-action-button {
+  width: 100%;
+  height: 54px;
+  border: 0;
+  border-radius: 16px;
+  padding: 0 15px 0 18px;
+  background: #1d1f25;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 14px;
+  font-weight: 800;
+  box-shadow: 0 12px 25px rgba(26,28,34,.18);
+  transition: .2s ease;
+}
+
+.flow-action-button:hover {
+  transform: translateY(-2px);
+  background: #121318;
+}
+
+.flow-action-button:disabled {
+  cursor: not-allowed;
+  opacity: .45;
+  transform: none;
+}
+
+.flow-action-button.cash-size {
+  min-height: 76px;
+  height: auto;
+  border-radius: 16px;
+  padding: 0 22px 0 24px;
+  font-size: 18px;
+}
+
+.flow-action-button.danger {
+  background: #dc2626;
+  box-shadow: 0 12px 25px rgba(220,38,38,.18);
+}
+
+.flow-action-button.danger:hover {
+  background: #b91c1c;
+}
+
+.flow-action-button-icon {
+  width: 31px;
+  height: 31px;
+  border-radius: 10px;
+  background: #fff;
+  color: #1d1f25;
+  display: grid;
+  place-items: center;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.flow-action-button.cash-size .flow-action-button-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  font-size: 22px;
 }
 
 .admin-page {

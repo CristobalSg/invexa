@@ -5,6 +5,8 @@ const paginationQuerySchema = {
     page: { type: 'integer', minimum: 1, default: 1 },
     limit: { type: 'integer', minimum: 1, maximum: 100, default: 20 },
     search: { type: 'string', minLength: 1, maxLength: 150 },
+    codigo: { type: 'string', minLength: 1, maxLength: 100 },
+    nombre: { type: 'string', minLength: 1, maxLength: 150 },
     activo: { type: 'boolean' },
     categoria_id: { type: 'integer', minimum: 1 },
     proveedor_id: { type: 'integer', minimum: 1 },

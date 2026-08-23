@@ -21,6 +21,7 @@ import ListPanel from "../components/ListPanel";
 import ModuleCard from "../components/ModuleCard";
 import { Button, FormActions, FormField, inputClassName } from "../components/FormControls";
 import AdminPasswordModal from "../components/AdminPasswordModal";
+import FlowActionButton from "../components/FlowActionButton";
 
 const money = (value: number) => `$${value.toLocaleString()}`;
 const time = (value: string | null) =>
@@ -185,12 +186,13 @@ export default function CajaPage() {
                       placeholder="Fondo inicial"
                     />
                   </FormField>
-                  <button
+                  <FlowActionButton
                     onClick={() => abrir.mutate()}
-                    className="w-full rounded-xl bg-blue-600 p-6 text-center text-lg font-bold text-white shadow-md transition-all hover:-translate-y-0.5 hover:bg-blue-700 hover:shadow-lg"
+                    size="cash"
+                    disabled={abrir.isPending}
                   >
-                    Abrir
-                  </button>
+                    {abrir.isPending ? "Abriendo..." : "Abrir caja"}
+                  </FlowActionButton>
                 </div>
               )}
               {actual?.abierta && (

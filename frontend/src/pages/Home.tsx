@@ -334,12 +334,19 @@ export default function Home() {
   const activeCart = carts.find((cartSession) => cartSession.id === resolvedActiveCartId) ?? carts[0];
   const cart = activeCart?.items ?? [];
 
-  const focusBarcodeInput = () => {
-    window.setTimeout(() => barcodeInputRef.current?.focus(), 0);
+  const focusBarcodeInput = (force = false) => {
+    window.setTimeout(() => {
+      if (
+        force ||
+        (!isProductSearchOpen && !paymentModalOpen && !salePasswordOpen && !weighableProduct)
+      ) {
+        barcodeInputRef.current?.focus();
+      }
+    }, 0);
   };
 
   useEffect(() => {
-    focusBarcodeInput();
+    focusBarcodeInput(true);
   }, []);
 
   useEffect(() => {
@@ -358,6 +365,7 @@ export default function Home() {
         ? prev.filter((id) => id !== productId)
         : [...prev, productId],
     );
+    focusBarcodeInput();
   };
 
   const setCart = (updater: CartProduct[] | ((items: CartProduct[]) => CartProduct[])) => {
@@ -587,6 +595,7 @@ export default function Home() {
         return [p];
       })
     );
+    focusBarcodeInput();
   };
 
   const handleIncreaseQuantity = (cartItemId: string) => {
@@ -602,16 +611,18 @@ export default function Home() {
         };
       }),
     );
+    focusBarcodeInput();
   };
 
   const handleRemoveProduct = (cartItemId: string) => {
     setCart((prev) => prev.filter((p) => p.cartItemId !== cartItemId));
+    focusBarcodeInput();
   };
 
   const handleCloseProductSearch = () => {
     setIsProductSearchOpen(false);
     setSearchTerm("");
-    focusBarcodeInput();
+    focusBarcodeInput(true);
   };
 
   const handleProductSearchBlur = (event: React.FocusEvent<HTMLInputElement>) => {
@@ -623,6 +634,7 @@ export default function Home() {
 
   const handleClearBarcodeInput = () => {
     setBarcodeClearSignal((current) => current + 1);
+    focusBarcodeInput();
   };
 
   const handleModalidadChange = (modalidad: ModalidadVenta) => {
@@ -672,6 +684,7 @@ export default function Home() {
           </button>
           <button
             type="button"
+            onClick={() => focusBarcodeInput()}
             className="pos-tool-btn"
             aria-label="Agregar"
             title="Agregar"
@@ -698,7 +711,10 @@ export default function Home() {
             <div className="pos-category-actions">
               <button
                 type="button"
-                onClick={() => setProductListFilter({ type: "all" })}
+                onClick={() => {
+                  setProductListFilter({ type: "all" });
+                  focusBarcodeInput();
+                }}
                 className={`pos-category-reset ${productListFilter.type === "all" ? "active" : ""}`}
               >
                 General
@@ -712,7 +728,10 @@ export default function Home() {
               <button
                 key={category.id}
                 type="button"
-                onClick={() => setProductListFilter({ type: "category", categoryId: category.id, categoryName: category.name })}
+                onClick={() => {
+                  setProductListFilter({ type: "category", categoryId: category.id, categoryName: category.name });
+                  focusBarcodeInput();
+                }}
                 className={`pos-category-card ${productListFilter.type === "category" && productListFilter.categoryId === category.id ? "active" : ""}`}
               >
                 <span className="pos-category-visual">
@@ -727,7 +746,10 @@ export default function Home() {
             ))}
             <button
               type="button"
-              onClick={() => setCategoryModalOpen(true)}
+              onClick={() => {
+                setCategoryModalOpen(true);
+                focusBarcodeInput();
+              }}
               className="pos-category-card"
               aria-label="Ver más categorías"
               title="Ver más categorías"
@@ -739,7 +761,10 @@ export default function Home() {
             </button>
             <button
               type="button"
-              onClick={() => setProductListFilter({ type: "featured" })}
+              onClick={() => {
+                setProductListFilter({ type: "featured" });
+                focusBarcodeInput();
+              }}
               className={`pos-category-card ${productListFilter.type === "featured" ? "active" : ""}`}
               aria-label="Productos destacados"
               title="Productos destacados"
@@ -749,7 +774,10 @@ export default function Home() {
             </button>
             <button
               type="button"
-              onClick={() => setProductListFilter({ type: "offers" })}
+              onClick={() => {
+                setProductListFilter({ type: "offers" });
+                focusBarcodeInput();
+              }}
               className={`pos-category-card ${productListFilter.type === "offers" ? "active" : ""}`}
               aria-label="Productos en oferta"
               title="Productos en oferta"
@@ -788,7 +816,14 @@ export default function Home() {
             <span className="pos-kicker">Pedido</span>
             <h2 className="pos-subtitle">Carrito de compras</h2>
           </div>
-          <button type="button" onClick={() => setCart([])} className="border-0 bg-transparent px-2 py-1 text-xs text-[#8b8e97] hover:text-[#494b53]">
+          <button
+            type="button"
+            onClick={() => {
+              setCart([]);
+              focusBarcodeInput();
+            }}
+            className="border-0 bg-transparent px-2 py-1 text-xs text-[#8b8e97] hover:text-[#494b53]"
+          >
             Vaciar
           </button>
         </div>
@@ -911,7 +946,13 @@ export default function Home() {
                 <h2 className="text-xl font-bold text-gray-900">{quickProductsTitle}</h2>
                 <p className="mt-1 text-sm text-gray-500">{quickProducts.length} productos disponibles</p>
               </div>
-              <button onClick={() => setQuickProductsModal(null)} className="rounded px-3 py-1 text-gray-600 hover:bg-gray-100">
+              <button
+                onClick={() => {
+                  setQuickProductsModal(null);
+                  focusBarcodeInput();
+                }}
+                className="rounded px-3 py-1 text-gray-600 hover:bg-gray-100"
+              >
                 Cerrar
               </button>
             </div>
@@ -932,6 +973,7 @@ export default function Home() {
                       onClick={() => {
                         handleProductFound(product);
                         setQuickProductsModal(null);
+                        focusBarcodeInput();
                       }}
                       className="min-w-0 flex-1 text-left"
                     >
@@ -950,7 +992,10 @@ export default function Home() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => toggleFeaturedProduct(product.id)}
+                      onClick={() => {
+                        toggleFeaturedProduct(product.id);
+                        focusBarcodeInput();
+                      }}
                       className={`rounded-md p-2 ${
                         isFeatured
                           ? "text-amber-500 hover:bg-amber-50"
@@ -984,6 +1029,7 @@ export default function Home() {
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) {
               setCategoryModalOpen(false);
+              focusBarcodeInput();
             }
           }}
         >
@@ -995,7 +1041,10 @@ export default function Home() {
               </div>
               <button
                 type="button"
-                onClick={() => setCategoryModalOpen(false)}
+                onClick={() => {
+                  setCategoryModalOpen(false);
+                  focusBarcodeInput();
+                }}
                 className="rounded-xl border border-[#ececf0] bg-white px-3 py-2 text-sm font-bold text-[#5f626b] hover:bg-[#f7f7f9]"
               >
                 Cerrar
@@ -1010,6 +1059,7 @@ export default function Home() {
                   onClick={() => {
                     setProductListFilter({ type: "category", categoryId: category.id, categoryName: category.name });
                     setCategoryModalOpen(false);
+                    focusBarcodeInput();
                   }}
                   className={`pos-category-card ${productListFilter.type === "category" && productListFilter.categoryId === category.id ? "active" : ""}`}
                 >

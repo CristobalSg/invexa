@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { keepPreviousData, useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { FunnelIcon, PlusIcon } from "@heroicons/react/24/outline";
 import { getProducts, deleteProduct, reactivateProduct } from "../services/productService";
@@ -27,36 +27,35 @@ export default function ProductsPage() {
   const [nombre, setNombre] = useState("");
   const [categoriaId, setCategoriaId] = useState("");
   const [estado, setEstado] = useState<EstadoProductoFiltro>("ACTIVOS");
+  const [page, setPage] = useState(1);
   const isOwner = getStoredUser()?.rol === "OWNER";
 
   const queryClient = useQueryClient();
+  const normalizedCodigo = codigo.trim();
+  const normalizedNombre = nombre.trim();
+  const estadoActivo = estado === "TODOS" ? undefined : estado === "ACTIVOS";
 
   const { data: products, isLoading, isFetching, error } = useQuery({
-    queryKey: ["products"],
-    queryFn: () => getProducts({ limit: 100 }),
+    queryKey: ["products", { page, codigo: normalizedCodigo, nombre: normalizedNombre, categoriaId, estado }],
+    queryFn: () =>
+      getProducts({
+        page,
+        limit: 100,
+        codigo: normalizedCodigo || undefined,
+        nombre: normalizedNombre || undefined,
+        categoria_id: categoriaId ? Number(categoriaId) : undefined,
+        activo: estadoActivo,
+      }),
     placeholderData: keepPreviousData,
   });
   const { data: categorias } = useQuery({ queryKey: ["categorias"], queryFn: () => getCategorias() });
 
-  const productosFiltrados = useMemo(() => {
-    const normalizedCodigo = codigo.trim().toLowerCase();
-    const normalizedNombre = nombre.trim().toLowerCase();
+  useEffect(() => {
+    setPage(1);
+  }, [categoriaId, codigo, estado, nombre]);
 
-    return (products?.items ?? [])
-      .filter((product) => {
-        if (estado === "TODOS") return true;
-        return estado === "ACTIVOS" ? product.activo : !product.activo;
-      })
-      .filter((product) => !categoriaId || product.categoria_id === Number(categoriaId))
-      .filter((product) => {
-        if (!normalizedCodigo) return true;
-        return (product.codigo_barras ?? "").toLowerCase().includes(normalizedCodigo);
-      })
-      .filter((product) => {
-        if (!normalizedNombre) return true;
-        return product.nombre.toLowerCase().includes(normalizedNombre);
-      });
-  }, [categoriaId, codigo, estado, nombre, products?.items]);
+  const productosFiltrados = products?.items ?? [];
+  const pagination = products?.pagination;
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteProduct(id),
@@ -146,6 +145,31 @@ export default function ProductsPage() {
         </div>
       </ModuleCard>
       {error && <p className="text-sm text-red-500">Error al cargar productos</p>}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm font-semibold text-gray-500">
+          {pagination ? `${pagination.total} productos · Página ${pagination.page} de ${Math.max(1, pagination.totalPages)}` : "Cargando productos..."}
+        </p>
+        {pagination && pagination.totalPages > 1 && (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setPage((current) => Math.max(1, current - 1))}
+              disabled={pagination.page <= 1}
+              className="rounded-xl border border-[#ececf0] bg-white px-4 py-2 text-sm font-bold text-[#5f626b] disabled:opacity-40"
+            >
+              Anterior
+            </button>
+            <button
+              type="button"
+              onClick={() => setPage((current) => Math.min(pagination.totalPages, current + 1))}
+              disabled={pagination.page >= pagination.totalPages}
+              className="rounded-xl border border-[#ececf0] bg-white px-4 py-2 text-sm font-bold text-[#5f626b] disabled:opacity-40"
+            >
+              Siguiente
+            </button>
+          </div>
+        )}
+      </div>
       {isFetching && <p className="text-sm text-gray-500">Actualizando productos...</p>}
 
       <ProductModal

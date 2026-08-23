@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from "react-router-dom";
 import { useNavigate } from "react-router-dom";
+import { Menu, MenuButton, MenuItem, MenuItems } from "@headlessui/react";
 import { useState } from "react";
 import {
   ArrowLeftOnRectangleIcon,
@@ -8,6 +9,8 @@ import {
   ClipboardDocumentListIcon,
   CubeIcon,
   ChevronRightIcon,
+  Cog6ToothIcon,
+  CursorArrowRaysIcon,
   MoonIcon,
   ShoppingBagIcon,
   ShoppingCartIcon,
@@ -17,7 +20,13 @@ import {
   WalletIcon,
 } from "@heroicons/react/24/outline";
 import { getStoredUser, logout } from "../services/authService";
-import { getStoredTheme, setStoredTheme, type ThemeMode } from "../services/themeService";
+import {
+  getStoredShowCursor,
+  getStoredTheme,
+  setStoredShowCursor,
+  setStoredTheme,
+  type ThemeMode,
+} from "../services/themeService";
 
 const sidebarLinkClass = () => ({ isActive }: { isActive: boolean }) =>
   `flowly-nav-item ${isActive ? "active" : ""}`;
@@ -26,6 +35,7 @@ export default function Layout() {
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(true);
   const [theme, setTheme] = useState<ThemeMode>(() => getStoredTheme());
+  const [showCursor, setShowCursor] = useState(() => getStoredShowCursor());
   const user = getStoredUser();
   const isOwner = user?.rol === "OWNER";
   const iconClass = "h-5 w-5 shrink-0";
@@ -39,6 +49,12 @@ export default function Layout() {
     const nextTheme = theme === "dark" ? "light" : "dark";
     setTheme(nextTheme);
     setStoredTheme(nextTheme);
+  };
+
+  const handleToggleCursor = () => {
+    const nextShowCursor = !showCursor;
+    setShowCursor(nextShowCursor);
+    setStoredShowCursor(nextShowCursor);
   };
 
   const links = [
@@ -135,18 +151,52 @@ export default function Layout() {
 
           <div className="flowly-nav-section">
             <div className="flowly-section-title">SOPORTE</div>
-            <button
-              type="button"
-              onClick={handleToggleTheme}
-              className="flowly-nav-item"
-              aria-label={theme === "dark" ? "Activar modo claro" : "Activar modo noche"}
-              title={theme === "dark" ? "Modo claro" : "Modo noche"}
-            >
-              <span className="flowly-nav-icon">
-                {theme === "dark" ? <SunIcon /> : <MoonIcon />}
-              </span>
-              <span className="flowly-nav-label">{theme === "dark" ? "Modo claro" : "Modo noche"}</span>
-            </button>
+            <Menu as="div" className="flowly-settings-menu">
+              <MenuButton
+                className="flowly-nav-item"
+                aria-label="Configuración"
+                title="Configuración"
+              >
+                <span className="flowly-nav-icon"><Cog6ToothIcon /></span>
+                <span className="flowly-nav-label">Configuración</span>
+              </MenuButton>
+              <MenuItems anchor="right end" className="flowly-settings-panel">
+                <MenuItem>
+                  {({ focus }) => (
+                    <button
+                      type="button"
+                      onClick={handleToggleTheme}
+                      className={`flowly-settings-option ${focus ? "active" : ""}`}
+                    >
+                      <span className="flowly-settings-option-icon">
+                        {theme === "dark" ? <SunIcon /> : <MoonIcon />}
+                      </span>
+                      <span>
+                        <strong>Modo noche</strong>
+                        <small>{theme === "dark" ? "Activado" : "Desactivado"}</small>
+                      </span>
+                      <span className={`flowly-switch ${theme === "dark" ? "on" : ""}`} aria-hidden="true" />
+                    </button>
+                  )}
+                </MenuItem>
+                <MenuItem>
+                  {({ focus }) => (
+                    <button
+                      type="button"
+                      onClick={handleToggleCursor}
+                      className={`flowly-settings-option ${focus ? "active" : ""}`}
+                    >
+                      <span className="flowly-settings-option-icon"><CursorArrowRaysIcon /></span>
+                      <span>
+                        <strong>Ver mouse</strong>
+                        <small>{showCursor ? "Visible" : "Oculto"}</small>
+                      </span>
+                      <span className={`flowly-switch ${showCursor ? "on" : ""}`} aria-hidden="true" />
+                    </button>
+                  )}
+                </MenuItem>
+              </MenuItems>
+            </Menu>
             <button
               type="button"
               onClick={handleLogout}

@@ -16,6 +16,8 @@ export class ProductosRepository {
   ): Promise<ProductoListRow[]> {
     const offset = (query.page - 1) * query.limit;
     const search = query.search ? `%${query.search}%` : null;
+    const codigo = query.codigo ? `%${query.codigo}%` : null;
+    const nombre = query.nombre ? `%${query.nombre}%` : null;
 
     const result = await this.pool.query<ProductoListRow>(
       `
@@ -41,16 +43,20 @@ export class ProductosRepository {
         INNER JOIN categorias_producto c ON c.id = p.categoria_id
         LEFT JOIN proveedores pr ON pr.id = p.proveedor_id
         WHERE ($1::text IS NULL OR p.nombre ILIKE $1 OR p.codigo_barras ILIKE $1)
-          AND ($2::boolean IS NULL OR p.activo = $2)
-          AND ($3::integer IS NULL OR p.categoria_id = $3)
-          AND ($4::integer IS NULL OR p.proveedor_id = $4)
-          AND ($5::tipo_propiedad_producto IS NULL OR p.tipo_propiedad = $5)
-          AND ($6::modo_inventario_producto IS NULL OR p.modo_inventario = $6)
+          AND ($2::text IS NULL OR p.codigo_barras ILIKE $2)
+          AND ($3::text IS NULL OR p.nombre ILIKE $3)
+          AND ($4::boolean IS NULL OR p.activo = $4)
+          AND ($5::integer IS NULL OR p.categoria_id = $5)
+          AND ($6::integer IS NULL OR p.proveedor_id = $6)
+          AND ($7::tipo_propiedad_producto IS NULL OR p.tipo_propiedad = $7)
+          AND ($8::modo_inventario_producto IS NULL OR p.modo_inventario = $8)
         ORDER BY p.nombre ASC
-        LIMIT $7 OFFSET $8
+        LIMIT $9 OFFSET $10
       `,
       [
         search,
+        codigo,
+        nombre,
         query.activo ?? null,
         query.categoria_id ?? null,
         query.proveedor_id ?? null,
