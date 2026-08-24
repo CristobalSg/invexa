@@ -14,6 +14,7 @@ interface ProductTileProps {
   product: Producto;
   isFeatured?: boolean;
   mode?: "sale" | "inventory";
+  density?: "normal" | "compact";
   inventoryModeLabel?: string;
   onClick?: () => void;
   onToggleFeatured?: () => void;
@@ -59,6 +60,7 @@ export default function ProductTile({
   product,
   isFeatured = false,
   mode = "sale",
+  density = "normal",
   inventoryModeLabel,
   onClick,
   onToggleFeatured,
@@ -67,6 +69,7 @@ export default function ProductTile({
   onReactivate,
 }: ProductTileProps) {
   const productImage = productImagesBySlug[slugifyAssetName(product.nombre)];
+  const isCompact = density === "compact";
   const content = (
     <>
       <div className="pos-product-visual">
@@ -97,9 +100,11 @@ export default function ProductTile({
       {mode === "inventory" && !product.activo && (
         <span className="inventory-status-badge">Desactivado</span>
       )}
-      <div className="pos-product-unit">
-        {product.categoria_nombre} · {product.stock} {isWeighableProduct(product) ? "kg" : "un."}
-      </div>
+      {!isCompact && (
+        <div className="pos-product-unit">
+          {product.categoria_nombre} · {product.stock} {isWeighableProduct(product) ? "kg" : "un."}
+        </div>
+      )}
       {mode === "inventory" && (
         <div className="inventory-product-meta">
           <span>{product.codigo_barras ?? "Sin código"}</span>
@@ -166,11 +171,11 @@ export default function ProductTile({
               </MenuItems>
             </Menu>
           )
-        ) : (
+        ) : !isCompact ? (
           <span className="pos-add-btn" aria-hidden="true">
             <PlusIcon className="h-5 w-5" />
           </span>
-        )}
+        ) : null}
       </div>
     </>
   );
@@ -184,7 +189,7 @@ export default function ProductTile({
   }
 
   return (
-    <button type="button" className="pos-product-card text-left" onClick={onClick}>
+    <button type="button" className={`pos-product-card text-left ${isCompact ? "compact" : ""}`} onClick={onClick}>
       {content}
     </button>
   );

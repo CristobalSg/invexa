@@ -61,7 +61,7 @@ const paymentMethodLabels: Record<MetodoPago, string> = {
 
 const cashSuggestionAmounts = [1000, 2000, 5000, 10000, 20000];
 const featuredProductsStorageKey = "pos-featured-products";
-const productModalPageSize = 32;
+const productModalPageSize = 30;
 const categoryModalPageSize = 8;
 
 const toInputAmount = (value: number) => (value > 0 ? String(value) : "");
@@ -1068,6 +1068,7 @@ export default function Home() {
                     key={product.id}
                     product={product}
                     isFeatured={isFeatured}
+                    density="compact"
                     onClick={() => {
                       handleProductFound(product);
                       setQuickProductsModal(null);
