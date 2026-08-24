@@ -6,6 +6,7 @@ type ProductModalProps = {
   isOpen: boolean;
   onClose: () => void;
   title?: string;
+  action?: React.ReactNode;
   children: React.ReactNode;
 };
 
@@ -13,6 +14,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
   isOpen,
   onClose,
   title = "Agregar nuevo producto",
+  action,
   children,
 }) => {
   return (
@@ -24,15 +26,18 @@ export const ProductModal: React.FC<ProductModalProps> = ({
             <DialogTitle className="product-modal-title">
               {title}
             </DialogTitle>
-            <button
-              type="button"
-              onClick={onClose}
-              className="product-modal-close"
-              aria-label="Cerrar"
-              title="Cerrar"
-            >
-              <XMarkIcon className="h-5 w-5" />
-            </button>
+            <div className="product-modal-header-actions">
+              {action}
+              <button
+                type="button"
+                onClick={onClose}
+                className="product-modal-close"
+                aria-label="Cerrar"
+                title="Cerrar"
+              >
+                <XMarkIcon className="h-5 w-5" />
+              </button>
+            </div>
           </div>
           {children}
         </DialogPanel>

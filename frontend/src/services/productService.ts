@@ -17,6 +17,22 @@ export interface ProductFilters {
   modo_inventario?: ModoInventarioProducto;
 }
 
+export interface ResetProduceProductInput {
+  nombre: string;
+  tipo: "FRUTA" | "VERDURA";
+}
+
+export interface ResetProduceProductsInput {
+  master_password: string;
+  productos: ResetProduceProductInput[];
+}
+
+export interface ResetProduceProductsResult {
+  categoria_id: number;
+  desactivados: number;
+  creados: number;
+}
+
 export async function getProducts(filters: ProductFilters = {}): Promise<PaginatedResult<Producto>> {
   const { data } = await api.get<PaginatedResult<Producto>>(ENDPOINT, { params: { limit: 100, ...filters } });
   return data;
@@ -39,6 +55,11 @@ export async function deleteProduct(id: string | number): Promise<Producto> {
 
 export async function reactivateProduct(id: string | number): Promise<Producto> {
   const { data } = await api.patch<Producto>(`${ENDPOINT}/${id}`, { activo: true });
+  return data;
+}
+
+export async function resetProduceProducts(input: ResetProduceProductsInput): Promise<ResetProduceProductsResult> {
+  const { data } = await api.post<ResetProduceProductsResult>(`${ENDPOINT}/frutas-verduras/reset`, input);
   return data;
 }
 

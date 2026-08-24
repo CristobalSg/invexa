@@ -1,4 +1,8 @@
+import type { Pool } from 'pg';
+
+import type { UserRole } from '../../plugins/jwt.plugin.js';
 import { BadRequestError, ConflictError, NotFoundError } from '../../utils/errors.js';
+import { assertValidOwnerPassword } from '../../utils/master-authorization.js';
 import type { ProductosRepository } from './productos.repository.js';
 import type {
   CreateProductoBody,
@@ -7,12 +11,17 @@ import type {
   Producto,
   ProductoListRow,
   ProductoRow,
+  ResetProduceProductsBody,
+  ResetProduceProductsResult,
   TipoPropiedadProducto,
   UpdateProductoBody,
 } from './productos.types.js';
 
 export class ProductosService {
-  constructor(private readonly repository: ProductosRepository) {}
+  constructor(
+    private readonly repository: ProductosRepository,
+    private readonly pool: Pool,
+  ) {}
 
   async findAll(query: PaginationQuery): Promise<PaginatedResult<Producto>> {
     const page = query.page ?? 1;
@@ -51,7 +60,11 @@ export class ProductosService {
     return this.mapProducto(producto);
   }
 
-  async create(data: CreateProductoBody): Promise<Producto> {
+  async create(data: CreateProductoBody, userRole: UserRole): Promise<Producto> {
+    if (userRole !== 'OWNER') {
+      await assertValidOwnerPassword(this.pool, data.master_password);
+    }
+
     await this.validateProductReferences(
       data.categoria_id,
       data.tipo_propiedad ?? 'PROPIO',
@@ -99,6 +112,26 @@ export class ProductosService {
     }
 
     return this.mapProducto(producto);
+  }
+
+  async resetProduceProducts(data: ResetProduceProductsBody): Promise<ResetProduceProductsResult> {
+    await assertValidOwnerPassword(this.pool, data.master_password);
+
+    const seenNames = new Set<string>();
+    const products = data.productos
+      .map((product) => ({ ...product, nombre: product.nombre.trim() }))
+      .filter((product) => {
+        const key = product.nombre.toLocaleLowerCase('es-CL');
+        if (!key || seenNames.has(key)) return false;
+        seenNames.add(key);
+        return true;
+      });
+
+    if (products.length === 0) {
+      throw new BadRequestError('No hay productos validos para crear');
+    }
+
+    return this.repository.resetProduceProducts(products);
   }
 
   private async validateProductReferences(

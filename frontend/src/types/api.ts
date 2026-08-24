@@ -33,6 +33,12 @@ export interface PaginatedResult<T> {
   pagination: Pagination;
 }
 
+export interface BackupFileInfo {
+  filename: string;
+  size_bytes: number;
+  created_at: string;
+}
+
 export interface AuthUser {
   id: number;
   nombre_usuario: string;
@@ -207,7 +213,11 @@ export interface Venta {
   metodo_pago: MetodoPago;
   subtotal: number;
   descuento: number;
+  total_sin_redondeo: number;
+  redondeo: number;
   total: number;
+  monto_recibido: number | null;
+  vuelto: number | null;
   modalidad: ModalidadVenta;
   estado: EstadoVenta;
   anulada_en: string | null;

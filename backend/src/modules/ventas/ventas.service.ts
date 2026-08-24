@@ -125,14 +125,37 @@ export class VentasService {
         throw new BadRequestError('El descuento no puede superar el subtotal');
       }
 
-      const total = this.round(subtotalVenta - descuento, 2);
+      const totalSinRedondeo = this.round(subtotalVenta - descuento, 2);
+      const redondeo = data.metodo_pago === 'EFECTIVO' && modalidad !== 'RETIRO_DUENO'
+        ? this.round(this.roundToNearestTen(totalSinRedondeo) - totalSinRedondeo, 2)
+        : 0;
+      const total = this.round(totalSinRedondeo + redondeo, 2);
+      const montoRecibido = data.metodo_pago === 'EFECTIVO' && modalidad !== 'RETIRO_DUENO'
+        ? data.monto_recibido
+        : undefined;
+      const vuelto = montoRecibido === undefined ? null : this.round(montoRecibido - total, 2);
+
+      if (data.metodo_pago === 'EFECTIVO' && modalidad !== 'RETIRO_DUENO') {
+        if (montoRecibido === undefined) {
+          throw new BadRequestError('Debes ingresar el monto recibido en efectivo');
+        }
+
+        if (montoRecibido < total) {
+          throw new BadRequestError('El monto recibido no alcanza para pagar la venta');
+        }
+      }
+
       const venta = await this.repository.createVenta(client, {
         usuarioId,
         sesionCajaId: sesionCaja.id,
         metodoPago: data.metodo_pago,
         subtotal: subtotalVenta,
         descuento,
+        totalSinRedondeo,
+        redondeo,
         total,
+        montoRecibido: montoRecibido ?? null,
+        vuelto,
         modalidad,
       });
 
@@ -308,7 +331,11 @@ export class VentasService {
       metodo_pago: row.metodo_pago,
       subtotal: Number(row.subtotal),
       descuento: Number(row.descuento),
+      total_sin_redondeo: Number(row.total_sin_redondeo),
+      redondeo: Number(row.redondeo),
       total: Number(row.total),
+      monto_recibido: row.monto_recibido === null ? null : Number(row.monto_recibido),
+      vuelto: row.vuelto === null ? null : Number(row.vuelto),
       modalidad: row.modalidad,
       estado: row.estado,
       anulada_en: row.anulada_en?.toISOString() ?? null,
@@ -365,6 +392,10 @@ export class VentasService {
   private round(value: number, decimals: number): number {
     const factor = 10 ** decimals;
     return Math.round((value + Number.EPSILON) * factor) / factor;
+  }
+
+  private roundToNearestTen(value: number): number {
+    return Math.round(value / 10) * 10;
   }
 
   private getPrecioUnitario(

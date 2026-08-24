@@ -4,6 +4,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 
 import { env } from './config/env.js';
 import { authRoutes } from './modules/auth/auth.routes.js';
+import { backupsRoutes } from './modules/backups/backups.routes.js';
 import { cajaRoutes } from './modules/caja/caja.routes.js';
 import { categoriasRoutes } from './modules/categorias/categorias.routes.js';
 import { comprasRoutes } from './modules/compras/compras.routes.js';
@@ -53,6 +54,7 @@ export const buildApp = async (): Promise<FastifyInstance> => {
   await app.register(ofertasRoutes, { prefix: '/ofertas' });
   await app.register(inventarioRoutes, { prefix: '/inventario' });
   await app.register(reportesRoutes, { prefix: '/reportes' });
+  await app.register(backupsRoutes, { prefix: '/backups' });
 
   return app;
 };

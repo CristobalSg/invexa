@@ -271,7 +271,11 @@ CREATE TABLE ventas (
 
   subtotal NUMERIC(10,2) NOT NULL DEFAULT 0,
   descuento NUMERIC(10,2) NOT NULL DEFAULT 0,
+  total_sin_redondeo NUMERIC(10,2) NOT NULL DEFAULT 0,
+  redondeo NUMERIC(10,2) NOT NULL DEFAULT 0,
   total NUMERIC(10,2) NOT NULL,
+  monto_recibido NUMERIC(10,2),
+  vuelto NUMERIC(10,2),
 
   modalidad modalidad_venta NOT NULL DEFAULT 'NORMAL',
 

@@ -65,11 +65,11 @@ export default function Layout() {
     { to: "/compras", label: "Compras", icon: ClipboardDocumentListIcon, visible: true },
     { to: "/catalogos", label: "Catálogos", icon: BookOpenIcon, visible: isOwner },
     { to: "/catalogos/ofertas", label: "Ofertas", icon: TagIcon, visible: isOwner },
-    { to: "/usuarios", label: "Usuarios", icon: UserGroupIcon, visible: isOwner },
+    { to: "/usuarios", label: "Administración", icon: UserGroupIcon, visible: isOwner },
     { to: "/reportes", label: "Reportes", icon: ChartBarIcon, visible: isOwner },
   ];
   const mainLinks = links.filter((link) => ["POS", "Ventas", "Caja"].includes(link.label));
-  const inventoryLinks = links.filter((link) => ["Productos", "Compras", "Catálogos", "Ofertas", "Usuarios", "Reportes"].includes(link.label));
+  const inventoryLinks = links.filter((link) => ["Productos", "Compras", "Catálogos", "Ofertas", "Administración", "Reportes"].includes(link.label));
 
   return (
     <div className={`flowly-shell ${theme === "dark" ? "dark" : ""}`}>
@@ -149,7 +149,7 @@ export default function Layout() {
             })}
           </div>
 
-          <div className="flowly-nav-section">
+          <div className="flowly-nav-section flowly-nav-support">
             <div className="flowly-section-title">SOPORTE</div>
             <Menu as="div" className="flowly-settings-menu">
               <MenuButton
@@ -200,12 +200,12 @@ export default function Layout() {
             <button
               type="button"
               onClick={handleLogout}
-              className="flowly-nav-item"
-              aria-label="Cambiar usuario"
-              title="Cambiar usuario"
+              className="flowly-nav-item flowly-nav-danger"
+              aria-label="Cerrar sesión"
+              title="Cerrar sesión"
             >
               <span className="flowly-nav-icon"><ArrowLeftOnRectangleIcon /></span>
-              <span className="flowly-nav-label">Cambiar usuario</span>
+              <span className="flowly-nav-label">Cerrar sesión</span>
             </button>
           </div>
         </nav>
@@ -221,8 +221,8 @@ export default function Layout() {
             type="button"
             onClick={handleLogout}
             className="rounded-lg p-2 text-red-700 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-950/40"
-            aria-label="Cambiar usuario"
-            title="Cambiar usuario"
+            aria-label="Cerrar sesión"
+            title="Cerrar sesión"
           >
             <ArrowLeftOnRectangleIcon className={iconClass} />
           </button>

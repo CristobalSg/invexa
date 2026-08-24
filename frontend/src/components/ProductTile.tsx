@@ -22,7 +22,7 @@ interface ProductTileProps {
   onReactivate?: () => void;
 }
 
-const productImageModules = import.meta.glob("../assets/images/products/*.{png,jpg,jpeg,webp,avif}", {
+const productImageModules = import.meta.glob("../assets/images/products/**/*.{png,jpg,jpeg,webp,avif}", {
   eager: true,
   query: "?url",
   import: "default",
@@ -37,7 +37,7 @@ const slugifyAssetName = (value: string) =>
     .replace(/^-+|-+$/g, "");
 
 const productImagesBySlug = Object.entries(productImageModules).reduce<Record<string, string>>((acc, [path, src]) => {
-  const filename = path.split("/").pop()?.replace(/\.[^.]+$/, "") ?? "";
+  const filename = path.split("/").pop()?.replace(/\.[^.]+$/, "").replace(/^\d+[_-]+/, "") ?? "";
   acc[slugifyAssetName(filename)] = src;
   return acc;
 }, {});

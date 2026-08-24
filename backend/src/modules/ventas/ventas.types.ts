@@ -35,7 +35,11 @@ export interface VentaRow {
   readonly metodo_pago: MetodoPago;
   readonly subtotal: string;
   readonly descuento: string;
+  readonly total_sin_redondeo: string;
+  readonly redondeo: string;
   readonly total: string;
+  readonly monto_recibido: string | null;
+  readonly vuelto: string | null;
   readonly modalidad: ModalidadVenta;
   readonly estado: EstadoVenta;
   readonly anulada_en: Date | null;
@@ -84,7 +88,11 @@ export interface Venta {
   readonly metodo_pago: MetodoPago;
   readonly subtotal: number;
   readonly descuento: number;
+  readonly total_sin_redondeo: number;
+  readonly redondeo: number;
   readonly total: number;
+  readonly monto_recibido: number | null;
+  readonly vuelto: number | null;
   readonly modalidad: ModalidadVenta;
   readonly estado: EstadoVenta;
   readonly anulada_en: string | null;
@@ -136,6 +144,7 @@ export interface CreateVentaBody {
   readonly descuento?: number;
   readonly modalidad?: ModalidadVenta;
   readonly master_password?: string;
+  readonly monto_recibido?: number;
   readonly items: CreateVentaItemBody[];
 }
 

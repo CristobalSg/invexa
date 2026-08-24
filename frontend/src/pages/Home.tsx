@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { EllipsisHorizontalIcon, MagnifyingGlassIcon, PlusIcon, StarIcon as StarIconOutline, TagIcon, WalletIcon, XMarkIcon } from "@heroicons/react/24/outline";
+import { EllipsisHorizontalIcon, MagnifyingGlassIcon, PlusIcon, TagIcon, WalletIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { StarIcon as StarIconSolid } from "@heroicons/react/24/solid";
 import InputForm from "../components/InputForm";
 import MainList from "../components/MainList";
 import SideList from "../components/SideList";
 import StatsPanel from "../components/StatsPanel";
+import ProductTile from "../components/ProductTile";
 import { Button, FormActions, FormField, inputClassName } from "../components/FormControls";
 import AdminPasswordModal from "../components/AdminPasswordModal";
 import type { MetodoPago, ModalidadVenta, Oferta, Producto } from "../types/api";
@@ -19,12 +20,8 @@ type CartProduct = Producto & { quantity: number; cartItemId: string };
 type CartSession = { id: string; name: string; items: CartProduct[] };
 type MixedPaymentMethod = "EFECTIVO" | "TARJETA" | "TRANSFERENCIA";
 type PaymentAmounts = Record<MixedPaymentMethod, string>;
-type QuickProductsModal = "frutas-verduras" | "destacados" | "ofertas" | `categoria-${number}`;
-type ProductListFilter =
-  | { type: "all" }
-  | { type: "category"; categoryId: number; categoryName: string }
-  | { type: "featured" }
-  | { type: "offers" };
+type QuickProductsModal = `categoria-${number}`;
+type ProductShelfFilter = "featured" | "offers";
 
 const isWeighableProduct = (product: Producto) =>
   product.unidad_venta === "PESO";
@@ -34,47 +31,6 @@ const blocksSalesByStock = (product: Producto) =>
 
 const normalizeText = (value: string) =>
   value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-
-const matchesCategory = (product: Producto, categoryName: string) =>
-  normalizeText(product.categoria_nombre).includes(categoryName);
-
-const fruitTerms = [
-  "manzana",
-  "platano",
-  "banana",
-  "pera",
-  "naranja",
-  "mandarina",
-  "limon",
-  "palta",
-  "uva",
-  "melon",
-  "sandia",
-  "durazno",
-  "frutilla",
-  "kiwi",
-];
-const vegetableTerms = [
-  "lechuga",
-  "tomate",
-  "cebolla",
-  "papa",
-  "zanahoria",
-  "zapallo",
-  "pepino",
-  "pimenton",
-  "brocoli",
-  "coliflor",
-  "apio",
-  "acelga",
-  "cilantro",
-  "perejil",
-];
-
-const matchesAnyTerm = (product: Producto, terms: string[]) => {
-  const name = normalizeText(product.nombre);
-  return terms.some((term) => name.includes(term));
-};
 
 const createCartItemId = (productId: number) => `${productId}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 const createCartSession = (index: number): CartSession => ({
@@ -105,15 +61,16 @@ const paymentMethodLabels: Record<MetodoPago, string> = {
 
 const cashSuggestionAmounts = [1000, 2000, 5000, 10000, 20000];
 const featuredProductsStorageKey = "pos-featured-products";
+const productModalPageSize = 32;
+const categoryModalPageSize = 8;
 
 const toInputAmount = (value: number) => (value > 0 ? String(value) : "");
 const toAmount = (value: string) => Number(value) || 0;
 const roundUpTo = (value: number, step: number) => Math.ceil(value / step) * step;
+const roundCurrency = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
+const roundToNearestTen = (value: number) => Math.round(value / 10) * 10;
 const formatMoney = (value: number) => `$${value.toLocaleString()}`;
-const formatOfferQuantity = (offer: Oferta) =>
-  offer.producto_unidad_venta === "PESO"
-    ? `${Number((offer.cantidad_oferta * 1000).toFixed(0))} g`
-    : `${offer.cantidad_oferta} un.`;
+const formatSignedMoney = (value: number) => `${value >= 0 ? "+" : "-"}$${Math.abs(value).toLocaleString()}`;
 
 const getCategoryVisual = (name: string) => {
   const normalized = normalizeText(name);
@@ -232,9 +189,10 @@ export default function Home() {
   const barcodeInputRef = useRef<HTMLInputElement>(null);
   const productSearchInputRef = useRef<HTMLInputElement>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [searchPage, setSearchPage] = useState(1);
   const [isProductSearchOpen, setIsProductSearchOpen] = useState(false);
   const [barcodeClearSignal, setBarcodeClearSignal] = useState(0);
-  const [productListFilter, setProductListFilter] = useState<ProductListFilter>({ type: "all" });
+  const [productShelfFilter, setProductShelfFilter] = useState<ProductShelfFilter>("featured");
   const [carts, setCarts] = useState<CartSession[]>(() => [createCartSession(1)]);
   const [activeCartId] = useState(() => "");
   const [message, setMessage] = useState("");
@@ -243,7 +201,9 @@ export default function Home() {
   const [grams, setGrams] = useState("");
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [categoryModalOpen, setCategoryModalOpen] = useState(false);
+  const [categoryModalPage, setCategoryModalPage] = useState(1);
   const [quickProductsModal, setQuickProductsModal] = useState<QuickProductsModal | null>(null);
+  const [quickProductsPage, setQuickProductsPage] = useState(1);
   const [featuredProductIds, setFeaturedProductIds] = useState<number[]>(readFeaturedProductIds);
   const [modalidadVenta, setModalidadVenta] = useState<ModalidadVenta>("NORMAL");
   const [salePasswordOpen, setSalePasswordOpen] = useState(false);
@@ -272,6 +232,19 @@ export default function Home() {
     queryKey: ["ofertas", "activas"],
     queryFn: () => getOfertasActivas(),
   });
+  const normalizedSearchTerm = searchTerm.trim();
+  const { data: searchProducts, isFetching: isSearchFetching } = useQuery({
+    queryKey: ["products", "pos-search", { search: normalizedSearchTerm, page: searchPage }],
+    queryFn: () =>
+      getProducts({
+        activo: true,
+        search: normalizedSearchTerm,
+        page: searchPage,
+        limit: productModalPageSize,
+      }),
+    enabled: isProductSearchOpen && normalizedSearchTerm.length > 0,
+    placeholderData: keepPreviousData,
+  });
 
   const activeOffers = ofertasActivas?.items ?? [];
   const activeOffersByProductId = new Map(activeOffers.map((offer) => [offer.producto_id, offer]));
@@ -283,53 +256,37 @@ export default function Home() {
     });
   const categoryButtons = allCategoryButtons.slice(0, 4);
   const extraCategoryButtons = allCategoryButtons.slice(4);
+  const categoryModalTotalPages = Math.max(1, Math.ceil(extraCategoryButtons.length / categoryModalPageSize));
+  const pagedExtraCategoryButtons = extraCategoryButtons.slice(
+    (categoryModalPage - 1) * categoryModalPageSize,
+    categoryModalPage * categoryModalPageSize,
+  );
   const quickCategoryId = quickProductsModal?.startsWith("categoria-")
     ? Number(quickProductsModal.replace("categoria-", ""))
     : null;
   const quickCategoryName = allCategoryButtons.find((category) => category.id === quickCategoryId)?.name;
+  const { data: categoryProductsPage, isFetching: isCategoryProductsFetching } = useQuery({
+    queryKey: ["products", "pos-category", { categoryId: quickCategoryId, page: quickProductsPage }],
+    queryFn: () =>
+      getProducts({
+        activo: true,
+        categoria_id: quickCategoryId ?? undefined,
+        page: quickProductsPage,
+        limit: productModalPageSize,
+      }),
+    enabled: quickCategoryId !== null,
+    placeholderData: keepPreviousData,
+  });
 
-  const produceProducts = (productos?.items ?? []).filter(
-    (product) =>
-      matchesCategory(product, "frutas") ||
-      matchesCategory(product, "verduras") ||
-      matchesAnyTerm(product, fruitTerms) ||
-      matchesAnyTerm(product, vegetableTerms),
-  );
   const featuredProducts = (productos?.items ?? []).filter((product) => featuredProductIds.includes(product.id));
   const offerProducts = (productos?.items ?? []).filter((product) => activeOffersByProductId.has(product.id));
-  const listedProducts =
-    productListFilter.type === "category"
-      ? (productos?.items ?? []).filter((product) => product.categoria_id === productListFilter.categoryId)
-      : productListFilter.type === "featured"
-        ? featuredProducts
-        : productListFilter.type === "offers"
-          ? offerProducts
-          : productos?.items ?? [];
-  const listedProductsTitle =
-    productListFilter.type === "category"
-      ? productListFilter.categoryName
-      : productListFilter.type === "featured"
-        ? "Favoritos"
-        : productListFilter.type === "offers"
-          ? "Ofertas"
-          : "Productos";
-  const categoryProducts = quickCategoryId
-    ? (productos?.items ?? []).filter((product) => product.categoria_id === quickCategoryId)
-    : [];
-  const quickProducts =
-    quickProductsModal === "destacados"
-      ? featuredProducts
-      : quickProductsModal === "ofertas"
-        ? offerProducts
-        : quickCategoryId
-          ? categoryProducts
-          : produceProducts;
-  const quickProductsTitle =
-    quickProductsModal === "destacados"
-      ? "Productos destacados"
-      : quickProductsModal === "ofertas"
-        ? "Productos en oferta"
-        : quickCategoryName ?? "Frutas y verduras";
+  const listedProducts = productShelfFilter === "featured" ? featuredProducts : offerProducts;
+  const listedProductsTitle = productShelfFilter === "featured" ? "Favoritos" : "Ofertas";
+  const quickProducts = categoryProductsPage?.items ?? [];
+  const quickProductsPagination = categoryProductsPage?.pagination;
+  const searchProductsItems = searchProducts?.items ?? [];
+  const searchProductsPagination = searchProducts?.pagination;
+  const quickProductsTitle = quickCategoryName ?? "Categoría";
   const resolvedActiveCartId = activeCartId || carts[0]?.id || "";
   const activeCart = carts.find((cartSession) => cartSession.id === resolvedActiveCartId) ?? carts[0];
   const cart = activeCart?.items ?? [];
@@ -338,7 +295,7 @@ export default function Home() {
     window.setTimeout(() => {
       if (
         force ||
-        (!isProductSearchOpen && !paymentModalOpen && !salePasswordOpen && !weighableProduct)
+        (!isProductSearchOpen && !categoryModalOpen && !quickProductsModal && !paymentModalOpen && !salePasswordOpen && !weighableProduct)
       ) {
         barcodeInputRef.current?.focus();
       }
@@ -354,6 +311,18 @@ export default function Home() {
       window.setTimeout(() => productSearchInputRef.current?.focus(), 0);
     }
   }, [isProductSearchOpen]);
+
+  useEffect(() => {
+    setSearchPage(1);
+  }, [normalizedSearchTerm]);
+
+  useEffect(() => {
+    setQuickProductsPage(1);
+  }, [quickCategoryId]);
+
+  useEffect(() => {
+    setCategoryModalPage((current) => Math.min(current, categoryModalTotalPages));
+  }, [categoryModalTotalPages]);
 
   useEffect(() => {
     window.sessionStorage.setItem(featuredProductsStorageKey, JSON.stringify(featuredProductIds));
@@ -398,14 +367,19 @@ export default function Home() {
       : modalidadVenta === "PRECIO_COSTO"
         ? totalCosto
         : total - descuentoOfertas;
+  const redondeoVenta =
+    metodoPago === "EFECTIVO" && modalidadVenta !== "RETIRO_DUENO"
+      ? roundCurrency(roundToNearestTen(totalFinal) - totalFinal)
+      : 0;
+  const totalCobrar = roundCurrency(totalFinal + redondeoVenta);
   const cashReceivedAmount = toAmount(cashReceived);
   const mixedTotal = mixedMethods.reduce((sum, method) => sum + toAmount(mixedAmounts[method]), 0);
-  const cashSuggestions = createCashSuggestions(totalFinal);
+  const cashSuggestions = createCashSuggestions(totalCobrar);
   const canConfirmSale =
     modalidadVenta === "RETIRO_DUENO"
         ? true
         : metodoPago === "EFECTIVO"
-          ? cashReceivedAmount >= totalFinal
+          ? cashReceivedAmount >= totalCobrar
           : metodoPago === "MIXTO"
             ? mixedTotal >= totalFinal
             : true;
@@ -416,19 +390,20 @@ export default function Home() {
       setCenterAlert("Abre una caja antes de registrar ventas.");
       return;
     }
+    const normalTotalFinal = total - descuentoOfertas;
     setMetodoPago("EFECTIVO");
     setModalidadVenta("NORMAL");
     setSalePasswordOpen(false);
-    setCashReceived(toInputAmount(totalFinal));
+    setCashReceived(toInputAmount(roundToNearestTen(normalTotalFinal)));
     setMixedMethods(["EFECTIVO", "TARJETA"]);
-    setMixedAmounts(createMixedAmounts(["EFECTIVO", "TARJETA"], totalFinal));
+    setMixedAmounts(createMixedAmounts(["EFECTIVO", "TARJETA"], normalTotalFinal));
     setPaymentModalOpen(true);
   };
 
   const handlePaymentMethodChange = (method: MetodoPago) => {
     setMetodoPago(method);
     if (method === "EFECTIVO") {
-      setCashReceived(toInputAmount(totalFinal));
+      setCashReceived(toInputAmount(roundToNearestTen(totalFinal)));
     }
     if (method === "MIXTO") {
       const methods: MixedPaymentMethod[] = ["EFECTIVO", "TARJETA"];
@@ -461,7 +436,7 @@ export default function Home() {
   };
 
   const handleFinishSale = async (adminPassword?: string) => {
-    if (metodoPago === "EFECTIVO" && cashReceivedAmount < totalFinal) {
+    if (metodoPago === "EFECTIVO" && cashReceivedAmount < totalCobrar) {
       setMessage("El monto recibido no alcanza para pagar la venta.");
       return;
     }
@@ -479,6 +454,7 @@ export default function Home() {
         metodo_pago: metodoPago,
         modalidad: modalidadVenta,
         master_password: modalidadVenta === "NORMAL" ? undefined : adminPassword,
+        monto_recibido: metodoPago === "EFECTIVO" && modalidadVenta !== "RETIRO_DUENO" ? cashReceivedAmount : undefined,
         items: aggregateSaleItems(cart),
       });
       queryClient.invalidateQueries({ queryKey: ["products"] });
@@ -486,7 +462,7 @@ export default function Home() {
       queryClient.invalidateQueries({ queryKey: ["caja-actual"] });
       queryClient.invalidateQueries({ queryKey: ["reportes"] });
       setCart([]);
-      setProductListFilter({ type: "all" });
+      setProductShelfFilter("featured");
       setPaymentModalOpen(false);
       setSalePasswordOpen(false);
       setCashReceived("");
@@ -622,19 +598,20 @@ export default function Home() {
   const handleCloseProductSearch = () => {
     setIsProductSearchOpen(false);
     setSearchTerm("");
+    setSearchPage(1);
     focusBarcodeInput(true);
-  };
-
-  const handleProductSearchBlur = (event: React.FocusEvent<HTMLInputElement>) => {
-    const nextTarget = event.relatedTarget as HTMLElement | null;
-    if (nextTarget?.getAttribute("aria-label") === "Borrar código") return;
-
-    window.setTimeout(handleCloseProductSearch, 120);
   };
 
   const handleClearBarcodeInput = () => {
     setBarcodeClearSignal((current) => current + 1);
     focusBarcodeInput();
+  };
+
+  const handleSearchProductSelect = (product: Producto) => {
+    handleProductFound(product);
+    setIsProductSearchOpen(false);
+    setSearchTerm("");
+    setSearchPage(1);
   };
 
   const handleModalidadChange = (modalidad: ModalidadVenta) => {
@@ -646,8 +623,37 @@ export default function Home() {
           : total - descuentoOfertas;
     setModalidadVenta(modalidad);
     setSalePasswordOpen(false);
-    setCashReceived(toInputAmount(nextTotal));
+    setCashReceived(toInputAmount(metodoPago === "EFECTIVO" ? roundToNearestTen(nextTotal) : nextTotal));
     setMixedAmounts(createMixedAmounts(mixedMethods, nextTotal));
+  };
+
+  const renderModalPagination = (
+    pagination: { page: number; totalPages: number; total: number } | undefined,
+    onPageChange: (page: number) => void,
+  ) => {
+    if (!pagination || pagination.totalPages <= 1) return null;
+
+    return (
+      <div className="pos-modal-pagination">
+        <button
+          type="button"
+          onClick={() => onPageChange(Math.max(1, pagination.page - 1))}
+          disabled={pagination.page <= 1}
+        >
+          Anterior
+        </button>
+        <span>
+          Página {pagination.page} de {pagination.totalPages}
+        </span>
+        <button
+          type="button"
+          onClick={() => onPageChange(Math.min(pagination.totalPages, pagination.page + 1))}
+          disabled={pagination.page >= pagination.totalPages}
+        >
+          Siguiente
+        </button>
+      </div>
+    );
   };
 
   return (
@@ -675,7 +681,10 @@ export default function Home() {
           />
           <button
             type="button"
-            onClick={() => setIsProductSearchOpen(true)}
+            onClick={() => {
+              setIsProductSearchOpen(true);
+              setSearchPage(1);
+            }}
             className="pos-tool-btn"
             aria-label="Buscar producto"
             title="Buscar producto"
@@ -709,16 +718,6 @@ export default function Home() {
               <h2 className="pos-subtitle">Explora productos</h2>
             </div>
             <div className="pos-category-actions">
-              <button
-                type="button"
-                onClick={() => {
-                  setProductListFilter({ type: "all" });
-                  focusBarcodeInput();
-                }}
-                className={`pos-category-reset ${productListFilter.type === "all" ? "active" : ""}`}
-              >
-                General
-              </button>
               <span className="pos-category-count">{allCategoryButtons.length} categorías</span>
             </div>
           </div>
@@ -729,10 +728,9 @@ export default function Home() {
                 key={category.id}
                 type="button"
                 onClick={() => {
-                  setProductListFilter({ type: "category", categoryId: category.id, categoryName: category.name });
-                  focusBarcodeInput();
+                  setQuickProductsModal(`categoria-${category.id}`);
                 }}
-                className={`pos-category-card ${productListFilter.type === "category" && productListFilter.categoryId === category.id ? "active" : ""}`}
+                className={`pos-category-card ${quickCategoryId === category.id ? "active" : ""}`}
               >
                 <span className="pos-category-visual">
                   {categoryImagesBySlug[slugifyAssetName(category.name)] ? (
@@ -748,7 +746,7 @@ export default function Home() {
               type="button"
               onClick={() => {
                 setCategoryModalOpen(true);
-                focusBarcodeInput();
+                setCategoryModalPage(1);
               }}
               className="pos-category-card"
               aria-label="Ver más categorías"
@@ -762,10 +760,10 @@ export default function Home() {
             <button
               type="button"
               onClick={() => {
-                setProductListFilter({ type: "featured" });
+                setProductShelfFilter("featured");
                 focusBarcodeInput();
               }}
-              className={`pos-category-card ${productListFilter.type === "featured" ? "active" : ""}`}
+              className={`pos-category-card ${productShelfFilter === "featured" ? "active" : ""}`}
               aria-label="Productos destacados"
               title="Productos destacados"
             >
@@ -775,10 +773,10 @@ export default function Home() {
             <button
               type="button"
               onClick={() => {
-                setProductListFilter({ type: "offers" });
+                setProductShelfFilter("offers");
                 focusBarcodeInput();
               }}
-              className={`pos-category-card ${productListFilter.type === "offers" ? "active" : ""}`}
+              className={`pos-category-card ${productShelfFilter === "offers" ? "active" : ""}`}
               aria-label="Productos en oferta"
               title="Productos en oferta"
             >
@@ -788,17 +786,6 @@ export default function Home() {
           </div>
         </section>
 
-        {isProductSearchOpen && (
-          <div className="pos-search-wrap">
-            <InputForm
-              ref={productSearchInputRef}
-              title="Buscar producto"
-              onSearchChange={setSearchTerm}
-              onBlur={handleProductSearchBlur}
-            />
-          </div>
-        )}
-
         <SideList
           searchTerm={searchTerm}
           onProductClick={handleProductFound}
@@ -806,7 +793,32 @@ export default function Home() {
           onToggleFeatured={toggleFeaturedProduct}
           productsOverride={listedProducts}
           isLoadingOverride={!productos}
+          kicker="Vista rápida"
           title={listedProductsTitle}
+          actions={
+            <div className="pos-list-toggle">
+              <button
+                type="button"
+                onClick={() => {
+                  setProductShelfFilter("featured");
+                  focusBarcodeInput();
+                }}
+                className={productShelfFilter === "featured" ? "active" : ""}
+              >
+                Favoritos
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setProductShelfFilter("offers");
+                  focusBarcodeInput();
+                }}
+                className={productShelfFilter === "offers" ? "active" : ""}
+              >
+                Ofertas
+              </button>
+            </div>
+          }
         />
       </section>
 
@@ -852,6 +864,82 @@ export default function Home() {
         {message && <p className="mb-3 rounded-xl border border-[#ececf0] bg-white p-3 text-sm">{message}</p>}
         <StatsPanel total={totalFinal} onFinish={handleOpenPayment} disabled={cart.length === 0 || !cajaActual?.abierta} />
       </aside>
+      {isProductSearchOpen && (
+        <div
+          className="flow-modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) handleCloseProductSearch();
+          }}
+        >
+          <div className="flow-modal pos-search-modal">
+            <div className="pos-section-row">
+              <div>
+                <span className="pos-kicker">Buscar</span>
+                <h2 className="flow-modal-title">Buscar producto</h2>
+              </div>
+              <button
+                type="button"
+                onClick={handleCloseProductSearch}
+                className="rounded-xl border border-[#ececf0] bg-white px-4 py-3 text-sm font-bold text-[#5f626b] hover:bg-[#f7f7f9]"
+              >
+                Cerrar
+              </button>
+            </div>
+            <div className="mt-5">
+              <input
+                ref={productSearchInputRef}
+                type="text"
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") handleCloseProductSearch();
+                }}
+                className={`${inputClassName} h-14 text-lg font-bold`}
+                placeholder="Nombre o código de barra"
+              />
+            </div>
+
+            <div className="pos-search-results-head">
+              <span>
+                {normalizedSearchTerm
+                  ? searchProductsPagination
+                    ? `${searchProductsPagination.total} resultados`
+                    : "Buscando productos..."
+                  : "Ingresa un texto para buscar"}
+              </span>
+              {isSearchFetching && <span>Actualizando...</span>}
+            </div>
+
+            <div className="category-products-grid pos-search-results-grid">
+              {normalizedSearchTerm && searchProductsItems.map((product) => {
+                const isFeatured = featuredProductIds.includes(product.id);
+
+                return (
+                  <ProductTile
+                    key={product.id}
+                    product={product}
+                    isFeatured={isFeatured}
+                    onClick={() => handleSearchProductSelect(product)}
+                    onToggleFeatured={() => toggleFeaturedProduct(product.id)}
+                  />
+                );
+              })}
+              {normalizedSearchTerm && !isSearchFetching && searchProductsItems.length === 0 && (
+                <div className="category-products-empty">
+                  No hay productos para esta búsqueda.
+                </div>
+              )}
+              {!normalizedSearchTerm && (
+                <div className="category-products-empty">
+                  Escribe el nombre o código para ver resultados.
+                </div>
+              )}
+            </div>
+
+            {renderModalPagination(searchProductsPagination, setSearchPage)}
+          </div>
+        </div>
+      )}
       {centerAlert && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-sm rounded-lg bg-white p-6 text-center shadow-xl">
@@ -939,87 +1027,68 @@ export default function Home() {
         </div>
       )}
       {quickProductsModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-4xl rounded-lg bg-white p-6 shadow-xl">
-            <div className="flex items-start justify-between gap-4">
+        <div
+          className="flow-modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setQuickProductsModal(null);
+              setQuickProductsPage(1);
+              focusBarcodeInput();
+            }
+          }}
+        >
+          <div className="flow-modal category-products-modal">
+            <div className="pos-section-row">
               <div>
-                <h2 className="text-xl font-bold text-gray-900">{quickProductsTitle}</h2>
-                <p className="mt-1 text-sm text-gray-500">{quickProducts.length} productos disponibles</p>
+                <span className="pos-kicker">Categoría</span>
+                <h2 className="flow-modal-title">{quickProductsTitle}</h2>
               </div>
+              <span className="pos-status-pill">
+                {quickProductsPagination ? quickProductsPagination.total : quickProducts.length} productos
+              </span>
               <button
+                type="button"
                 onClick={() => {
                   setQuickProductsModal(null);
+                  setQuickProductsPage(1);
                   focusBarcodeInput();
                 }}
-                className="rounded px-3 py-1 text-gray-600 hover:bg-gray-100"
+                className="rounded-xl border border-[#ececf0] bg-white px-4 py-3 text-sm font-bold text-[#5f626b] hover:bg-[#f7f7f9]"
               >
                 Cerrar
               </button>
             </div>
 
-            <div className="mt-5 grid max-h-[70vh] grid-cols-1 gap-3 overflow-auto md:grid-cols-2 lg:grid-cols-3">
+            <div className="category-products-grid">
               {quickProducts.map((product) => {
                 const isFeatured = featuredProductIds.includes(product.id);
-                const offer = activeOffersByProductId.get(product.id);
 
                 return (
-                <div
-                  key={product.id}
-                  className="rounded-lg border border-gray-200 px-4 py-3 hover:border-blue-300 hover:bg-blue-50"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        handleProductFound(product);
-                        setQuickProductsModal(null);
-                        focusBarcodeInput();
-                      }}
-                      className="min-w-0 flex-1 text-left"
-                    >
-                      <p className="font-semibold text-gray-900">{product.nombre}</p>
-                      <p className="mt-1 text-sm text-gray-500">
-                        Stock {product.stock}{isWeighableProduct(product) ? " kg" : " unidades"}
-                      </p>
-                      <p className="mt-2 text-sm font-semibold text-gray-900">
-                        ${product.precio_venta.toLocaleString()}{isWeighableProduct(product) ? "/kg" : ""}
-                      </p>
-                      {offer && (
-                        <p className="mt-1 text-sm font-semibold text-sky-700">
-                          Oferta: {formatOfferQuantity(offer)} por ${offer.precio_oferta.toLocaleString()}
-                        </p>
-                      )}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        toggleFeaturedProduct(product.id);
-                        focusBarcodeInput();
-                      }}
-                      className={`rounded-md p-2 ${
-                        isFeatured
-                          ? "text-amber-500 hover:bg-amber-50"
-                          : "text-gray-300 hover:bg-gray-100 hover:text-amber-500"
-                      }`}
-                      aria-label={isFeatured ? "Quitar de destacados" : "Destacar producto"}
-                      title={isFeatured ? "Quitar de destacados" : "Destacar producto"}
-                    >
-                      {isFeatured ? <StarIconSolid className="h-5 w-5" /> : <StarIconOutline className="h-5 w-5" />}
-                    </button>
-                  </div>
-                </div>
+                  <ProductTile
+                    key={product.id}
+                    product={product}
+                    isFeatured={isFeatured}
+                    onClick={() => {
+                      handleProductFound(product);
+                      setQuickProductsModal(null);
+                      setQuickProductsPage(1);
+                    }}
+                    onToggleFeatured={() => toggleFeaturedProduct(product.id)}
+                  />
                 );
               })}
-              {quickProducts.length === 0 && (
-                <div className="col-span-full py-10 text-center text-sm text-gray-500">
-                  {quickProductsModal === "destacados"
-                    ? "Marca productos con la estrella para verlos aquí."
-                    : quickProductsModal === "ofertas"
-                      ? "No hay ofertas activas vigentes."
-                    : "No hay productos en esta categoría."}
+              {isCategoryProductsFetching && quickProducts.length === 0 && (
+                <div className="category-products-empty">
+                  Cargando productos...
+                </div>
+              )}
+              {!isCategoryProductsFetching && quickProducts.length === 0 && (
+                <div className="category-products-empty">
+                  No hay productos en esta categoría.
                 </div>
               )}
             </div>
+            {renderModalPagination(quickProductsPagination, setQuickProductsPage)}
           </div>
         </div>
       )}
@@ -1029,6 +1098,7 @@ export default function Home() {
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) {
               setCategoryModalOpen(false);
+              setCategoryModalPage(1);
               focusBarcodeInput();
             }
           }}
@@ -1043,6 +1113,7 @@ export default function Home() {
                 type="button"
                 onClick={() => {
                   setCategoryModalOpen(false);
+                  setCategoryModalPage(1);
                   focusBarcodeInput();
                 }}
                 className="rounded-xl border border-[#ececf0] bg-white px-3 py-2 text-sm font-bold text-[#5f626b] hover:bg-[#f7f7f9]"
@@ -1052,16 +1123,17 @@ export default function Home() {
             </div>
 
             <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-              {extraCategoryButtons.map((category) => (
+              {pagedExtraCategoryButtons.map((category) => (
                 <button
                   key={category.id}
                   type="button"
                   onClick={() => {
-                    setProductListFilter({ type: "category", categoryId: category.id, categoryName: category.name });
+                    setQuickProductsModal(`categoria-${category.id}`);
                     setCategoryModalOpen(false);
-                    focusBarcodeInput();
+                    setCategoryModalPage(1);
+                    setQuickProductsPage(1);
                   }}
-                  className={`pos-category-card ${productListFilter.type === "category" && productListFilter.categoryId === category.id ? "active" : ""}`}
+                  className={`pos-category-card ${quickCategoryId === category.id ? "active" : ""}`}
                 >
                   <span className="pos-category-visual">
                     {categoryImagesBySlug[slugifyAssetName(category.name)] ? (
@@ -1079,6 +1151,27 @@ export default function Home() {
                 </p>
               )}
             </div>
+            {extraCategoryButtons.length > 0 && (
+              <div className="pos-modal-pagination">
+                <button
+                  type="button"
+                  onClick={() => setCategoryModalPage((current) => Math.max(1, current - 1))}
+                  disabled={categoryModalPage <= 1}
+                >
+                  Anterior
+                </button>
+                <span>
+                  Página {categoryModalPage} de {categoryModalTotalPages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setCategoryModalPage((current) => Math.min(categoryModalTotalPages, current + 1))}
+                  disabled={categoryModalPage >= categoryModalTotalPages}
+                >
+                  Siguiente
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1128,9 +1221,19 @@ export default function Home() {
                       <span>Costo ref. {formatMoney(totalCosto)}</span>
                     </div>
                   )}
+                  <div className="mt-2 flex justify-between text-sm font-semibold text-[#5f626b]">
+                    <span>Total real</span>
+                    <span>{formatMoney(totalFinal)}</span>
+                  </div>
+                  {metodoPago === "EFECTIVO" && modalidadVenta !== "RETIRO_DUENO" && (
+                    <div className={`mt-1 flex justify-between text-sm font-semibold ${redondeoVenta < 0 ? "text-red-700" : "text-emerald-700"}`}>
+                      <span>Redondeo</span>
+                      <span>{formatSignedMoney(redondeoVenta)}</span>
+                    </div>
+                  )}
                   <div className="pos-grand-total">
                     <span>Total a pagar</span>
-                    <strong>${totalFinal.toLocaleString()}</strong>
+                    <strong>${totalCobrar.toLocaleString()}</strong>
                   </div>
                 </div>
 
@@ -1202,8 +1305,18 @@ export default function Home() {
                     <div className="mt-3 rounded-[20px] border border-emerald-200 bg-emerald-50 p-4 text-center">
                       <p className="text-sm font-semibold uppercase text-emerald-700">Vuelto</p>
                       <p className="mt-1 text-4xl font-bold leading-tight text-emerald-800">
-                        ${Math.max(0, cashReceivedAmount - totalFinal).toLocaleString()}
+                        ${Math.max(0, cashReceivedAmount - totalCobrar).toLocaleString()}
                       </p>
+                    </div>
+                    <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                      <div className="rounded-[16px] border border-[#ececf0] bg-[#fafafa] p-3">
+                        <p className="font-bold text-[#8b8e98]">Efectivo recibido</p>
+                        <p className="mt-1 text-lg font-black text-[#25262c]">{formatMoney(cashReceivedAmount)}</p>
+                      </div>
+                      <div className="rounded-[16px] border border-[#ececf0] bg-[#fafafa] p-3">
+                        <p className="font-bold text-[#8b8e98]">Total cobrado</p>
+                        <p className="mt-1 text-lg font-black text-[#25262c]">{formatMoney(totalCobrar)}</p>
+                      </div>
                     </div>
                     <div className="mt-4">
                       <p className="text-sm font-bold text-[#5f626b]">Sugeridos</p>

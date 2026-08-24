@@ -1,19 +1,41 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { KeyIcon, UserCircleIcon, UserGroupIcon } from "@heroicons/react/24/outline";
+import {
+  ArrowDownTrayIcon,
+  ArrowPathIcon,
+  CircleStackIcon,
+  KeyIcon,
+  TrashIcon,
+  UserCircleIcon,
+  UserGroupIcon,
+} from "@heroicons/react/24/outline";
 import { createUsuario, deactivateUsuario, getUsuarios, updateUsuario } from "../services/catalogService";
+import { createBackup, deleteBackup, downloadBackup, getBackups, restoreBackup } from "../services/backupService";
 import type { Usuario, UserRole } from "../types/api";
 import ListPanel from "../components/ListPanel";
 import ModuleCard from "../components/ModuleCard";
 import { Button, FormActions, FormField, inputClassName } from "../components/FormControls";
 
+const formatBackupDate = (value: string) =>
+  new Date(value).toLocaleString("es-CL", {
+    dateStyle: "short",
+    timeStyle: "short",
+  });
+
+const formatBackupSize = (bytes: number) => {
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
 export default function UsuariosPage() {
   const queryClient = useQueryClient();
+  const restoreInputRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState({ nombre_usuario: "", contraseña: "", nombre: "", email: "", rol: "CASHIER" as UserRole });
   const [passwordUser, setPasswordUser] = useState<Usuario | null>(null);
   const [passwordForm, setPasswordForm] = useState({ contraseña: "", confirmar_contraseña: "" });
   const [message, setMessage] = useState("");
   const { data, isLoading } = useQuery({ queryKey: ["usuarios"], queryFn: getUsuarios });
+  const { data: backups, isLoading: isLoadingBackups } = useQuery({ queryKey: ["backups"], queryFn: getBackups });
   const create = useMutation({
     mutationFn: () => createUsuario({ ...form, email: form.email || null }),
     onSuccess: () => {
@@ -46,6 +68,31 @@ export default function UsuariosPage() {
     },
     onError: (error) => setMessage(error instanceof Error ? error.message : "No se pudo modificar la contraseña"),
   });
+  const createBackupMutation = useMutation({
+    mutationFn: createBackup,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["backups"] });
+      setMessage("Backup creado correctamente.");
+    },
+    onError: (error) => setMessage(error instanceof Error ? error.message : "No se pudo crear el backup"),
+  });
+  const deleteBackupMutation = useMutation({
+    mutationFn: deleteBackup,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["backups"] });
+      setMessage("Backup eliminado.");
+    },
+    onError: (error) => setMessage(error instanceof Error ? error.message : "No se pudo eliminar el backup"),
+  });
+  const restoreBackupMutation = useMutation({
+    mutationFn: restoreBackup,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries();
+      setMessage("Backup restaurado correctamente. Si ves datos antiguos, recarga la pagina.");
+      if (restoreInputRef.current) restoreInputRef.current.value = "";
+    },
+    onError: (error) => setMessage(error instanceof Error ? error.message : "No se pudo restaurar el backup"),
+  });
 
   const openPasswordModal = (usuario: Usuario) => {
     setPasswordUser(usuario);
@@ -58,9 +105,44 @@ export default function UsuariosPage() {
     setPasswordForm({ contraseña: "", confirmar_contraseña: "" });
   };
 
+  const handleDownloadBackup = async (filename: string) => {
+    try {
+      const blob = await downloadBackup(filename);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "No se pudo descargar el backup");
+    }
+  };
+
+  const handleRestoreFile = (file: File | undefined) => {
+    if (!file) return;
+    if (!file.name.endsWith(".dump")) {
+      setMessage("Selecciona un archivo .dump");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Restaurar este backup reemplazara la base de datos actual. Esta accion no se puede deshacer desde el sistema. ¿Quieres continuar?",
+    );
+
+    if (!confirmed) {
+      if (restoreInputRef.current) restoreInputRef.current.value = "";
+      return;
+    }
+
+    restoreBackupMutation.mutate(file);
+  };
+
   return (
     <div className="admin-page space-y-6">
-      <h1 className="admin-page-title">Usuarios</h1>
+      <h1 className="admin-page-title">Configuración / Administración</h1>
       <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
         <div className="xl:sticky xl:top-6 xl:self-start">
       <ModuleCard title="Crear usuario" icon={UserCircleIcon} contentClassName="p-5">
@@ -123,6 +205,98 @@ export default function UsuariosPage() {
       />
         </div>
       </div>
+
+      <ModuleCard title="Backups de PostgreSQL" icon={CircleStackIcon} contentClassName="p-5">
+        <div className="grid gap-5 xl:grid-cols-[320px_1fr]">
+          <div className="space-y-3">
+            <Button
+              fullWidth
+              onClick={() => createBackupMutation.mutate()}
+              disabled={createBackupMutation.isPending}
+            >
+              {createBackupMutation.isPending ? "Creando backup..." : "Crear backup manual"}
+            </Button>
+            <input
+              ref={restoreInputRef}
+              type="file"
+              accept=".dump,application/octet-stream"
+              className="hidden"
+              onChange={(event) => handleRestoreFile(event.target.files?.[0])}
+            />
+            <Button
+              fullWidth
+              variant="secondary"
+              onClick={() => restoreInputRef.current?.click()}
+              disabled={restoreBackupMutation.isPending}
+            >
+              {restoreBackupMutation.isPending ? "Restaurando..." : "Importar/restaurar .dump"}
+            </Button>
+            <p className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-900">
+              Restaurar un backup reemplaza la base de datos actual.
+            </p>
+          </div>
+
+          <div className="admin-table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Archivo</th>
+                  <th>Fecha y hora</th>
+                  <th>Tamaño</th>
+                  <th className="text-right">Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {isLoadingBackups && (
+                  <tr>
+                    <td colSpan={4}>Cargando backups...</td>
+                  </tr>
+                )}
+                {!isLoadingBackups && (backups ?? []).length === 0 && (
+                  <tr>
+                    <td colSpan={4}>No hay backups generados.</td>
+                  </tr>
+                )}
+                {(backups ?? []).map((backup) => (
+                  <tr key={backup.filename}>
+                    <td className="font-semibold">{backup.filename}</td>
+                    <td>{formatBackupDate(backup.created_at)}</td>
+                    <td>{formatBackupSize(backup.size_bytes)}</td>
+                    <td>
+                      <div className="flex flex-wrap items-center justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleDownloadBackup(backup.filename)}
+                          className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-semibold text-[#7652ed] hover:bg-[#faf9ff]"
+                        >
+                          <ArrowDownTrayIcon className="h-4 w-4" />
+                          Descargar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (window.confirm(`¿Eliminar ${backup.filename}?`)) {
+                              deleteBackupMutation.mutate(backup.filename);
+                            }
+                          }}
+                          className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-semibold text-red-600 hover:bg-red-50"
+                        >
+                          <TrashIcon className="h-4 w-4" />
+                          Eliminar
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div className="mt-4 flex items-center gap-2 text-sm text-[#8b8e98]">
+          <ArrowPathIcon className="h-4 w-4" />
+          <span>Los backups se guardan como archivos .dump en la carpeta persistente configurada del servidor.</span>
+        </div>
+      </ModuleCard>
 
       {passwordUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">

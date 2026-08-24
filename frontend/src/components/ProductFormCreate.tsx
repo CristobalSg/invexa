@@ -3,7 +3,10 @@ import { useQuery } from "@tanstack/react-query";
 import { createProduct, updateProduct } from "../services/productService";
 import { getCategorias, getProveedores } from "../services/catalogService";
 import type { ModoInventarioProducto, Producto, TipoPropiedadProducto, UnidadVentaProducto } from "../types/api";
+import type { CreateProductInput } from "../types/product";
 import { Button, FormActions, FormField, inputClassName } from "./FormControls";
+import TouchSelectField from "./TouchSelectField";
+import AdminPasswordModal from "./AdminPasswordModal";
 
 const initialState = {
   nombre: "",
@@ -24,15 +27,24 @@ const initialState = {
 };
 
 type ProductFormState = typeof initialState;
-type NumericFieldName =
-  | "costo_actual"
-  | "precio_venta"
-  | "stock"
-  | "costo_caja"
-  | "cantidad_cajas"
-  | "cantidad_por_caja";
 
 const classificationStorageKey = "inventory-product-classification";
+
+const propertyOptions: Array<{ value: TipoPropiedadProducto; label: string }> = [
+  { value: "PROPIO", label: "Propio" },
+  { value: "CONSIGNACION", label: "Consignación" },
+];
+
+const saleUnitOptions: Array<{ value: UnidadVentaProducto; label: string }> = [
+  { value: "UNIDAD", label: "Unidad" },
+  { value: "PESO", label: "Peso" },
+];
+
+const inventoryModeOptions: Array<{ value: ModoInventarioProducto; label: string }> = [
+  { value: "SIN_INVENTARIO", label: "Sin inventario" },
+  { value: "FLEXIBLE", label: "Flexible" },
+  { value: "ESTRICTO", label: "Estricto" },
+];
 
 type StoredClassification = Pick<
   ProductFormState,
@@ -102,20 +114,24 @@ const toStockFormValue = (product: Producto) => {
   return String(product.stock);
 };
 
-const decimalNumericFields = new Set<NumericFieldName>(["costo_actual", "precio_venta", "stock", "costo_caja", "cantidad_por_caja"]);
-
 interface ProductFormCreateProps {
   initialData?: Producto;
   onSuccess?: () => void;
+  formId?: string;
+  hideActions?: boolean;
+  requireAdminPasswordForCreate?: boolean;
 }
 
 export default function ProductFormCreate({
   initialData,
   onSuccess,
+  formId,
+  hideActions = false,
+  requireAdminPasswordForCreate = false,
 }: ProductFormCreateProps) {
   const [form, setForm] = useState(createInitialFormState);
   const [message, setMessage] = useState("");
-  const [activeNumericField, setActiveNumericField] = useState<NumericFieldName | null>(null);
+  const [pendingCreateInput, setPendingCreateInput] = useState<CreateProductInput | null>(null);
   const barcodeInputRef = useRef<HTMLInputElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
   const priceInputRef = useRef<HTMLInputElement>(null);
@@ -211,96 +227,135 @@ export default function ProductFormCreate({
     });
   }
 
+  function setTouchClassification(
+    name: "tipo_propiedad" | "unidad_venta" | "modo_inventario",
+    value: TipoPropiedadProducto | UnidadVentaProducto | ModoInventarioProducto,
+  ) {
+    setForm((prev) => {
+      if (name === "tipo_propiedad") {
+        const tipo_propiedad = value as TipoPropiedadProducto;
+        return {
+          ...prev,
+          tipo_propiedad,
+          proveedor_id: tipo_propiedad === "PROPIO" ? "" : prev.proveedor_id,
+        };
+      }
+
+      return {
+        ...prev,
+        [name]: value,
+      };
+    });
+  }
+
+  function handleCategorySelect(value: number) {
+    setForm((prev) => ({ ...prev, categoria_id: value }));
+  }
+
+  function handleProviderSelect(value: string) {
+    setForm((prev) => ({
+      ...prev,
+      proveedor_id: value,
+      tipo_propiedad: value ? "CONSIGNACION" : prev.tipo_propiedad,
+    }));
+  }
+
   function focusOnEnter(event: KeyboardEvent<HTMLInputElement>, nextInput: HTMLInputElement | null) {
     if (event.key !== "Enter") return;
     event.preventDefault();
     nextInput?.focus();
   }
 
-  function handleNumericFieldFocus(fieldName: NumericFieldName) {
-    setActiveNumericField(fieldName);
+  function buildProductInput(): CreateProductInput | null {
+    if (form.tipo_propiedad === "CONSIGNACION" && !form.proveedor_id) {
+      setMessage("Selecciona un proveedor para productos en consignación");
+      return null;
+    }
+    if (form.precio_venta === "" || Number(form.precio_venta) <= 0) {
+      setMessage("Ingresa un precio de venta mayor a 0");
+      return null;
+    }
+    if (!initialData && form.ingreso_por_caja && packageTotalUnits <= 0) {
+      setMessage("Ingresa cuántas cajas son y cuántas unidades trae cada caja");
+      return null;
+    }
+
+    const stockInicial =
+      form.unidad_venta === "PESO"
+        ? Number(form.stock || 0) / 1000
+        : Number(form.stock || 0);
+
+    return {
+      nombre: form.nombre,
+      codigo_barras: form.codigo_barras || null,
+      categoria_id: Number(form.categoria_id),
+      tipo_propiedad: form.tipo_propiedad,
+      unidad_venta: form.unidad_venta,
+      modo_inventario: form.modo_inventario,
+      proveedor_id: form.tipo_propiedad === "CONSIGNACION" && form.proveedor_id ? Number(form.proveedor_id) : null,
+      costo_actual: form.costo_actual === "" ? null : Number(form.costo_actual),
+      precio_venta: Number(form.precio_venta),
+      stock: stockInicial,
+      activo: form.activo,
+    };
   }
 
-  function handleNumericKeypadPress(key: string) {
-    if (!activeNumericField) return;
-
-    setForm((prev) => {
-      const current = String(prev[activeNumericField] ?? "");
-      let next = current;
-
-      if (key === "clear") {
-        next = "";
-      } else if (key === "backspace") {
-        next = current.slice(0, -1);
-      } else if (key === "." && decimalNumericFields.has(activeNumericField) && !current.includes(".")) {
-        next = current ? `${current}.` : "0.";
-      } else if (/^\d$/.test(key)) {
-        next = `${current}${key}`.replace(/^0+(?=\d)/, "");
-      }
-
-      return {
-        ...prev,
-        [activeNumericField]: next,
-      };
+  function resetAfterCreate() {
+    storeClassification(form);
+    setMessage("Producto creado con éxito");
+    setForm({
+      ...createInitialFormState(),
+      nombre: "",
+      codigo_barras: "",
+      costo_actual: "",
+      precio_venta: "",
+      stock: "",
+      ingreso_por_caja: false,
+      costo_caja: "",
+      cantidad_cajas: "1",
+      cantidad_por_caja: "",
+      activo: true,
     });
+  }
+
+  async function createWithInput(input: CreateProductInput) {
+    await createProduct(input);
+    resetAfterCreate();
+    if (onSuccess) onSuccess();
   }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (form.tipo_propiedad === "CONSIGNACION" && !form.proveedor_id) {
-      setMessage("Selecciona un proveedor para productos en consignación");
-      return;
-    }
-    if (form.precio_venta === "" || Number(form.precio_venta) <= 0) {
-      setMessage("Ingresa un precio de venta mayor a 0");
-      return;
-    }
-    if (!initialData && form.ingreso_por_caja && packageTotalUnits <= 0) {
-      setMessage("Ingresa cuántas cajas son y cuántas unidades trae cada caja");
+    const input = buildProductInput();
+    if (!input) return;
+
+    if (!initialData && requireAdminPasswordForCreate) {
+      setPendingCreateInput(input);
       return;
     }
 
     try {
-      const stockInicial =
-        form.unidad_venta === "PESO"
-          ? Number(form.stock || 0) / 1000
-          : Number(form.stock || 0);
-      const input = {
-        nombre: form.nombre,
-        codigo_barras: form.codigo_barras || null,
-        categoria_id: Number(form.categoria_id),
-        tipo_propiedad: form.tipo_propiedad,
-        unidad_venta: form.unidad_venta,
-        modo_inventario: form.modo_inventario,
-        proveedor_id: form.tipo_propiedad === "CONSIGNACION" && form.proveedor_id ? Number(form.proveedor_id) : null,
-        costo_actual: form.costo_actual === "" ? null : Number(form.costo_actual),
-        precio_venta: Number(form.precio_venta),
-        stock: stockInicial,
-        activo: form.activo,
-      };
       if (initialData) {
         await updateProduct(initialData.id , input);
         setMessage("Producto actualizado con éxito");
       } else {
-        await createProduct(input);
-        storeClassification(form);
-        setMessage("Producto creado con éxito");
-        setForm({
-          ...createInitialFormState(),
-          nombre: "",
-          codigo_barras: "",
-          costo_actual: "",
-          precio_venta: "",
-          stock: "",
-          ingreso_por_caja: false,
-          costo_caja: "",
-          cantidad_cajas: "1",
-          cantidad_por_caja: "",
-          activo: true,
-        });
+        await createWithInput(input);
+        return;
       }
 
       if (onSuccess) onSuccess();
+    } catch (error) {
+      setMessage("Error al guardar el producto");
+      console.error(error);
+    }
+  }
+
+  async function handleAuthorizedCreate(masterPassword: string) {
+    if (!pendingCreateInput) return;
+
+    try {
+      await createWithInput({ ...pendingCreateInput, master_password: masterPassword });
+      setPendingCreateInput(null);
     } catch (error) {
       setMessage("Error al guardar el producto");
       console.error(error);
@@ -311,11 +366,8 @@ export default function ProductFormCreate({
   const costUnitLabel = form.unidad_venta === "PESO" ? "Costo por kg" : "Costo unitario";
 
   return (
-    <form onSubmit={handleSubmit} className="product-form">
+    <form id={formId} onSubmit={handleSubmit} className="product-form">
       <section className="product-form-section">
-        <div className="product-form-section-head">
-          <h3>Datos básicos</h3>
-        </div>
         <div className="grid gap-3 md:grid-cols-2">
           <FormField label="Código de barra">
             <input
@@ -347,57 +399,84 @@ export default function ProductFormCreate({
           <h3>Clasificación</h3>
         </div>
         <div className="grid gap-3 md:grid-cols-2">
-          <FormField label="Categoría">
-            <select
-              name="categoria_id"
-              value={form.categoria_id}
-              onChange={handleChange}
-              className={inputClassName}
-              required
-            >
-              {categorias?.items.map((cat) => <option key={cat.id} value={cat.id}>{cat.nombre}</option>)}
-            </select>
-          </FormField>
+          <TouchSelectField
+            label="Categoría"
+            value={form.categoria_id}
+            options={(categorias?.items ?? []).map((cat) => ({
+              value: cat.id,
+              label: cat.nombre,
+              description: `Multiplicador ${cat.multiplicador_ganancia}x`,
+            }))}
+            onChange={handleCategorySelect}
+            placeholder="Seleccionar categoría"
+            modalTitle="Categoría"
+            emptyText="No hay categorías disponibles."
+          />
 
           <FormField label="Tipo de propiedad">
-            <select name="tipo_propiedad" value={form.tipo_propiedad} onChange={handleChange} className={inputClassName}>
-              <option value="PROPIO">Propio</option>
-              <option value="CONSIGNACION">Consignación</option>
-            </select>
+            <div className="product-touch-options two">
+              {propertyOptions.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setTouchClassification("tipo_propiedad", option.value)}
+                  className={`product-touch-option ${form.tipo_propiedad === option.value ? "active" : ""}`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
           </FormField>
 
           <FormField label="Unidad de venta">
-            <select name="unidad_venta" value={form.unidad_venta} onChange={handleChange} className={inputClassName}>
-              <option value="UNIDAD">Unidad</option>
-              <option value="PESO">Peso</option>
-            </select>
+            <div className="product-touch-options two">
+              {saleUnitOptions.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setTouchClassification("unidad_venta", option.value)}
+                  className={`product-touch-option ${form.unidad_venta === option.value ? "active" : ""}`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
           </FormField>
 
           <FormField label="Modo de inventario">
-            <select name="modo_inventario" value={form.modo_inventario} onChange={handleChange} className={inputClassName}>
-              <option value="SIN_INVENTARIO">Sin inventario</option>
-              <option value="FLEXIBLE">Inventario flexible</option>
-              <option value="ESTRICTO">Inventario estricto</option>
-            </select>
+            <div className="product-touch-options three">
+              {inventoryModeOptions.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setTouchClassification("modo_inventario", option.value)}
+                  className={`product-touch-option ${form.modo_inventario === option.value ? "active" : ""}`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
           </FormField>
 
-          <FormField
-            label="Proveedor"
-            className="md:col-span-2"
-            help={form.tipo_propiedad === "PROPIO" ? "Los productos propios no usan proveedor." : undefined}
-          >
-            <select
-              name="proveedor_id"
+          <div className="md:col-span-2">
+            <TouchSelectField
+              label="Proveedor"
               value={form.proveedor_id}
-              onChange={handleChange}
-              className={inputClassName}
-              required={form.tipo_propiedad === "CONSIGNACION"}
+              options={[
+                { value: "", label: "Sin proveedor" },
+                ...(proveedores?.items ?? []).map((prov) => ({
+                  value: String(prov.id),
+                  label: prov.nombre,
+                })),
+              ]}
+              onChange={handleProviderSelect}
+              placeholder="Seleccionar proveedor"
+              help={form.tipo_propiedad === "PROPIO" ? "Los productos propios no usan proveedor." : undefined}
               disabled={form.tipo_propiedad === "PROPIO"}
-            >
-              <option value="">Sin proveedor</option>
-              {proveedores?.items.map((prov) => <option key={prov.id} value={prov.id}>{prov.nombre}</option>)}
-            </select>
-          </FormField>
+              modalTitle="Proveedor"
+              emptyText="No hay proveedores disponibles."
+            />
+          </div>
         </div>
       </section>
 
@@ -422,7 +501,6 @@ export default function ProductFormCreate({
                   min={0}
                   value={form.costo_caja}
                   onChange={handleChange}
-                  onFocus={() => handleNumericFieldFocus("costo_caja")}
                   className={inputClassName}
                 />
               </FormField>
@@ -435,7 +513,6 @@ export default function ProductFormCreate({
                   step={form.unidad_venta === "PESO" ? 1 : 0.001}
                   value={form.cantidad_por_caja}
                   onChange={handleChange}
-                  onFocus={() => handleNumericFieldFocus("cantidad_por_caja")}
                   className={inputClassName}
                 />
               </FormField>
@@ -448,7 +525,6 @@ export default function ProductFormCreate({
                   step={1}
                   value={form.cantidad_cajas}
                   onChange={handleChange}
-                  onFocus={() => handleNumericFieldFocus("cantidad_cajas")}
                   className={inputClassName}
                 />
               </FormField>
@@ -464,9 +540,6 @@ export default function ProductFormCreate({
       )}
 
       <section className="product-form-section">
-        <div className="product-form-section-head">
-          <h3>Inventario y precio</h3>
-        </div>
         <div className="grid gap-3 md:grid-cols-3">
           <FormField label={costUnitLabel}>
             <input
@@ -475,7 +548,6 @@ export default function ProductFormCreate({
               min={0}
               value={form.costo_actual}
               onChange={handleChange}
-              onFocus={() => handleNumericFieldFocus("costo_actual")}
               className={inputClassName}
             />
           </FormField>
@@ -488,7 +560,6 @@ export default function ProductFormCreate({
               min={1}
               value={form.precio_venta}
               onChange={handleChange}
-              onFocus={() => handleNumericFieldFocus("precio_venta")}
               onKeyDown={(event) => focusOnEnter(event, stockInputRef.current)}
               className={inputClassName}
               placeholder="Precio de venta"
@@ -508,7 +579,6 @@ export default function ProductFormCreate({
               step={form.unidad_venta === "PESO" ? 1 : 0.001}
               value={form.stock}
               onChange={handleChange}
-              onFocus={() => handleNumericFieldFocus("stock")}
               className={inputClassName}
               placeholder={form.unidad_venta === "PESO" ? "Ej: 1000" : "Stock inicial"}
               disabled={!initialData && form.ingreso_por_caja}
@@ -519,54 +589,21 @@ export default function ProductFormCreate({
 
       {message && <p className="product-form-message">{message}</p>}
 
-      {activeNumericField && (
-        <div className="product-form-touch-keypad">
-          {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((key) => (
-            <button
-              key={key}
-              type="button"
-              onPointerDown={(event) => event.preventDefault()}
-              onClick={() => handleNumericKeypadPress(key)}
-            >
-              {key}
-            </button>
-          ))}
-          <button
-            type="button"
-            onPointerDown={(event) => event.preventDefault()}
-            onClick={() => handleNumericKeypadPress("clear")}
-          >
-            C
-          </button>
-          <button
-            type="button"
-            onPointerDown={(event) => event.preventDefault()}
-            onClick={() => handleNumericKeypadPress("0")}
-          >
-            0
-          </button>
-          <button
-            type="button"
-            onPointerDown={(event) => event.preventDefault()}
-            onClick={() => handleNumericKeypadPress(".")}
-          >
-            .
-          </button>
-          <button
-            type="button"
-            onPointerDown={(event) => event.preventDefault()}
-            onClick={() => handleNumericKeypadPress("backspace")}
-          >
-            ⌫
-          </button>
-        </div>
+      {!hideActions && (
+        <FormActions className="product-form-actions">
+          <Button type="submit">
+            {initialData ? "Guardar cambios" : "Crear producto"}
+          </Button>
+        </FormActions>
       )}
-
-      <FormActions className="product-form-actions">
-        <Button type="submit">
-          {initialData ? "Guardar cambios" : "Crear producto"}
-        </Button>
-      </FormActions>
+      {pendingCreateInput && (
+        <AdminPasswordModal
+          title="Autorizar producto"
+          description="Ingresa la contraseña de administrador para crear este producto."
+          onClose={() => setPendingCreateInput(null)}
+          onConfirm={handleAuthorizedCreate}
+        />
+      )}
     </form>
   );
 }

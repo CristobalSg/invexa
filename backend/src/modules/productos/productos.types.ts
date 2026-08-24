@@ -87,6 +87,7 @@ export interface CreateProductoBody {
   readonly precio_venta: number;
   readonly stock?: number;
   readonly activo?: boolean;
+  readonly master_password?: string;
 }
 
 export interface UpdateProductoBody {
@@ -101,4 +102,20 @@ export interface UpdateProductoBody {
   readonly precio_venta?: number;
   readonly stock?: number;
   readonly activo?: boolean;
+}
+
+export interface ResetProduceProductInput {
+  readonly nombre: string;
+  readonly tipo: 'FRUTA' | 'VERDURA';
+}
+
+export interface ResetProduceProductsBody {
+  readonly master_password: string;
+  readonly productos: readonly ResetProduceProductInput[];
+}
+
+export interface ResetProduceProductsResult {
+  readonly categoria_id: number;
+  readonly desactivados: number;
+  readonly creados: number;
 }

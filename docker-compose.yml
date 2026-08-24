@@ -41,8 +41,11 @@ services:
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173,http://127.0.0.1:5173}
       RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-100}
       RATE_LIMIT_TIME_WINDOW: ${RATE_LIMIT_TIME_WINDOW:-1 minute}
+      BACKUP_DIR: /app/backend/backups
     ports:
       - '3000:3000'
+    volumes:
+      - ./backups:/app/backend/backups
 
   frontend:
     build:

@@ -143,6 +143,7 @@ export const createProductoSchema = {
       precio_venta: { type: 'number', exclusiveMinimum: 0 },
       stock: { type: 'number', minimum: 0, default: 0 },
       activo: { type: 'boolean' },
+      master_password: { type: 'string', minLength: 1, maxLength: 200 },
     },
   },
   response: {
@@ -179,5 +180,48 @@ export const deactivateProductoSchema = {
   params: idParamsSchema,
   response: {
     200: successProductoResponseSchema,
+  },
+} as const;
+
+export const resetProduceProductsSchema = {
+  body: {
+    type: 'object',
+    required: ['master_password', 'productos'],
+    additionalProperties: false,
+    properties: {
+      master_password: { type: 'string', minLength: 1, maxLength: 200 },
+      productos: {
+        type: 'array',
+        minItems: 1,
+        maxItems: 300,
+        items: {
+          type: 'object',
+          required: ['nombre', 'tipo'],
+          additionalProperties: false,
+          properties: {
+            nombre: { type: 'string', minLength: 2, maxLength: 150 },
+            tipo: { type: 'string', enum: ['FRUTA', 'VERDURA'] },
+          },
+        },
+      },
+    },
+  },
+  response: {
+    200: {
+      type: 'object',
+      required: ['success', 'data'],
+      properties: {
+        success: { type: 'boolean' },
+        data: {
+          type: 'object',
+          required: ['categoria_id', 'desactivados', 'creados'],
+          properties: {
+            categoria_id: { type: 'number' },
+            desactivados: { type: 'number' },
+            creados: { type: 'number' },
+          },
+        },
+      },
+    },
   },
 } as const;

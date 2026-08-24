@@ -6,8 +6,10 @@ import {
   BanknotesIcon,
   CheckCircleIcon,
   ClockIcon,
+  CreditCardIcon,
   TruckIcon,
   WalletIcon,
+  XMarkIcon,
 } from "@heroicons/react/24/outline";
 import {
   abrirCaja,
@@ -19,9 +21,11 @@ import {
 import type { CategoriaMovimientoCaja, TipoMovimientoCaja } from "../types/api";
 import ListPanel from "../components/ListPanel";
 import ModuleCard from "../components/ModuleCard";
-import { Button, FormActions, FormField, inputClassName } from "../components/FormControls";
+import { Button, FormField, inputClassName } from "../components/FormControls";
 import AdminPasswordModal from "../components/AdminPasswordModal";
 import FlowActionButton from "../components/FlowActionButton";
+import TouchSelectField from "../components/TouchSelectField";
+import { getStoredUser } from "../services/authService";
 
 const money = (value: number) => `$${value.toLocaleString()}`;
 const time = (value: string | null) =>
@@ -60,12 +64,17 @@ const categoriaLabel = (value: CategoriaMovimientoCaja) =>
 
 export default function CajaPage() {
   const queryClient = useQueryClient();
+  const currentUser = getStoredUser();
+  const isOwner = currentUser?.rol === "OWNER";
   const [monto, setMonto] = useState("");
   const [message, setMessage] = useState("");
   const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
-  const [showCashCountInput, setShowCashCountInput] = useState(false);
+  const [closeFinalConfirmOpen, setCloseFinalConfirmOpen] = useState(false);
+  const [movementModalOpen, setMovementModalOpen] = useState(false);
   const [efectivoContado, setEfectivoContado] = useState("");
   const [cashMatches, setCashMatches] = useState(false);
+  const [debitMatches, setDebitMatches] = useState(false);
+  const [debitReal, setDebitReal] = useState("");
   const [consignationSeparated, setConsignationSeparated] = useState(false);
   const [movementPasswordOpen, setMovementPasswordOpen] = useState(false);
   const [movimientoForm, setMovimientoForm] = useState({
@@ -76,7 +85,10 @@ export default function CajaPage() {
   });
 
   const { data: actual, isLoading } = useQuery({ queryKey: ["caja-actual"], queryFn: getCajaActual });
-  const { data: sesiones } = useQuery({ queryKey: ["caja-sesiones"], queryFn: () => getCajaSesiones() });
+  const { data: sesiones } = useQuery({
+    queryKey: ["caja-sesiones", currentUser?.id, currentUser?.rol],
+    queryFn: () => getCajaSesiones(),
+  });
 
   const invalidateCaja = async () => {
     await Promise.all([
@@ -102,8 +114,10 @@ export default function CajaPage() {
       await invalidateCaja();
       await queryClient.refetchQueries({ queryKey: ["caja-sesiones"] });
       setCloseConfirmOpen(false);
-      setShowCashCountInput(false);
+      setCloseFinalConfirmOpen(false);
       setEfectivoContado("");
+      setDebitMatches(false);
+      setDebitReal("");
     },
     onError: (error) => setMessage(error instanceof Error ? error.message : "No se pudo cerrar caja"),
   });
@@ -120,6 +134,7 @@ export default function CajaPage() {
     onSuccess: async () => {
       setMessage("Movimiento registrado.");
       setMovementPasswordOpen(false);
+      setMovementModalOpen(false);
       setMovimientoForm((prev) => ({ ...prev, monto: "", descripcion: "" }));
       await invalidateCaja();
     },
@@ -130,24 +145,50 @@ export default function CajaPage() {
     actual && efectivoContado !== ""
       ? Number(efectivoContado) - actual.resumen.monto_esperado_cierre
       : 0;
+  const hasCashSales = Boolean(actual && actual.resumen.efectivo > 0);
+  const hasDebitSales = Boolean(actual && actual.resumen.tarjeta > 0);
+  const hasConsignationSales = Boolean(actual && actual.resumen.ventas_consignacion > 0);
+  const canCloseCaja =
+    Boolean(actual) &&
+    (!hasCashSales || cashMatches || efectivoContado !== "") &&
+    (!hasDebitSales || debitMatches || debitReal !== "") &&
+    (!hasConsignationSales || consignationSeparated);
 
   const handleOpenCloseModal = () => {
     if (!actual) return;
-    setShowCashCountInput(false);
     setEfectivoContado("");
     setCashMatches(false);
+    setDebitMatches(false);
+    setDebitReal("");
     setConsignationSeparated(false);
     setCloseConfirmOpen(true);
   };
 
-  const handleCloseWithExactCash = () => {
-    if (!actual) return;
-    setCashMatches(true);
-    cerrar.mutate(actual.resumen.monto_esperado_cierre);
+  const handleDismissCloseModal = () => {
+    setCloseConfirmOpen(false);
+    setCloseFinalConfirmOpen(false);
+    setEfectivoContado("");
+    setCashMatches(false);
+    setDebitMatches(false);
+    setDebitReal("");
+    setConsignationSeparated(false);
   };
 
-  const handleCloseWithCountedCash = () => {
-    cerrar.mutate(Number(efectivoContado));
+  const handleRequestCloseConfirmation = () => {
+    if (!actual) return;
+
+    if (!canCloseCaja) {
+      setMessage("Completa la revisión de efectivo, débito y consignación antes de cerrar la caja.");
+      return;
+    }
+
+    setCloseFinalConfirmOpen(true);
+  };
+
+  const handleCloseWithChecklist = () => {
+    if (!actual) return;
+
+    cerrar.mutate(hasCashSales && !cashMatches ? Number(efectivoContado) : actual.resumen.monto_esperado_cierre);
   };
 
   if (isLoading) return <p>Cargando caja...</p>;
@@ -158,22 +199,8 @@ export default function CajaPage() {
 
       <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
         <div className="space-y-6 xl:sticky xl:top-6 xl:self-start">
-          <ModuleCard title="Caja actual" icon={WalletIcon} contentClassName="p-5">
+          <ModuleCard contentClassName="p-5">
             <div className="space-y-4">
-              <div>
-                {actual ? (
-                  <div className="mt-2 text-sm text-gray-700 space-y-1">
-                    <p>Sesión #{actual.id} · {actual.abierta ? "Abierta" : "Cerrada"}</p>
-                    <p>Apertura: {money(actual.monto_apertura)}</p>
-                    <p>Ventas efectivo: {money(actual.resumen.efectivo)}</p>
-                    <p>Ingresos: {money(actual.resumen.ingresos)} · Egresos: {money(actual.resumen.egresos)}</p>
-                    <p className="font-semibold">Efectivo esperado: {money(actual.resumen.monto_esperado_cierre)}</p>
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-500 mt-2">No hay caja abierta.</p>
-                )}
-              </div>
-
               {!actual?.abierta && (
                 <div className="grid gap-3">
                   <FormField label="Monto apertura">
@@ -196,68 +223,26 @@ export default function CajaPage() {
                 </div>
               )}
               {actual?.abierta && (
-                <button
-                  onClick={handleOpenCloseModal}
-                  className="w-full rounded-xl bg-red-600 p-6 text-center text-lg font-bold text-white shadow-md transition-all hover:-translate-y-0.5 hover:bg-red-700 hover:shadow-lg"
-                >
-                  Cerrar caja
-                </button>
+                <div className="grid gap-3">
+                  <button
+                    onClick={handleOpenCloseModal}
+                    className="w-full rounded-xl bg-red-600 p-6 text-center text-lg font-bold text-white shadow-md transition-all hover:-translate-y-0.5 hover:bg-red-700 hover:shadow-lg"
+                  >
+                    Cerrar caja
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMovementModalOpen(true)}
+                    className="cash-movement-open-button"
+                  >
+                    <ArrowUpTrayIcon className="h-6 w-6" />
+                    Registrar movimiento
+                  </button>
+                </div>
               )}
             </div>
             {message && <p className="mt-3 text-sm text-gray-700">{message}</p>}
           </ModuleCard>
-
-          {actual?.abierta && (
-            <ModuleCard title="Registrar movimiento" icon={ArrowUpTrayIcon} contentClassName="p-5">
-              <div className="mt-4 grid gap-3">
-                <FormField label="Tipo">
-                <select
-                  value={movimientoForm.tipo}
-                  onChange={(event) => setMovimientoForm((prev) => ({ ...prev, tipo: event.target.value as TipoMovimientoCaja }))}
-                  className={inputClassName}
-                >
-                  <option value="INGRESO">Ingreso</option>
-                  <option value="EGRESO">Egreso</option>
-                </select>
-                </FormField>
-                <FormField label="Categoría">
-                <select
-                  value={movimientoForm.categoria}
-                  onChange={(event) => setMovimientoForm((prev) => ({ ...prev, categoria: event.target.value as CategoriaMovimientoCaja }))}
-                  className={inputClassName}
-                >
-                  {movimientoCategorias.map((category) => (
-                    <option key={category.value} value={category.value}>{category.label}</option>
-                  ))}
-                </select>
-                </FormField>
-                <FormField label="Monto">
-                <input
-                  type="number"
-                  min={1}
-                  value={movimientoForm.monto}
-                  onChange={(event) => setMovimientoForm((prev) => ({ ...prev, monto: event.target.value }))}
-                  className={inputClassName}
-                  placeholder="Monto"
-                />
-                </FormField>
-                <FormField label="Descripción">
-                <input
-                  value={movimientoForm.descripcion}
-                  onChange={(event) => setMovimientoForm((prev) => ({ ...prev, descripcion: event.target.value }))}
-                  className={inputClassName}
-                  placeholder="Descripción"
-                />
-                </FormField>
-                <Button
-                  onClick={() => setMovementPasswordOpen(true)}
-                  disabled={crearMovimiento.isPending || movimientoForm.monto === ""}
-                >
-                  Registrar
-                </Button>
-              </div>
-            </ModuleCard>
-          )}
         </div>
 
         <div className="space-y-6">
@@ -283,7 +268,7 @@ export default function CajaPage() {
           )}
 
           <ListPanel
-            title="Sesiones recientes"
+            title={isOwner ? "Sesiones recientes" : "Mis sesiones recientes"}
             icon={ClockIcon}
             emptyMessage="Sin sesiones registradas."
             items={(sesiones?.items ?? []).map((session) => ({
@@ -307,13 +292,85 @@ export default function CajaPage() {
         </div>
       </div>
 
+      {movementModalOpen && actual?.abierta && (
+        <div
+          className="flow-modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setMovementModalOpen(false);
+            }
+          }}
+        >
+          <div className="flow-modal cash-movement-modal" role="dialog" aria-modal="true">
+            <div className="cash-movement-modal-head">
+              <div>
+                <p>Movimiento de caja</p>
+                <h2>Registrar movimiento</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMovementModalOpen(false)}
+                className="cash-close-x"
+                aria-label="Cerrar modal"
+                title="Cerrar"
+              >
+                <XMarkIcon className="h-6 w-6" />
+              </button>
+            </div>
+
+            <div className="cash-movement-form">
+              <TouchSelectField
+                label="Tipo"
+                value={movimientoForm.tipo}
+                options={[
+                  { value: "INGRESO", label: "Ingreso" },
+                  { value: "EGRESO", label: "Egreso" },
+                ]}
+                onChange={(value) => setMovimientoForm((prev) => ({ ...prev, tipo: value as TipoMovimientoCaja }))}
+              />
+              <TouchSelectField
+                label="Categoría"
+                value={movimientoForm.categoria}
+                options={movimientoCategorias}
+                onChange={(value) => setMovimientoForm((prev) => ({ ...prev, categoria: value as CategoriaMovimientoCaja }))}
+              />
+              <FormField label="Monto">
+                <input
+                  type="number"
+                  min={1}
+                  value={movimientoForm.monto}
+                  onChange={(event) => setMovimientoForm((prev) => ({ ...prev, monto: event.target.value }))}
+                  className={`${inputClassName} text-lg`}
+                  placeholder="Monto"
+                />
+              </FormField>
+              <FormField label="Descripción">
+                <input
+                  value={movimientoForm.descripcion}
+                  onChange={(event) => setMovimientoForm((prev) => ({ ...prev, descripcion: event.target.value }))}
+                  className={`${inputClassName} text-lg`}
+                  placeholder="Descripción"
+                />
+              </FormField>
+              <Button
+                onClick={() => setMovementPasswordOpen(true)}
+                disabled={crearMovimiento.isPending || movimientoForm.monto === ""}
+                className="min-h-[56px] text-base"
+                fullWidth
+              >
+                Registrar
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {closeConfirmOpen && actual && (
         <div
           className="flow-modal-backdrop"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) {
-              setCloseConfirmOpen(false);
-              setShowCashCountInput(false);
+              handleDismissCloseModal();
             }
           }}
         >
@@ -323,17 +380,36 @@ export default function CajaPage() {
                 <p>Cierre de caja</p>
                 <h2>Caja #{actual.id}</h2>
               </div>
-              <span className="cash-close-status">
-                <ClockIcon className="h-5 w-5" />
-                {sessionDuration(actual.abierta_en, null)}
-              </span>
+              <div className="cash-close-head-actions">
+                <span className="cash-close-status">
+                  <ClockIcon className="h-5 w-5" />
+                  {sessionDuration(actual.abierta_en, null)}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleRequestCloseConfirmation}
+                  disabled={cerrar.isPending || !canCloseCaja}
+                  className="cash-close-submit"
+                >
+                  {cerrar.isPending ? "Cerrando..." : "Cerrar caja"}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDismissCloseModal}
+                  className="cash-close-x"
+                  aria-label="Cerrar modal"
+                  title="Cerrar"
+                >
+                  <XMarkIcon className="h-6 w-6" />
+                </button>
+              </div>
             </div>
 
             <div className="cash-close-grid">
               <section className="cash-close-card highlight">
                 <div className="cash-close-card-title">
                   <BanknotesIcon className="h-6 w-6" />
-                  <span>Efectivo esperado</span>
+                  <span>Pagos esperados</span>
                 </div>
                 <strong>{money(actual.resumen.monto_esperado_cierre)}</strong>
                 <div className="cash-close-lines">
@@ -341,6 +417,24 @@ export default function CajaPage() {
                   <span><b>Ventas efectivo</b>{money(actual.resumen.efectivo)}</span>
                   <span><b>Ingresos</b>{money(actual.resumen.ingresos)}</span>
                   <span><b>Egresos</b>-{money(actual.resumen.egresos)}</span>
+                </div>
+                <div className="cash-close-card-subtitle">
+                  <CreditCardIcon className="h-5 w-5" />
+                  <span>Pagos electrónicos</span>
+                </div>
+                <div className="cash-close-split compact">
+                  <span>
+                    <small>Débito / tarjeta</small>
+                    {money(actual.resumen.tarjeta)}
+                  </span>
+                  <span>
+                    <small>Transferencia</small>
+                    {money(actual.resumen.transferencia)}
+                  </span>
+                  <span>
+                    <small>Mixto</small>
+                    {money(actual.resumen.mixto)}
+                  </span>
                 </div>
               </section>
 
@@ -382,90 +476,152 @@ export default function CajaPage() {
                   <CheckCircleIcon className="h-6 w-6" />
                   <span>Checklist</span>
                 </div>
-                <label className="cash-close-check">
-                  <input
-                    type="checkbox"
-                    checked={cashMatches}
-                    onChange={(event) => setCashMatches(event.target.checked)}
-                  />
-                  <span>El efectivo calza con el monto esperado</span>
-                </label>
-                <label className="cash-close-check">
-                  <input
-                    type="checkbox"
-                    checked={consignationSeparated}
-                    onChange={(event) => setConsignationSeparated(event.target.checked)}
-                  />
-                  <span>Se separó la plata que entró por consignación</span>
-                </label>
-              </section>
 
-              <section className="cash-close-card actions">
-                <p className="cash-close-question">¿Cómo quieres cerrar?</p>
-                <button
-                  type="button"
-                  onClick={handleCloseWithExactCash}
-                  disabled={cerrar.isPending}
-                  className="cash-close-option primary"
-                >
-                  Cerrar con efectivo justo
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEfectivoContado("");
-                    setShowCashCountInput(true);
-                    setCashMatches(false);
-                  }}
-                  className="cash-close-option"
-                >
-                  Ingresar efectivo real
-                </button>
-
-                {showCashCountInput && (
-                  <div className="cash-close-count">
-                    <FormField label="Efectivo real contado">
-                      <input
-                        autoFocus
-                        type="number"
-                        min={0}
-                        value={efectivoContado}
-                        onChange={(event) => {
-                          setEfectivoContado(event.target.value);
-                          setCashMatches(Number(event.target.value) === actual.resumen.monto_esperado_cierre);
-                        }}
-                        className={`${inputClassName} text-lg`}
-                      />
-                    </FormField>
-                    <div className={`cash-close-difference ${diferenciaCierre < 0 ? "negative" : ""}`}>
-                      <span>Diferencia</span>
-                      <strong>{money(diferenciaCierre)}</strong>
+                <div className="cash-close-audit">
+                  <label className={`cash-close-check ${hasCashSales ? "" : "disabled"}`}>
+                    <input
+                      type="checkbox"
+                      checked={hasCashSales ? cashMatches : false}
+                      disabled={!hasCashSales}
+                      onChange={(event) => {
+                        setCashMatches(event.target.checked);
+                        if (event.target.checked) setEfectivoContado("");
+                      }}
+                    />
+                    <span>
+                      El efectivo calza con el monto esperado
+                      {!hasCashSales && <small>Sin ventas en efectivo</small>}
+                    </span>
+                  </label>
+                  {hasCashSales && !cashMatches && (
+                    <div className="cash-close-count">
+                      <FormField label="Efectivo real contado">
+                        <input
+                          autoFocus
+                          type="number"
+                          min={0}
+                          value={efectivoContado}
+                          onChange={(event) => setEfectivoContado(event.target.value)}
+                          className={`${inputClassName} text-lg`}
+                        />
+                      </FormField>
+                      <div className={`cash-close-difference ${diferenciaCierre < 0 ? "negative" : ""}`}>
+                        <span>Diferencia</span>
+                        <strong>{money(diferenciaCierre)}</strong>
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
+
+                <div className="cash-close-audit">
+                  <label className={`cash-close-check ${hasDebitSales ? "" : "disabled"}`}>
+                    <input
+                      type="checkbox"
+                      checked={hasDebitSales ? debitMatches : false}
+                      disabled={!hasDebitSales}
+                      onChange={(event) => {
+                        setDebitMatches(event.target.checked);
+                        if (event.target.checked) setDebitReal("");
+                      }}
+                    />
+                    <span>
+                      Las ventas con débito/tarjeta fueron registradas
+                      {!hasDebitSales && <small>Sin ventas con tarjeta</small>}
+                    </span>
+                  </label>
+                  {hasDebitSales && !debitMatches && (
+                    <div className="cash-close-count">
+                      <FormField label="Total real en débito/tarjeta">
+                        <input
+                          type="number"
+                          min={0}
+                          value={debitReal}
+                          onChange={(event) => setDebitReal(event.target.value)}
+                          className={`${inputClassName} text-lg`}
+                        />
+                      </FormField>
+                      <div className={`cash-close-difference ${Number(debitReal || 0) - actual.resumen.tarjeta < 0 ? "negative" : ""}`}>
+                        <span>Diferencia</span>
+                        <strong>{money(Number(debitReal || 0) - actual.resumen.tarjeta)}</strong>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="cash-close-audit">
+                  <label className={`cash-close-check ${hasConsignationSales ? "" : "disabled"}`}>
+                    <input
+                      type="checkbox"
+                      checked={hasConsignationSales ? consignationSeparated : false}
+                      disabled={!hasConsignationSales}
+                      onChange={(event) => setConsignationSeparated(event.target.checked)}
+                    />
+                    <span>
+                      Se separó la plata que entró por consignación
+                      {!hasConsignationSales && <small>Sin ventas de consignación</small>}
+                    </span>
+                  </label>
+                </div>
               </section>
+
+            </div>
+          </div>
+        </div>
+      )}
+
+      {closeFinalConfirmOpen && actual && (
+        <div
+          className="flow-modal-backdrop cash-final-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setCloseFinalConfirmOpen(false);
+            }
+          }}
+        >
+          <div className="flow-modal cash-final-confirm" role="dialog" aria-modal="true">
+            <div className="cash-final-confirm-head">
+              <span className="cash-final-confirm-icon">
+                <CheckCircleIcon className="h-7 w-7" />
+              </span>
+              <div>
+                <p>Confirmar cierre</p>
+                <h2>¿Cerrar caja #{actual.id}?</h2>
+              </div>
             </div>
 
-            <FormActions className="cash-close-footer">
-              <Button
-                variant="ghost"
-                onClick={() => {
-                  setCloseConfirmOpen(false);
-                  setShowCashCountInput(false);
-                }}
+            <div className="cash-final-confirm-summary">
+              <span>
+                <small>Efectivo a registrar</small>
+                {money(hasCashSales && !cashMatches ? Number(efectivoContado) : actual.resumen.monto_esperado_cierre)}
+              </span>
+              <span>
+                <small>Diferencia efectivo</small>
+                {money(hasCashSales && !cashMatches ? diferenciaCierre : 0)}
+              </span>
+            </div>
+
+            <p className="cash-final-confirm-copy">
+              Esta acción cerrará la caja actual y ya no podrás registrar nuevas ventas en esta sesión.
+            </p>
+
+            <div className="cash-final-confirm-actions">
+              <button
+                type="button"
+                className="cash-final-cancel"
+                onClick={() => setCloseFinalConfirmOpen(false)}
+                disabled={cerrar.isPending}
               >
-                Cancelar
-              </Button>
-              {showCashCountInput && (
-                <Button
-                  variant="danger"
-                  onClick={handleCloseWithCountedCash}
-                  disabled={cerrar.isPending || efectivoContado === ""}
-                >
-                  {cerrar.isPending ? "Cerrando..." : "Cerrar con efectivo real"}
-                </Button>
-              )}
-            </FormActions>
+                Volver
+              </button>
+              <button
+                type="button"
+                className="cash-final-submit"
+                onClick={handleCloseWithChecklist}
+                disabled={cerrar.isPending}
+              >
+                {cerrar.isPending ? "Cerrando..." : "Sí, cerrar caja"}
+              </button>
+            </div>
           </div>
         </div>
       )}

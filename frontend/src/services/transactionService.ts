@@ -25,6 +25,7 @@ export async function createVenta(input: {
   descuento?: number;
   modalidad?: ModalidadVenta;
   master_password?: string;
+  monto_recibido?: number;
   items: { producto_id: number; cantidad: number }[];
 }) {
   const { data } = await api.post<VentaDetalle>(ENDPOINT, input);

@@ -30,7 +30,11 @@ export class VentasRepository {
           v.metodo_pago,
           v.subtotal,
           v.descuento,
+          v.total_sin_redondeo,
+          v.redondeo,
           v.total,
+          v.monto_recibido,
+          v.vuelto,
           v.modalidad,
           v.estado,
           v.anulada_en,
@@ -73,7 +77,11 @@ export class VentasRepository {
           v.metodo_pago,
           v.subtotal,
           v.descuento,
+          v.total_sin_redondeo,
+          v.redondeo,
           v.total,
+          v.monto_recibido,
+          v.vuelto,
           v.modalidad,
           v.estado,
           v.anulada_en,
@@ -223,7 +231,11 @@ export class VentasRepository {
       readonly metodoPago: MetodoPago;
       readonly subtotal: number;
       readonly descuento: number;
+      readonly totalSinRedondeo: number;
+      readonly redondeo: number;
       readonly total: number;
+      readonly montoRecibido: number | null;
+      readonly vuelto: number | null;
       readonly modalidad: string;
     },
   ): Promise<VentaRow> {
@@ -235,10 +247,14 @@ export class VentasRepository {
           metodo_pago,
           subtotal,
           descuento,
+          total_sin_redondeo,
+          redondeo,
           total,
+          monto_recibido,
+          vuelto,
           modalidad
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7::modalidad_venta)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::modalidad_venta)
         RETURNING
           id,
           usuario_id,
@@ -247,7 +263,11 @@ export class VentasRepository {
           metodo_pago,
           subtotal,
           descuento,
+          total_sin_redondeo,
+          redondeo,
           total,
+          monto_recibido,
+          vuelto,
           modalidad,
           estado,
           anulada_en,
@@ -261,7 +281,11 @@ export class VentasRepository {
         data.metodoPago,
         data.subtotal,
         data.descuento,
+        data.totalSinRedondeo,
+        data.redondeo,
         data.total,
+        data.montoRecibido,
+        data.vuelto,
         data.modalidad,
       ],
     );
@@ -386,7 +410,11 @@ export class VentasRepository {
           v.metodo_pago,
           v.subtotal,
           v.descuento,
+          v.total_sin_redondeo,
+          v.redondeo,
           v.total,
+          v.monto_recibido,
+          v.vuelto,
           v.modalidad,
           v.estado,
           v.anulada_en,
@@ -473,7 +501,11 @@ export class VentasRepository {
           v.metodo_pago,
           v.subtotal,
           v.descuento,
+          v.total_sin_redondeo,
+          v.redondeo,
           v.total,
+          v.monto_recibido,
+          v.vuelto,
           v.modalidad,
           v.estado,
           v.anulada_en,

@@ -12,4 +12,5 @@ export interface CreateProductInput {
   precio_venta: number;
   stock?: number;
   activo?: boolean;
+  master_password?: string;
 }

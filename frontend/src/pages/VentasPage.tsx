@@ -7,8 +7,10 @@ import ListPanel from "../components/ListPanel";
 import ModuleCard from "../components/ModuleCard";
 import { FormField, inputClassName } from "../components/FormControls";
 import AdminPasswordModal from "../components/AdminPasswordModal";
+import TouchSelectField from "../components/TouchSelectField";
 
 const money = (value: number) => `$${value.toLocaleString()}`;
+const signedMoney = (value: number) => `${value >= 0 ? "+" : "-"}${money(Math.abs(value))}`;
 
 export default function VentasPage() {
   const queryClient = useQueryClient();
@@ -51,21 +53,33 @@ export default function VentasPage() {
   return (
     <div className="admin-page space-y-6">
       <h1 className="admin-page-title">Ventas</h1>
-      <ModuleCard title="Filtros" icon={FunnelIcon} contentClassName="p-4">
+      <ModuleCard title="Filtros" icon={FunnelIcon} className="overflow-visible" contentClassName="p-4">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         <FormField label="Fecha">
           <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} className={inputClassName} />
         </FormField>
-        <FormField label="Estado">
-        <select value={estado} onChange={(e) => setEstado(e.target.value as EstadoVenta | "")} className={inputClassName}>
-          <option value="">Todos los estados</option><option value="COMPLETADA">Completada</option><option value="ANULADA">Anulada</option>
-        </select>
-        </FormField>
-        <FormField label="Método de pago">
-        <select value={metodo} onChange={(e) => setMetodo(e.target.value as MetodoPago | "")} className={inputClassName}>
-          <option value="">Todos los pagos</option><option value="EFECTIVO">Efectivo</option><option value="TARJETA">Tarjeta</option><option value="TRANSFERENCIA">Transferencia</option><option value="MIXTO">Mixto</option>
-        </select>
-        </FormField>
+        <TouchSelectField
+          label="Estado"
+          value={estado}
+          options={[
+            { value: "", label: "Todos los estados" },
+            { value: "COMPLETADA", label: "Completada" },
+            { value: "ANULADA", label: "Anulada" },
+          ]}
+          onChange={(value) => setEstado(value as EstadoVenta | "")}
+        />
+        <TouchSelectField
+          label="Método de pago"
+          value={metodo}
+          options={[
+            { value: "", label: "Todos los pagos" },
+            { value: "EFECTIVO", label: "Efectivo" },
+            { value: "TARJETA", label: "Tarjeta" },
+            { value: "TRANSFERENCIA", label: "Transferencia" },
+            { value: "MIXTO", label: "Mixto" },
+          ]}
+          onChange={(value) => setMetodo(value as MetodoPago | "")}
+        />
       </div>
       </ModuleCard>
       {message && <p className="admin-message">{message}</p>}
@@ -84,8 +98,23 @@ export default function VentasPage() {
             new Date(venta.creado_en).toLocaleString(),
             venta.metodo_pago,
             venta.estado,
+            ...(venta.metodo_pago === "EFECTIVO"
+              ? [
+                  `Real ${money(venta.total_sin_redondeo)}`,
+                  `Redondeo ${signedMoney(venta.redondeo)}`,
+                  ...(venta.monto_recibido !== null ? [`Recibido ${money(venta.monto_recibido)}`] : []),
+                  ...(venta.vuelto !== null ? [`Vuelto ${money(venta.vuelto)}`] : []),
+                ]
+              : []),
           ],
-          amount: money(venta.total),
+          amount: (
+            <div>
+              <small className="block text-[11px] font-semibold uppercase tracking-[0.08em] text-[#8b8e98]">
+                Cobrado
+              </small>
+              {money(venta.total)}
+            </div>
+          ),
           action: venta.estado === "COMPLETADA" ? (
             <button
               onClick={() => {

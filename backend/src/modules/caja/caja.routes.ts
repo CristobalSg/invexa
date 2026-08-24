@@ -93,12 +93,16 @@ export const cajaRoutes: FastifyPluginAsync = async (fastify) => {
     '/sesiones',
     { preHandler: cajaAccess, schema: listCajaSessionsSchema },
     async (request, reply) => {
+      const query =
+        request.user.rol === 'OWNER'
+          ? request.query
+          : { ...request.query, usuario_id: request.user.id };
       const result = await service.findAll(
         {
           id: request.user.id,
           rol: request.user.rol,
         },
-        request.query,
+        query,
       );
 
       return ok(reply, result);

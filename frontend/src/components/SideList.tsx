@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query"
+import type { ReactNode } from "react"
 import { getProducts } from "../services/productService"
 import type { Producto } from "../types/api"
 import ProductTile from "./ProductTile"
@@ -10,7 +11,9 @@ interface Props {
   onToggleFeatured?: (productId: number) => void
   productsOverride?: Producto[]
   isLoadingOverride?: boolean
+  kicker?: string
   title?: string
+  actions?: ReactNode
 }
 
 export default function SideList({
@@ -20,7 +23,9 @@ export default function SideList({
   onToggleFeatured,
   productsOverride,
   isLoadingOverride = false,
+  kicker = "Seleccionado",
   title = "Productos",
+  actions,
 }: Props) {
   const { data: products, isLoading } = useQuery({
     queryKey: ["products"],
@@ -52,12 +57,15 @@ export default function SideList({
     <section className="pos-products-block">
       <div className="pos-section-row">
         <div>
-          <span className="pos-kicker">Seleccionado</span>
+          <span className="pos-kicker">{kicker}</span>
           <h2 className="pos-subtitle">{title}</h2>
         </div>
-        <button type="button" className="rounded-xl border border-[#ececf0] bg-white px-3 py-2 text-xs font-semibold text-[#71747d]">
-          {filtered.length} productos
-        </button>
+        <div className="pos-list-actions">
+          {actions}
+          <button type="button" className="rounded-xl border border-[#ececf0] bg-white px-3 py-2 text-xs font-semibold text-[#71747d]">
+            {filtered.length} productos
+          </button>
+        </div>
       </div>
       <div className="mt-1">
         {searchTerm && (

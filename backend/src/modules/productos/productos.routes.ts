@@ -10,6 +10,7 @@ import {
   getProductoByCodigoSchema,
   getProductoSchema,
   listProductosSchema,
+  resetProduceProductsSchema,
   updateProductoSchema,
 } from './productos.schema.js';
 import { ProductosService } from './productos.service.js';
@@ -18,13 +19,15 @@ import type {
   PaginationQuery,
   ProductoCodigoParams,
   ProductoParams,
+  ResetProduceProductsBody,
   UpdateProductoBody,
 } from './productos.types.js';
 
 export const productosRoutes: FastifyPluginAsync = async (fastify) => {
   const repository = new ProductosRepository(fastify.pg);
-  const service = new ProductosService(repository);
+  const service = new ProductosService(repository, fastify.pg);
   const readProducts = [authMiddleware, roleMiddleware(['OWNER', 'CASHIER'])];
+  const createProducts = [authMiddleware, roleMiddleware(['OWNER', 'CASHIER'])];
   const ownerOnly = [authMiddleware, roleMiddleware(['OWNER'])];
 
   fastify.get<{ Querystring: PaginationQuery }>(
@@ -56,10 +59,19 @@ export const productosRoutes: FastifyPluginAsync = async (fastify) => {
 
   fastify.post<{ Body: CreateProductoBody }>(
     '/',
-    { preHandler: ownerOnly, schema: createProductoSchema },
+    { preHandler: createProducts, schema: createProductoSchema },
     async (request, reply) => {
-      const producto = await service.create(request.body);
+      const producto = await service.create(request.body, request.user.rol);
       return created(reply, producto);
+    },
+  );
+
+  fastify.post<{ Body: ResetProduceProductsBody }>(
+    '/frutas-verduras/reset',
+    { preHandler: ownerOnly, schema: resetProduceProductsSchema },
+    async (request, reply) => {
+      const result = await service.resetProduceProducts(request.body);
+      return ok(reply, result);
     },
   );
 

@@ -5,6 +5,8 @@ import type {
   PaginationQuery,
   ProductoListRow,
   ProductoRow,
+  ResetProduceProductInput,
+  ResetProduceProductsResult,
   UpdateProductoBody,
 } from './productos.types.js';
 
@@ -326,5 +328,107 @@ export class ProductosRepository {
     }
 
     return this.findById(result.rows[0].id);
+  }
+
+  async resetProduceProducts(
+    products: readonly ResetProduceProductInput[],
+  ): Promise<ResetProduceProductsResult> {
+    const client = await this.pool.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      const categoryResult = await client.query<{ readonly id: number }>(
+        `
+          SELECT id
+          FROM categorias_producto
+          WHERE LOWER(nombre) LIKE '%fruta%'
+            AND LOWER(nombre) LIKE '%verdura%'
+          ORDER BY id ASC
+          LIMIT 1
+        `,
+      );
+
+      let categoryId = categoryResult.rows[0]?.id;
+
+      if (!categoryId) {
+        const insertedCategory = await client.query<{ readonly id: number }>(
+          `
+            INSERT INTO categorias_producto (nombre, multiplicador_ganancia, variacion_maxima_precio)
+            VALUES ('Frutas y verduras', 1.50, 0.25)
+            RETURNING id
+          `,
+        );
+
+        categoryId = insertedCategory.rows[0]?.id;
+      }
+
+      if (!categoryId) {
+        throw new Error('No se pudo preparar la categoria Frutas y verduras');
+      }
+
+      const deactivateResult = await client.query(
+        `
+          UPDATE productos p
+          SET
+            activo = FALSE,
+            actualizado_en = NOW()
+          FROM categorias_producto c
+          WHERE p.categoria_id = c.id
+            AND p.activo = TRUE
+            AND (
+              LOWER(c.nombre) LIKE '%fruta%'
+              OR LOWER(c.nombre) LIKE '%verdura%'
+            )
+        `,
+      );
+
+      for (const product of products) {
+        await client.query(
+          `
+            INSERT INTO productos (
+              nombre,
+              codigo_barras,
+              categoria_id,
+              tipo_propiedad,
+              unidad_venta,
+              modo_inventario,
+              proveedor_id,
+              costo_actual,
+              precio_venta,
+              stock,
+              activo
+            )
+            VALUES (
+              $1,
+              NULL,
+              $2,
+              'PROPIO',
+              'PESO',
+              'FLEXIBLE',
+              NULL,
+              NULL,
+              1,
+              0,
+              TRUE
+            )
+          `,
+          [product.nombre, categoryId],
+        );
+      }
+
+      await client.query('COMMIT');
+
+      return {
+        categoria_id: categoryId,
+        desactivados: deactivateResult.rowCount ?? 0,
+        creados: products.length,
+      };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 }
