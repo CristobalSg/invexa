@@ -51,9 +51,6 @@ export default function ProductList({ products = [], onDecrease, onIncrease, onR
                 <p className="pos-cart-meta">
                   ${product.precio_venta.toLocaleString()}{lockedQuantity ? "/kg" : " c/u"} · {formatQuantity(product.quantity, lockedQuantity)}
                 </p>
-                <p className="pos-cart-line-total">
-                  ${(product.precio_venta * product.quantity).toLocaleString()}
-                </p>
               </div>
 
               <div className="pos-cart-controls">

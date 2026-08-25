@@ -41,6 +41,13 @@ export interface ProfileLoginBody {
   readonly contraseña: string;
 }
 
+export interface RecoverProfilePasswordBody {
+  readonly usuario_id: number;
+  readonly master_password: string;
+  readonly contraseña: string;
+  readonly confirmar_contraseña: string;
+}
+
 export interface AuthUser {
   readonly id: number;
   readonly nombre_usuario: string;

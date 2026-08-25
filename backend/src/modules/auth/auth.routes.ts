@@ -10,11 +10,18 @@ import {
   loginSchema,
   meSchema,
   profileLoginSchema,
+  recoverProfilePasswordSchema,
   setupAdminSchema,
   setupStatusSchema,
 } from './auth.schema.js';
 import { AuthService } from './auth.service.js';
-import type { AuthorizeDeviceBody, LoginBody, ProfileLoginBody, SetupAdminBody } from './auth.types.js';
+import type {
+  AuthorizeDeviceBody,
+  LoginBody,
+  ProfileLoginBody,
+  RecoverProfilePasswordBody,
+  SetupAdminBody,
+} from './auth.types.js';
 
 export const authRoutes: FastifyPluginAsync = async (fastify) => {
   const service = new AuthService(fastify);
@@ -65,6 +72,15 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
     { schema: profileLoginSchema },
     async (request, reply) => {
       const result = await service.loginProfile(getDeviceToken(request), request.body);
+      return ok(reply, result);
+    },
+  );
+
+  fastify.post<{ Body: RecoverProfilePasswordBody }>(
+    '/perfiles/recuperar-contrasena',
+    { schema: recoverProfilePasswordSchema },
+    async (request, reply) => {
+      const result = await service.recoverProfilePassword(getDeviceToken(request), request.body);
       return ok(reply, result);
     },
   );

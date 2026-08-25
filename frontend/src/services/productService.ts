@@ -38,6 +38,23 @@ export async function getProducts(filters: ProductFilters = {}): Promise<Paginat
   return data;
 }
 
+export async function getAllProducts(filters: ProductFilters = {}): Promise<Producto[]> {
+  const firstPage = await getProducts({ ...filters, page: 1, limit: 100 });
+  const totalPages = firstPage.pagination.totalPages;
+
+  if (totalPages <= 1) {
+    return firstPage.items;
+  }
+
+  const remainingPages = await Promise.all(
+    Array.from({ length: totalPages - 1 }, (_, index) =>
+      getProducts({ ...filters, page: index + 2, limit: 100 }),
+    ),
+  );
+
+  return [firstPage, ...remainingPages].flatMap((page) => page.items);
+}
+
 export async function createProduct(input: CreateProductInput): Promise<Producto> {
   const { data } = await api.post<Producto>(ENDPOINT, input);
   return data;

@@ -22,6 +22,11 @@ export async function cerrarCaja(efectivo_contado: number) {
   return data;
 }
 
+export async function forzarCerrarCaja(efectivo_contado: number, master_password: string) {
+  const { data } = await api.post<CajaSession>("/caja/cerrar/forzar", { efectivo_contado, master_password });
+  return data;
+}
+
 export async function crearMovimientoCaja(input: {
   tipo: TipoMovimientoCaja;
   categoria: CategoriaMovimientoCaja;
@@ -30,6 +35,24 @@ export async function crearMovimientoCaja(input: {
   master_password: string;
 }) {
   const { data } = await api.post<CajaMovimiento>("/caja/movimientos", input);
+  return data;
+}
+
+export async function editarMovimientoCaja(id: number, input: {
+  tipo: TipoMovimientoCaja;
+  categoria: CategoriaMovimientoCaja;
+  monto: number;
+  descripcion?: string | null;
+  master_password: string;
+}) {
+  const { data } = await api.patch<CajaMovimiento>(`/caja/movimientos/${id}`, input);
+  return data;
+}
+
+export async function eliminarMovimientoCaja(id: number, master_password: string) {
+  const { data } = await api.delete<CajaMovimiento>(`/caja/movimientos/${id}`, {
+    data: { master_password },
+  });
   return data;
 }
 

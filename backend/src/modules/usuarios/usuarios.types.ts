@@ -41,6 +41,7 @@ export interface CreateUsuarioBody {
 export interface UpdateUsuarioBody {
   readonly nombre_usuario?: string;
   readonly contraseña?: string;
+  readonly master_password?: string;
   readonly nombre?: string;
   readonly email?: string | null;
   readonly rol?: UserRole;

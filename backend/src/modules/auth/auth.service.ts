@@ -4,6 +4,7 @@ import type { FastifyInstance } from 'fastify';
 
 import { env } from '../../config/env.js';
 import { BadRequestError, ConflictError, UnauthorizedError } from '../../utils/errors.js';
+import { assertValidOwnerPassword } from '../../utils/master-authorization.js';
 import { AuthRepository } from './auth.repository.js';
 import type {
   AuthUser,
@@ -15,6 +16,7 @@ import type {
   LoginResult,
   PosProfileLoginResult,
   ProfileLoginBody,
+  RecoverProfilePasswordBody,
   SetupAdminBody,
   SetupAdminResult,
   SetupStatusResult,
@@ -181,6 +183,28 @@ export class AuthService {
       requiere_apertura_turno: !openTurn && authUser.rol !== 'OWNER',
       turno_abierto: openTurn,
     };
+  }
+
+  async recoverProfilePassword(
+    deviceToken: string | undefined,
+    data: RecoverProfilePasswordBody,
+  ): Promise<AuthUser> {
+    await this.validateDevice(deviceToken);
+
+    if (data.contraseña !== data.confirmar_contraseña) {
+      throw new BadRequestError('Las contraseñas no coinciden');
+    }
+
+    await assertValidOwnerPassword(this.fastify.pg, data.master_password);
+
+    const contrasenaHash = await bcrypt.hash(data.contraseña, env.bcryptSaltRounds);
+    const usuario = await this.repository.updatePassword(data.usuario_id, contrasenaHash);
+
+    if (!usuario) {
+      throw new UnauthorizedError('Usuario no encontrado o inactivo');
+    }
+
+    return this.mapAuthUser(usuario);
   }
 
   async getProfile(usuarioId: number): Promise<AuthUser> {

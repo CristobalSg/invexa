@@ -18,6 +18,9 @@ import type {
   CajaUserContext,
   CerrarCajaBody,
   CrearMovimientoCajaBody,
+  EditarMovimientoCajaBody,
+  EliminarMovimientoCajaBody,
+  ForzarCerrarCajaBody,
   PaginatedResult,
 } from './caja.types.js';
 
@@ -95,6 +98,42 @@ export class CajaService {
     });
   }
 
+  async forzarCerrar(data: ForzarCerrarCajaBody, deviceId?: string): Promise<CajaSessionDetalle> {
+    if (!deviceId) {
+      throw new BadRequestError('Este equipo no esta autorizado');
+    }
+
+    await assertValidOwnerPassword(this.pool, data.master_password);
+
+    return withTransaction(this.pool, async (client) => {
+      await this.repository.lockDeviceCashSessions(client, deviceId);
+
+      const openSession = await this.repository.findOpenByDeviceId(client, deviceId);
+
+      if (!openSession) {
+        throw new BadRequestError('Este equipo no tiene un turno de caja abierto');
+      }
+
+      const resumen = await this.repository.getResumenWithClient(client, openSession.id);
+      const resumenFinanciero = this.mapResumen(resumen, Number(openSession.monto_apertura));
+      const diferencia = this.round(data.efectivo_contado - resumenFinanciero.monto_esperado_cierre, 2);
+      const closed = await this.repository.close(
+        client,
+        openSession.id,
+        data.efectivo_contado,
+        resumenFinanciero.monto_esperado_cierre,
+        diferencia,
+      );
+      const session = await this.repository.findByIdWithClient(client, closed.id);
+
+      if (!session) {
+        throw new NotFoundError('Sesion de caja no encontrada');
+      }
+
+      return this.mapSessionDetalle(session, resumen);
+    });
+  }
+
   async crearMovimiento(
     usuarioId: number,
     data: CrearMovimientoCajaBody,
@@ -128,6 +167,100 @@ export class CajaService {
       const movimiento = await this.repository.createMovimiento(client, openSession.id, usuarioId, data);
       const rows = await this.repository.findMovimientosBySessionId(openSession.id);
       return this.mapMovimiento(rows.find((row) => row.id === movimiento.id) ?? movimiento);
+    });
+  }
+
+  async editarMovimiento(
+    usuarioId: number,
+    movimientoId: number,
+    data: EditarMovimientoCajaBody,
+    deviceId?: string,
+  ): Promise<CajaMovimiento> {
+    if (data.monto <= 0) {
+      throw new BadRequestError('El monto debe ser mayor a 0');
+    }
+
+    await assertValidOwnerPassword(this.pool, data.master_password);
+
+    return withTransaction(this.pool, async (client) => {
+      if (deviceId) {
+        await this.repository.lockDeviceCashSessions(client, deviceId);
+      } else {
+        await this.repository.lockUserCashSessions(client, usuarioId);
+      }
+
+      const openSession = deviceId
+        ? await this.repository.findOpenByDeviceId(client, deviceId)
+        : await this.repository.findOpenByUsuarioId(client, usuarioId);
+
+      if (!openSession) {
+        throw new BadRequestError('Este equipo no tiene un turno de caja abierto');
+      }
+
+      if (openSession.usuario_id !== usuarioId) {
+        throw new ForbiddenError('Solo el usuario del turno actual puede editar movimientos');
+      }
+
+      const movimiento = await this.repository.findMovimientoByIdForUpdate(client, movimientoId);
+
+      if (!movimiento || movimiento.sesion_caja_id !== openSession.id) {
+        throw new NotFoundError('Movimiento de caja no encontrado');
+      }
+
+      const movimientoEditado = await this.repository.updateMovimiento(
+        client,
+        movimientoId,
+        data,
+      );
+
+      if (!movimientoEditado) {
+        throw new NotFoundError('Movimiento de caja no encontrado');
+      }
+
+      return this.mapMovimiento(movimientoEditado);
+    });
+  }
+
+  async eliminarMovimiento(
+    usuarioId: number,
+    movimientoId: number,
+    data: EliminarMovimientoCajaBody,
+    deviceId?: string,
+  ): Promise<CajaMovimiento> {
+    await assertValidOwnerPassword(this.pool, data.master_password);
+
+    return withTransaction(this.pool, async (client) => {
+      if (deviceId) {
+        await this.repository.lockDeviceCashSessions(client, deviceId);
+      } else {
+        await this.repository.lockUserCashSessions(client, usuarioId);
+      }
+
+      const openSession = deviceId
+        ? await this.repository.findOpenByDeviceId(client, deviceId)
+        : await this.repository.findOpenByUsuarioId(client, usuarioId);
+
+      if (!openSession) {
+        throw new BadRequestError('Este equipo no tiene un turno de caja abierto');
+      }
+
+      if (openSession.usuario_id !== usuarioId) {
+        throw new ForbiddenError('Solo el usuario del turno actual puede eliminar movimientos');
+      }
+
+      const movimiento = await this.repository.findMovimientoByIdForUpdate(client, movimientoId);
+
+      if (!movimiento || movimiento.sesion_caja_id !== openSession.id) {
+        throw new NotFoundError('Movimiento de caja no encontrado');
+      }
+
+      const movimientoEliminado = await this.repository.deleteMovimiento(client, movimientoId);
+
+      if (!movimientoEliminado) {
+        throw new NotFoundError('Movimiento de caja no encontrado');
+      }
+
+      return this.mapMovimiento(movimientoEliminado);
     });
   }
 

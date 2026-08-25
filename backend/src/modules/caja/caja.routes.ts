@@ -9,6 +9,9 @@ import {
   abrirCajaSchema,
   cajaActualSchema,
   cerrarCajaSchema,
+  editarMovimientoCajaSchema,
+  eliminarMovimientoCajaSchema,
+  forzarCerrarCajaSchema,
   crearMovimientoCajaSchema,
   getCajaSessionSchema,
   listMovimientosCajaSchema,
@@ -21,6 +24,9 @@ import type {
   CajaSessionsQuery,
   CerrarCajaBody,
   CrearMovimientoCajaBody,
+  EditarMovimientoCajaBody,
+  EliminarMovimientoCajaBody,
+  ForzarCerrarCajaBody,
 } from './caja.types.js';
 
 export const cajaRoutes: FastifyPluginAsync = async (fastify) => {
@@ -28,6 +34,7 @@ export const cajaRoutes: FastifyPluginAsync = async (fastify) => {
   const service = new CajaService(repository, fastify.pg);
   const authService = new AuthService(fastify);
   const cajaAccess = [authMiddleware, roleMiddleware(['OWNER', 'CASHIER'])];
+  const ownerOnly = [authMiddleware, roleMiddleware(['OWNER'])];
   const getDeviceId = async (request: { headers: Record<string, string | string[] | undefined> }) => {
     const token = request.headers['x-device-token'];
     const deviceToken = Array.isArray(token) ? token[0] : token;
@@ -58,6 +65,15 @@ export const cajaRoutes: FastifyPluginAsync = async (fastify) => {
     },
   );
 
+  fastify.post<{ Body: ForzarCerrarCajaBody }>(
+    '/cerrar/forzar',
+    { preHandler: ownerOnly, schema: forzarCerrarCajaSchema },
+    async (request, reply) => {
+      const session = await service.forzarCerrar(request.body, await getDeviceId(request));
+      return ok(reply, session);
+    },
+  );
+
   fastify.post<{ Body: CrearMovimientoCajaBody }>(
     '/movimientos',
     { preHandler: cajaAccess, schema: crearMovimientoCajaSchema },
@@ -77,6 +93,34 @@ export const cajaRoutes: FastifyPluginAsync = async (fastify) => {
     async (request, reply) => {
       const movimientos = await service.listMovimientosActual(request.user.id, await getDeviceId(request));
       return ok(reply, movimientos);
+    },
+  );
+
+  fastify.patch<{ Params: { readonly id: number }; Body: EditarMovimientoCajaBody }>(
+    '/movimientos/:id',
+    { preHandler: cajaAccess, schema: editarMovimientoCajaSchema },
+    async (request, reply) => {
+      const movimiento = await service.editarMovimiento(
+        request.user.id,
+        request.params.id,
+        request.body,
+        await getDeviceId(request),
+      );
+      return ok(reply, movimiento);
+    },
+  );
+
+  fastify.delete<{ Params: { readonly id: number }; Body: EliminarMovimientoCajaBody }>(
+    '/movimientos/:id',
+    { preHandler: cajaAccess, schema: eliminarMovimientoCajaSchema },
+    async (request, reply) => {
+      const movimiento = await service.eliminarMovimiento(
+        request.user.id,
+        request.params.id,
+        request.body,
+        await getDeviceId(request),
+      );
+      return ok(reply, movimiento);
     },
   );
 

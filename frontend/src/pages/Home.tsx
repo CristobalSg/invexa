@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { EllipsisHorizontalIcon, MagnifyingGlassIcon, PlusIcon, TagIcon, WalletIcon, XMarkIcon } from "@heroicons/react/24/outline";
-import { StarIcon as StarIconSolid } from "@heroicons/react/24/solid";
+import { CurrencyDollarIcon, EllipsisHorizontalIcon, MagnifyingGlassIcon, WalletIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import InputForm from "../components/InputForm";
 import MainList from "../components/MainList";
 import SideList from "../components/SideList";
@@ -13,8 +12,8 @@ import AdminPasswordModal from "../components/AdminPasswordModal";
 import type { MetodoPago, ModalidadVenta, Oferta, Producto } from "../types/api";
 import { createVenta } from "../services/transactionService";
 import { getCajaActual } from "../services/cajaService";
-import { getProducts } from "../services/productService";
-import { getCategorias, getOfertasActivas } from "../services/catalogService";
+import { getAllProducts, getProductByBarcode, getProducts } from "../services/productService";
+import { getAllOfertasActivas, getCategorias } from "../services/catalogService";
 
 type CartProduct = Producto & { quantity: number; cartItemId: string };
 type CartSession = { id: string; name: string; items: CartProduct[] };
@@ -188,9 +187,15 @@ export default function Home() {
   const queryClient = useQueryClient();
   const barcodeInputRef = useRef<HTMLInputElement>(null);
   const productSearchInputRef = useRef<HTMLInputElement>(null);
+  const priceLookupInputRef = useRef<HTMLInputElement>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [searchPage, setSearchPage] = useState(1);
   const [isProductSearchOpen, setIsProductSearchOpen] = useState(false);
+  const [isPriceLookupOpen, setIsPriceLookupOpen] = useState(false);
+  const [priceLookupCode, setPriceLookupCode] = useState("");
+  const [priceLookupProduct, setPriceLookupProduct] = useState<Producto | null>(null);
+  const [priceLookupMessage, setPriceLookupMessage] = useState("");
+  const [isPriceLookupLoading, setIsPriceLookupLoading] = useState(false);
   const [barcodeClearSignal, setBarcodeClearSignal] = useState(0);
   const [productShelfFilter, setProductShelfFilter] = useState<ProductShelfFilter>("featured");
   const [carts, setCarts] = useState<CartSession[]>(() => [createCartSession(1)]);
@@ -221,16 +226,16 @@ export default function Home() {
     queryFn: getCajaActual,
   });
   const { data: productos } = useQuery({
-    queryKey: ["products"],
-    queryFn: () => getProducts({ activo: true }),
+    queryKey: ["products", "all-active"],
+    queryFn: () => getAllProducts({ activo: true }),
   });
   const { data: categorias } = useQuery({
     queryKey: ["categorias"],
     queryFn: () => getCategorias(),
   });
-  const { data: ofertasActivas } = useQuery({
+  const { data: ofertasActivas, isLoading: isLoadingOffers } = useQuery({
     queryKey: ["ofertas", "activas"],
-    queryFn: () => getOfertasActivas(),
+    queryFn: () => getAllOfertasActivas(),
   });
   const normalizedSearchTerm = searchTerm.trim();
   const { data: searchProducts, isFetching: isSearchFetching } = useQuery({
@@ -246,7 +251,7 @@ export default function Home() {
     placeholderData: keepPreviousData,
   });
 
-  const activeOffers = ofertasActivas?.items ?? [];
+  const activeOffers = ofertasActivas ?? [];
   const activeOffersByProductId = new Map(activeOffers.map((offer) => [offer.producto_id, offer]));
   const allCategoryButtons = (categorias?.items ?? [])
     .map((category, index) => ({ id: category.id, name: category.nombre, index }))
@@ -254,8 +259,8 @@ export default function Home() {
       const priorityDiff = getCategorySortPriority(first.name) - getCategorySortPriority(second.name);
       return priorityDiff === 0 ? first.index - second.index : priorityDiff;
     });
-  const categoryButtons = allCategoryButtons.slice(0, 4);
-  const extraCategoryButtons = allCategoryButtons.slice(4);
+  const categoryButtons = allCategoryButtons.slice(0, 6);
+  const extraCategoryButtons = allCategoryButtons.slice(6);
   const categoryModalTotalPages = Math.max(1, Math.ceil(extraCategoryButtons.length / categoryModalPageSize));
   const pagedExtraCategoryButtons = extraCategoryButtons.slice(
     (categoryModalPage - 1) * categoryModalPageSize,
@@ -278,8 +283,8 @@ export default function Home() {
     placeholderData: keepPreviousData,
   });
 
-  const featuredProducts = (productos?.items ?? []).filter((product) => featuredProductIds.includes(product.id));
-  const offerProducts = (productos?.items ?? []).filter((product) => activeOffersByProductId.has(product.id));
+  const featuredProducts = (productos ?? []).filter((product) => featuredProductIds.includes(product.id));
+  const offerProducts = (productos ?? []).filter((product) => activeOffersByProductId.has(product.id));
   const listedProducts = productShelfFilter === "featured" ? featuredProducts : offerProducts;
   const listedProductsTitle = productShelfFilter === "featured" ? "Favoritos" : "Ofertas";
   const quickProducts = categoryProductsPage?.items ?? [];
@@ -295,7 +300,7 @@ export default function Home() {
     window.setTimeout(() => {
       if (
         force ||
-        (!isProductSearchOpen && !categoryModalOpen && !quickProductsModal && !paymentModalOpen && !salePasswordOpen && !weighableProduct)
+        (!isProductSearchOpen && !isPriceLookupOpen && !categoryModalOpen && !quickProductsModal && !paymentModalOpen && !salePasswordOpen && !weighableProduct)
       ) {
         barcodeInputRef.current?.focus();
       }
@@ -311,6 +316,12 @@ export default function Home() {
       window.setTimeout(() => productSearchInputRef.current?.focus(), 0);
     }
   }, [isProductSearchOpen]);
+
+  useEffect(() => {
+    if (isPriceLookupOpen) {
+      window.setTimeout(() => priceLookupInputRef.current?.focus(), 0);
+    }
+  }, [isPriceLookupOpen]);
 
   useEffect(() => {
     setSearchPage(1);
@@ -602,6 +613,45 @@ export default function Home() {
     focusBarcodeInput(true);
   };
 
+  const handleOpenPriceLookup = () => {
+    setIsPriceLookupOpen(true);
+    setPriceLookupCode("");
+    setPriceLookupProduct(null);
+    setPriceLookupMessage("");
+  };
+
+  const handleClosePriceLookup = () => {
+    setIsPriceLookupOpen(false);
+    setPriceLookupCode("");
+    setPriceLookupProduct(null);
+    setPriceLookupMessage("");
+    focusBarcodeInput(true);
+  };
+
+  const handlePriceLookup = async () => {
+    const code = priceLookupCode.trim();
+
+    if (!code) {
+      setPriceLookupProduct(null);
+      setPriceLookupMessage("Ingresa un código de barra.");
+      return;
+    }
+
+    setIsPriceLookupLoading(true);
+    setPriceLookupMessage("");
+
+    try {
+      const product = await getProductByBarcode(code);
+      setPriceLookupProduct(product);
+      setPriceLookupMessage(product ? "" : "No se encontró un producto activo con ese código.");
+    } catch (error) {
+      setPriceLookupProduct(null);
+      setPriceLookupMessage(error instanceof Error ? error.message : "No se pudo consultar el precio");
+    } finally {
+      setIsPriceLookupLoading(false);
+    }
+  };
+
   const handleClearBarcodeInput = () => {
     setBarcodeClearSignal((current) => current + 1);
     focusBarcodeInput();
@@ -693,12 +743,12 @@ export default function Home() {
           </button>
           <button
             type="button"
-            onClick={() => focusBarcodeInput()}
+            onClick={handleOpenPriceLookup}
             className="pos-tool-btn"
-            aria-label="Agregar"
-            title="Agregar"
+            aria-label="Consultar precio"
+            title="Consultar precio"
           >
-            <PlusIcon className="h-6 w-6" />
+            <CurrencyDollarIcon className="h-6 w-6" />
           </button>
           <button
             type="button"
@@ -757,32 +807,6 @@ export default function Home() {
               </span>
               <span className="pos-category-label">Más</span>
             </button>
-            <button
-              type="button"
-              onClick={() => {
-                setProductShelfFilter("featured");
-                focusBarcodeInput();
-              }}
-              className={`pos-category-card ${productShelfFilter === "featured" ? "active" : ""}`}
-              aria-label="Productos destacados"
-              title="Productos destacados"
-            >
-              <span className="pos-category-visual"><StarIconSolid className="h-7 w-7 text-amber-500" /></span>
-              <span className="pos-category-label">Favoritos</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setProductShelfFilter("offers");
-                focusBarcodeInput();
-              }}
-              className={`pos-category-card ${productShelfFilter === "offers" ? "active" : ""}`}
-              aria-label="Productos en oferta"
-              title="Productos en oferta"
-            >
-              <span className="pos-category-visual"><TagIcon className="h-7 w-7 text-sky-600" /></span>
-              <span className="pos-category-label">Ofertas</span>
-            </button>
           </div>
         </section>
 
@@ -792,7 +816,7 @@ export default function Home() {
           featuredProductIds={featuredProductIds}
           onToggleFeatured={toggleFeaturedProduct}
           productsOverride={listedProducts}
-          isLoadingOverride={!productos}
+          isLoadingOverride={!productos || (productShelfFilter === "offers" && isLoadingOffers)}
           kicker="Vista rápida"
           title={listedProductsTitle}
           actions={
@@ -940,6 +964,83 @@ export default function Home() {
           </div>
         </div>
       )}
+      {isPriceLookupOpen && (
+        <div
+          className="flow-modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) handleClosePriceLookup();
+          }}
+        >
+          <div className="flow-modal price-lookup-modal max-w-md">
+            <div className="pos-section-row">
+              <div>
+                <span className="pos-kicker">Consulta</span>
+                <h2 className="flow-modal-title">Buscar precio</h2>
+              </div>
+              <button
+                type="button"
+                onClick={handleClosePriceLookup}
+                className="rounded-xl border border-[#ececf0] bg-white px-4 py-3 text-sm font-bold text-[#5f626b] hover:bg-[#f7f7f9]"
+              >
+                Cerrar
+              </button>
+            </div>
+
+            <FormField label="Código de barra" className="mt-5">
+              <input
+                ref={priceLookupInputRef}
+                autoFocus
+                type="text"
+                inputMode="numeric"
+                value={priceLookupCode}
+                onChange={(event) => {
+                  setPriceLookupCode(event.target.value);
+                  setPriceLookupProduct(null);
+                  setPriceLookupMessage("");
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") handlePriceLookup();
+                  if (event.key === "Escape") handleClosePriceLookup();
+                }}
+                className={`${inputClassName} h-14 text-lg font-bold`}
+                placeholder="Escanea o ingresa el código"
+              />
+            </FormField>
+
+            {priceLookupMessage && (
+              <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-900">
+                {priceLookupMessage}
+              </p>
+            )}
+
+            {priceLookupProduct && (
+              <div className="price-lookup-result">
+                <div className="min-w-0">
+                  <span className="pos-kicker">Producto</span>
+                  <h3>{priceLookupProduct.nombre}</h3>
+                  <p>
+                    {priceLookupProduct.codigo_barras ?? "Sin código"} · Stock {priceLookupProduct.stock}{" "}
+                    {isWeighableProduct(priceLookupProduct) ? "kg" : "un."}
+                  </p>
+                </div>
+                <strong>
+                  ${priceLookupProduct.precio_venta.toLocaleString()}
+                  {isWeighableProduct(priceLookupProduct) ? "/kg" : ""}
+                </strong>
+              </div>
+            )}
+
+            <FormActions className="pt-5">
+              <Button variant="ghost" onClick={handleClosePriceLookup}>
+                Cancelar
+              </Button>
+              <Button onClick={handlePriceLookup} disabled={isPriceLookupLoading || !priceLookupCode.trim()}>
+                {isPriceLookupLoading ? "Consultando..." : "Consultar"}
+              </Button>
+            </FormActions>
+          </div>
+        </div>
+      )}
       {centerAlert && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-sm rounded-lg bg-white p-6 text-center shadow-xl">
@@ -964,9 +1065,12 @@ export default function Home() {
           <div className="flow-modal weight-modal max-w-md p-0">
             <div className="p-6 pb-4">
               <span className="pos-kicker">Producto por peso</span>
-              <h2 className="flow-modal-title">{weighableProduct.nombre}</h2>
+              <div className="weight-modal-heading">
+                <h2 className="flow-modal-title">{weighableProduct.nombre}</h2>
+                <strong>${weighableProduct.precio_venta.toLocaleString()}/kg</strong>
+              </div>
               <p className="mt-2 text-sm text-[#8b8e98]">
-                ${weighableProduct.precio_venta.toLocaleString()}/kg · Stock {weighableProduct.stock} kg
+                Stock {weighableProduct.stock} kg
               </p>
               <FormField label="Peso en gramos" className="mt-5">
                 <input

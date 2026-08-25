@@ -32,7 +32,7 @@ export default function UsuariosPage() {
   const restoreInputRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState({ nombre_usuario: "", contraseña: "", nombre: "", email: "", rol: "CASHIER" as UserRole });
   const [passwordUser, setPasswordUser] = useState<Usuario | null>(null);
-  const [passwordForm, setPasswordForm] = useState({ contraseña: "", confirmar_contraseña: "" });
+  const [passwordForm, setPasswordForm] = useState({ contraseña: "", confirmar_contraseña: "", master_password: "" });
   const [message, setMessage] = useState("");
   const { data, isLoading } = useQuery({ queryKey: ["usuarios"], queryFn: getUsuarios });
   const { data: backups, isLoading: isLoadingBackups } = useQuery({ queryKey: ["backups"], queryFn: getBackups });
@@ -59,7 +59,10 @@ export default function UsuariosPage() {
         throw new Error("Las contraseñas no coinciden");
       }
 
-      return updateUsuario(passwordUser.id, { contraseña: passwordForm.contraseña });
+      return updateUsuario(passwordUser.id, {
+        contraseña: passwordForm.contraseña,
+        master_password: passwordForm.master_password,
+      });
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["usuarios"] });
@@ -96,13 +99,13 @@ export default function UsuariosPage() {
 
   const openPasswordModal = (usuario: Usuario) => {
     setPasswordUser(usuario);
-    setPasswordForm({ contraseña: "", confirmar_contraseña: "" });
+    setPasswordForm({ contraseña: "", confirmar_contraseña: "", master_password: "" });
     setMessage("");
   };
 
   const closePasswordModal = () => {
     setPasswordUser(null);
-    setPasswordForm({ contraseña: "", confirmar_contraseña: "" });
+    setPasswordForm({ contraseña: "", confirmar_contraseña: "", master_password: "" });
   };
 
   const handleDownloadBackup = async (filename: string) => {
@@ -314,9 +317,18 @@ export default function UsuariosPage() {
             </div>
 
             <div className="mt-5 grid gap-3">
-              <FormField label="Nueva contraseña">
+              <FormField label="Contraseña administrador">
                 <input
                   autoFocus
+                  type="password"
+                  maxLength={200}
+                  value={passwordForm.master_password}
+                  onChange={(event) => setPasswordForm((current) => ({ ...current, master_password: event.target.value }))}
+                  className={inputClassName}
+                />
+              </FormField>
+              <FormField label="Nueva contraseña">
+                <input
                   type="password"
                   minLength={4}
                   maxLength={200}
@@ -343,7 +355,11 @@ export default function UsuariosPage() {
                   className={inputClassName}
                   onKeyDown={(event) => {
                     if (event.key === "Escape") closePasswordModal();
-                    if (event.key === "Enter" && passwordForm.contraseña === passwordForm.confirmar_contraseña) {
+                    if (
+                      event.key === "Enter" &&
+                      passwordForm.master_password &&
+                      passwordForm.contraseña === passwordForm.confirmar_contraseña
+                    ) {
                       updatePassword.mutate();
                     }
                   }}
@@ -359,6 +375,7 @@ export default function UsuariosPage() {
                 onClick={() => updatePassword.mutate()}
                 disabled={
                   updatePassword.isPending ||
+                  !passwordForm.master_password ||
                   passwordForm.contraseña.length < 4 ||
                   passwordForm.contraseña !== passwordForm.confirmar_contraseña
                 }

@@ -184,6 +184,28 @@ export const cerrarCajaSchema = {
   },
 } as const;
 
+export const forzarCerrarCajaSchema = {
+  body: {
+    type: 'object',
+    required: ['efectivo_contado', 'master_password'],
+    additionalProperties: false,
+    properties: {
+      efectivo_contado: { type: 'number', minimum: 0 },
+      master_password: { type: 'string', minLength: 1, maxLength: 200 },
+    },
+  },
+  response: {
+    200: {
+      type: 'object',
+      required: ['success', 'data'],
+      properties: {
+        success: { type: 'boolean' },
+        data: cajaSessionDetalleSchema,
+      },
+    },
+  },
+} as const;
+
 export const crearMovimientoCajaSchema = {
   body: {
     type: 'object',
@@ -202,6 +224,57 @@ export const crearMovimientoCajaSchema = {
   },
   response: {
     201: {
+      type: 'object',
+      required: ['success', 'data'],
+      properties: {
+        success: { type: 'boolean' },
+        data: movimientoCajaSchema,
+      },
+    },
+  },
+} as const;
+
+export const editarMovimientoCajaSchema = {
+  params: idParamsSchema,
+  body: {
+    type: 'object',
+    required: ['tipo', 'categoria', 'monto', 'master_password'],
+    additionalProperties: false,
+    properties: {
+      tipo: { type: 'string', enum: ['INGRESO', 'EGRESO'] },
+      categoria: {
+        type: 'string',
+        enum: ['PAGO_PROVEEDOR', 'COMPRA_MENOR', 'RETIRO_PROPIETARIO', 'DEPOSITO', 'REPOSICION', 'OTRO'],
+      },
+      monto: { type: 'number', exclusiveMinimum: 0 },
+      descripcion: { type: ['string', 'null'], maxLength: 500 },
+      master_password: { type: 'string', minLength: 1, maxLength: 200 },
+    },
+  },
+  response: {
+    200: {
+      type: 'object',
+      required: ['success', 'data'],
+      properties: {
+        success: { type: 'boolean' },
+        data: movimientoCajaSchema,
+      },
+    },
+  },
+} as const;
+
+export const eliminarMovimientoCajaSchema = {
+  params: idParamsSchema,
+  body: {
+    type: 'object',
+    required: ['master_password'],
+    additionalProperties: false,
+    properties: {
+      master_password: { type: 'string', minLength: 1, maxLength: 200 },
+    },
+  },
+  response: {
+    200: {
       type: 'object',
       required: ['success', 'data'],
       properties: {

@@ -47,7 +47,7 @@ export async function createUsuario(input: {
   return data;
 }
 
-export async function updateUsuario(id: number, input: Partial<Usuario> & { contraseña?: string }) {
+export async function updateUsuario(id: number, input: Partial<Usuario> & { contraseña?: string; master_password?: string }) {
   const { data } = await api.patch<Usuario>(`/usuarios/${id}`, input);
   return data;
 }
@@ -65,6 +65,23 @@ export async function getOfertas(params: { page?: number; limit?: number; search
 export async function getOfertasActivas(params: { page?: number; limit?: number; search?: string; producto_id?: number } = {}) {
   const { data } = await api.get<PaginatedResult<Oferta>>("/ofertas/activas", { params: { page: 1, limit: 100, ...params } });
   return data;
+}
+
+export async function getAllOfertasActivas(params: { search?: string; producto_id?: number } = {}) {
+  const firstPage = await getOfertasActivas({ ...params, page: 1, limit: 100 });
+  const totalPages = firstPage.pagination.totalPages;
+
+  if (totalPages <= 1) {
+    return firstPage.items;
+  }
+
+  const remainingPages = await Promise.all(
+    Array.from({ length: totalPages - 1 }, (_, index) =>
+      getOfertasActivas({ ...params, page: index + 2, limit: 100 }),
+    ),
+  );
+
+  return [firstPage, ...remainingPages].flatMap((page) => page.items);
 }
 
 export async function createOferta(input: {

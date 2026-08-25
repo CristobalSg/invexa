@@ -62,6 +62,16 @@ export async function loginProfile(usuario_id: number, contraseña: string): Pro
   return data;
 }
 
+export async function recoverProfilePassword(input: {
+  usuario_id: number;
+  master_password: string;
+  contraseña: string;
+  confirmar_contraseña: string;
+}): Promise<AuthUser> {
+  const { data } = await api.post<AuthUser>("/auth/perfiles/recuperar-contrasena", input);
+  return data;
+}
+
 export async function getMe(): Promise<AuthUser> {
   const { data } = await api.get<AuthUser>("/auth/me");
   localStorage.setItem(USER_KEY, JSON.stringify(data));

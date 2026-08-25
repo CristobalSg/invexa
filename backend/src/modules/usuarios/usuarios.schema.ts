@@ -110,6 +110,11 @@ export const updateUsuarioSchema = {
         minLength: 4,
         maxLength: 200,
       },
+      master_password: {
+        type: 'string',
+        minLength: 1,
+        maxLength: 200,
+      },
       nombre: {
         type: 'string',
         minLength: 2,

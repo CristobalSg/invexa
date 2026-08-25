@@ -5,6 +5,7 @@ import {
   ArrowLeftOnRectangleIcon,
   BanknotesIcon,
   ComputerDesktopIcon,
+  KeyIcon,
   LockClosedIcon,
   UserCircleIcon,
   WalletIcon,
@@ -16,6 +17,7 @@ import {
   getStoredDevice,
   loginProfile,
   logout,
+  recoverProfilePassword,
 } from "../../services/authService";
 import type { DeviceProfile, ProfileLoginResult } from "../../types/api";
 import { Button, FormActions, FormField, inputClassName } from "../../components/FormControls";
@@ -48,6 +50,12 @@ export default function ProfilesPage() {
   const device = getStoredDevice();
   const [selectedProfile, setSelectedProfile] = useState<DeviceProfile | null>(null);
   const [password, setPassword] = useState("");
+  const [isRecoveringPassword, setIsRecoveringPassword] = useState(false);
+  const [recoveryForm, setRecoveryForm] = useState({
+    master_password: "",
+    contraseña: "",
+    confirmar_contraseña: "",
+  });
   const [openingTurnFor, setOpeningTurnFor] = useState<ProfileLoginResult | null>(null);
   const [openingAmount, setOpeningAmount] = useState("");
   const [message, setMessage] = useState("");
@@ -94,10 +102,35 @@ export default function ProfilesPage() {
     onError: (error) => setMessage(error instanceof Error ? error.message : "No se pudo abrir el turno"),
   });
 
+  const recoverPassword = useMutation({
+    mutationFn: () => {
+      if (!selectedProfile) throw new Error("Selecciona un perfil");
+      if (recoveryForm.contraseña !== recoveryForm.confirmar_contraseña) {
+        throw new Error("Las contraseñas no coinciden");
+      }
+
+      return recoverProfilePassword({
+        usuario_id: selectedProfile.id,
+        master_password: recoveryForm.master_password,
+        contraseña: recoveryForm.contraseña,
+        confirmar_contraseña: recoveryForm.confirmar_contraseña,
+      });
+    },
+    onSuccess: () => {
+      setPassword("");
+      setIsRecoveringPassword(false);
+      setRecoveryForm({ master_password: "", contraseña: "", confirmar_contraseña: "" });
+      setMessage("Contraseña actualizada. Ingresa con la nueva clave.");
+    },
+    onError: (error) => setMessage(error instanceof Error ? error.message : "No se pudo recuperar la contraseña"),
+  });
+
   const handleSelectProfile = (profile: DeviceProfile) => {
     logout();
     setSelectedProfile(profile);
     setPassword("");
+    setIsRecoveringPassword(false);
+    setRecoveryForm({ master_password: "", contraseña: "", confirmar_contraseña: "" });
     setMessage("");
   };
 
@@ -173,32 +206,142 @@ export default function ProfilesPage() {
               <p className="mt-1 text-sm text-neutral-400">{roleLabel[selectedProfile.rol]}</p>
             </div>
             <div className="p-6">
-            <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-blue-300">
-              <LockClosedIcon className="h-5 w-5" />
-              Acceso personal
-            </div>
-            <p className="mt-2 text-sm text-neutral-400">Ingresa tu PIN o contraseña para continuar.</p>
-            <FormField label="PIN / contraseña" className="mt-5">
-              <input
-                autoFocus
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && password) login.mutate();
-                  if (event.key === "Escape") setSelectedProfile(null);
-                }}
-                className={`${inputClassName} border-neutral-700 bg-neutral-950 text-lg text-white placeholder:text-neutral-500 focus:border-blue-400 focus:ring-blue-950`}
-              />
-            </FormField>
+            {!isRecoveringPassword ? (
+              <>
+                <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-blue-300">
+                  <LockClosedIcon className="h-5 w-5" />
+                  Acceso personal
+                </div>
+                <p className="mt-2 text-sm text-neutral-400">Ingresa tu PIN o contraseña para continuar.</p>
+                <FormField label="PIN / contraseña" className="mt-5">
+                  <input
+                    autoFocus
+                    type="password"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && password) login.mutate();
+                      if (event.key === "Escape") setSelectedProfile(null);
+                    }}
+                    className={`${inputClassName} border-neutral-700 bg-neutral-950 text-lg text-white placeholder:text-neutral-500 focus:border-blue-400 focus:ring-blue-950`}
+                  />
+                </FormField>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsRecoveringPassword(true);
+                    setMessage("");
+                  }}
+                  className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-blue-300 hover:text-blue-200"
+                >
+                  <KeyIcon className="h-4 w-4" />
+                  Recuperar contraseña
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-blue-300">
+                  <KeyIcon className="h-5 w-5" />
+                  Recuperar contraseña
+                </div>
+                <p className="mt-2 text-sm text-neutral-400">
+                  Ingresa la contraseña del administrador y define una nueva clave para esta cuenta.
+                </p>
+                <div className="mt-5 grid gap-4">
+                  <FormField label="Contraseña administrador">
+                    <input
+                      autoFocus
+                      type="password"
+                      value={recoveryForm.master_password}
+                      onChange={(event) =>
+                        setRecoveryForm((current) => ({ ...current, master_password: event.target.value }))
+                      }
+                      className={`${inputClassName} border-neutral-700 bg-neutral-950 text-white placeholder:text-neutral-500 focus:border-blue-400 focus:ring-blue-950`}
+                    />
+                  </FormField>
+                  <FormField label="Nueva contraseña">
+                    <input
+                      type="password"
+                      minLength={4}
+                      maxLength={200}
+                      value={recoveryForm.contraseña}
+                      onChange={(event) =>
+                        setRecoveryForm((current) => ({ ...current, contraseña: event.target.value }))
+                      }
+                      className={`${inputClassName} border-neutral-700 bg-neutral-950 text-white placeholder:text-neutral-500 focus:border-blue-400 focus:ring-blue-950`}
+                    />
+                  </FormField>
+                  <FormField
+                    label="Repetir contraseña"
+                    error={
+                      recoveryForm.confirmar_contraseña &&
+                      recoveryForm.contraseña !== recoveryForm.confirmar_contraseña
+                        ? "No coincide"
+                        : undefined
+                    }
+                  >
+                    <input
+                      type="password"
+                      minLength={4}
+                      maxLength={200}
+                      value={recoveryForm.confirmar_contraseña}
+                      onChange={(event) =>
+                        setRecoveryForm((current) => ({ ...current, confirmar_contraseña: event.target.value }))
+                      }
+                      onKeyDown={(event) => {
+                        if (event.key === "Escape") setIsRecoveringPassword(false);
+                        if (
+                          event.key === "Enter" &&
+                          recoveryForm.master_password &&
+                          recoveryForm.contraseña.length >= 4 &&
+                          recoveryForm.contraseña === recoveryForm.confirmar_contraseña
+                        ) {
+                          recoverPassword.mutate();
+                        }
+                      }}
+                      className={`${inputClassName} border-neutral-700 bg-neutral-950 text-white placeholder:text-neutral-500 focus:border-blue-400 focus:ring-blue-950`}
+                    />
+                  </FormField>
+                </div>
+              </>
+            )}
             {message && <p className="mt-3 rounded-md bg-amber-50 p-3 text-sm text-amber-800">{message}</p>}
             <FormActions className="pt-5">
-              <Button variant="ghost" onClick={() => setSelectedProfile(null)} className="text-neutral-200 hover:bg-white/10">
-                Cancelar
-              </Button>
-              <Button onClick={() => login.mutate()} disabled={!password || login.isPending}>
-                {login.isPending ? "Validando..." : "Entrar"}
-              </Button>
+              {!isRecoveringPassword ? (
+                <>
+                  <Button variant="ghost" onClick={() => setSelectedProfile(null)} className="text-neutral-200 hover:bg-white/10">
+                    Cancelar
+                  </Button>
+                  <Button onClick={() => login.mutate()} disabled={!password || login.isPending}>
+                    {login.isPending ? "Validando..." : "Entrar"}
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      setIsRecoveringPassword(false);
+                      setRecoveryForm({ master_password: "", contraseña: "", confirmar_contraseña: "" });
+                      setMessage("");
+                    }}
+                    className="text-neutral-200 hover:bg-white/10"
+                  >
+                    Volver
+                  </Button>
+                  <Button
+                    onClick={() => recoverPassword.mutate()}
+                    disabled={
+                      recoverPassword.isPending ||
+                      !recoveryForm.master_password ||
+                      recoveryForm.contraseña.length < 4 ||
+                      recoveryForm.contraseña !== recoveryForm.confirmar_contraseña
+                    }
+                  >
+                    {recoverPassword.isPending ? "Actualizando..." : "Guardar nueva clave"}
+                  </Button>
+                </>
+              )}
             </FormActions>
             </div>
           </div>

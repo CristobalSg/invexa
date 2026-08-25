@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from 'fastify';
 
 import { authMiddleware } from '../../middlewares/auth.middleware.js';
 import { roleMiddleware } from '../../middlewares/role.middleware.js';
+import { assertValidOwnerPassword } from '../../utils/master-authorization.js';
 import { created, ok } from '../../utils/responses.js';
 import { UsuariosRepository } from './usuarios.repository.js';
 import {
@@ -50,6 +51,10 @@ export const usuariosRoutes: FastifyPluginAsync = async (fastify) => {
     '/:id',
     { preHandler: ownerOnly, schema: updateUsuarioSchema },
     async (request, reply) => {
+      if (request.body.contraseña !== undefined) {
+        await assertValidOwnerPassword(fastify.pg, request.body.master_password);
+      }
+
       const usuario = await service.update(request.params.id, request.body);
       return ok(reply, usuario);
     },

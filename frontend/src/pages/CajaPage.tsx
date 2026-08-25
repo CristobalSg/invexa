@@ -15,10 +15,13 @@ import {
   abrirCaja,
   cerrarCaja,
   crearMovimientoCaja,
+  editarMovimientoCaja,
+  eliminarMovimientoCaja,
+  forzarCerrarCaja,
   getCajaActual,
   getCajaSesiones,
 } from "../services/cajaService";
-import type { CategoriaMovimientoCaja, TipoMovimientoCaja } from "../types/api";
+import type { CajaMovimiento, CategoriaMovimientoCaja, TipoMovimientoCaja } from "../types/api";
 import ListPanel from "../components/ListPanel";
 import ModuleCard from "../components/ModuleCard";
 import { Button, FormField, inputClassName } from "../components/FormControls";
@@ -77,6 +80,17 @@ export default function CajaPage() {
   const [debitReal, setDebitReal] = useState("");
   const [consignationSeparated, setConsignationSeparated] = useState(false);
   const [movementPasswordOpen, setMovementPasswordOpen] = useState(false);
+  const [movementToEdit, setMovementToEdit] = useState<CajaMovimiento | null>(null);
+  const [movementToDelete, setMovementToDelete] = useState<CajaMovimiento | null>(null);
+  const [editMovementPasswordOpen, setEditMovementPasswordOpen] = useState(false);
+  const [forceCloseAmount, setForceCloseAmount] = useState("");
+  const [forceClosePasswordOpen, setForceClosePasswordOpen] = useState(false);
+  const [editMovimientoForm, setEditMovimientoForm] = useState({
+    tipo: "EGRESO" as TipoMovimientoCaja,
+    categoria: "PAGO_PROVEEDOR" as CategoriaMovimientoCaja,
+    monto: "",
+    descripcion: "",
+  });
   const [movimientoForm, setMovimientoForm] = useState({
     tipo: "EGRESO" as TipoMovimientoCaja,
     categoria: "PAGO_PROVEEDOR" as CategoriaMovimientoCaja,
@@ -84,7 +98,7 @@ export default function CajaPage() {
     descripcion: "",
   });
 
-  const { data: actual, isLoading } = useQuery({ queryKey: ["caja-actual"], queryFn: getCajaActual });
+  const { data: actual, isLoading, error: cajaActualError } = useQuery({ queryKey: ["caja-actual"], queryFn: getCajaActual });
   const { data: sesiones } = useQuery({
     queryKey: ["caja-sesiones", currentUser?.id, currentUser?.rol],
     queryFn: () => getCajaSesiones(),
@@ -141,6 +155,46 @@ export default function CajaPage() {
     onError: (error) => setMessage(error instanceof Error ? error.message : "No se pudo registrar el movimiento"),
   });
 
+  const editarMovimiento = useMutation({
+    mutationFn: ({ id, masterPassword }: { id: number; masterPassword: string }) =>
+      editarMovimientoCaja(id, {
+        tipo: editMovimientoForm.tipo,
+        categoria: editMovimientoForm.categoria,
+        monto: Number(editMovimientoForm.monto),
+        descripcion: editMovimientoForm.descripcion || null,
+        master_password: masterPassword,
+      }),
+    onSuccess: async () => {
+      setMessage("Movimiento actualizado.");
+      setMovementToEdit(null);
+      setEditMovementPasswordOpen(false);
+      await invalidateCaja();
+    },
+    onError: (error) => setMessage(error instanceof Error ? error.message : "No se pudo editar el movimiento"),
+  });
+
+  const eliminarMovimiento = useMutation({
+    mutationFn: ({ id, masterPassword }: { id: number; masterPassword: string }) =>
+      eliminarMovimientoCaja(id, masterPassword),
+    onSuccess: async () => {
+      setMessage("Movimiento eliminado.");
+      setMovementToDelete(null);
+      await invalidateCaja();
+    },
+    onError: (error) => setMessage(error instanceof Error ? error.message : "No se pudo eliminar el movimiento"),
+  });
+
+  const forceClose = useMutation({
+    mutationFn: (masterPassword: string) => forzarCerrarCaja(Number(forceCloseAmount || 0), masterPassword),
+    onSuccess: async () => {
+      setMessage("Caja cerrada forzadamente. Ya puedes abrir una nueva caja.");
+      setForceCloseAmount("");
+      setForceClosePasswordOpen(false);
+      await invalidateCaja();
+    },
+    onError: (error) => setMessage(error instanceof Error ? error.message : "No se pudo forzar el cierre de caja"),
+  });
+
   const diferenciaCierre =
     actual && efectivoContado !== ""
       ? Number(efectivoContado) - actual.resumen.monto_esperado_cierre
@@ -153,6 +207,9 @@ export default function CajaPage() {
     (!hasCashSales || cashMatches || efectivoContado !== "") &&
     (!hasDebitSales || debitMatches || debitReal !== "") &&
     (!hasConsignationSales || consignationSeparated);
+  const cajaActualErrorMessage = cajaActualError instanceof Error
+    ? cajaActualError.message
+    : "No se pudo revisar el estado de la caja.";
 
   const handleOpenCloseModal = () => {
     if (!actual) return;
@@ -191,6 +248,28 @@ export default function CajaPage() {
     cerrar.mutate(hasCashSales && !cashMatches ? Number(efectivoContado) : actual.resumen.monto_esperado_cierre);
   };
 
+  const openEditMovementModal = (movimiento: CajaMovimiento) => {
+    setMovementToEdit(movimiento);
+    setEditMovimientoForm({
+      tipo: movimiento.tipo,
+      categoria: movimiento.categoria,
+      monto: String(movimiento.monto),
+      descripcion: movimiento.descripcion ?? "",
+    });
+    setMessage("");
+  };
+
+  const handleConfirmEditMovement = (masterPassword: string) => {
+    if (!movementToEdit) return;
+
+    if (Number(editMovimientoForm.monto) <= 0) {
+      setMessage("Ingresa un monto mayor a 0.");
+      return;
+    }
+
+    editarMovimiento.mutate({ id: movementToEdit.id, masterPassword });
+  };
+
   if (isLoading) return <p>Cargando caja...</p>;
 
   return (
@@ -201,7 +280,33 @@ export default function CajaPage() {
         <div className="space-y-6 xl:sticky xl:top-6 xl:self-start">
           <ModuleCard contentClassName="p-5">
             <div className="space-y-4">
-              {!actual?.abierta && (
+              {cajaActualError && (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-900">
+                  <p>{cajaActualErrorMessage}</p>
+                  {isOwner && (
+                    <div className="mt-4 grid gap-3">
+                      <FormField label="Efectivo contado para cierre">
+                        <input
+                          type="number"
+                          min={0}
+                          value={forceCloseAmount}
+                          onChange={(event) => setForceCloseAmount(event.target.value)}
+                          className={inputClassName}
+                          placeholder="Monto real en caja"
+                        />
+                      </FormField>
+                      <Button
+                        onClick={() => setForceClosePasswordOpen(true)}
+                        disabled={forceClose.isPending || forceCloseAmount === ""}
+                        fullWidth
+                      >
+                        {forceClose.isPending ? "Cerrando..." : "Forzar cierre de caja"}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
+              {!actual?.abierta && !cajaActualError && (
                 <div className="grid gap-3">
                   <FormField label="Monto apertura">
                     <input
@@ -263,6 +368,27 @@ export default function CajaPage() {
                 ],
                 amount: `${movimiento.tipo === "INGRESO" ? "+" : "-"}${money(movimiento.monto)}`,
                 amountClassName: movimiento.tipo === "INGRESO" ? "text-green-700" : "text-red-700",
+                action: (
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => openEditMovementModal(movimiento)}
+                      className="rounded-md px-3 py-1.5 text-sm font-semibold text-[#7652ed] hover:bg-[#faf9ff]"
+                    >
+                      Editar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMovementToDelete(movimiento);
+                        setMessage("");
+                      }}
+                      className="rounded-md px-3 py-1.5 text-sm font-semibold text-red-600 hover:bg-red-50"
+                    >
+                      Eliminar
+                    </button>
+                  </div>
+                ),
               }))}
             />
           )}
@@ -633,6 +759,109 @@ export default function CajaPage() {
           isPending={crearMovimiento.isPending}
           onClose={() => setMovementPasswordOpen(false)}
           onConfirm={(password) => crearMovimiento.mutate(password)}
+        />
+      )}
+
+      {forceClosePasswordOpen && (
+        <AdminPasswordModal
+          title="Forzar cierre de caja"
+          description="Ingresa la contraseña de administrador para cerrar la caja abierta en este equipo."
+          isPending={forceClose.isPending}
+          onClose={() => setForceClosePasswordOpen(false)}
+          onConfirm={(password) => forceClose.mutate(password)}
+        />
+      )}
+
+      {movementToEdit && (
+        <div
+          className="flow-modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setMovementToEdit(null);
+          }}
+        >
+          <div className="flow-modal cash-movement-modal" role="dialog" aria-modal="true">
+            <div className="cash-movement-modal-head">
+              <div>
+                <p>Movimiento de caja</p>
+                <h2>Editar movimiento</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMovementToEdit(null)}
+                className="cash-close-x"
+                aria-label="Cerrar modal"
+                title="Cerrar"
+              >
+                <XMarkIcon className="h-6 w-6" />
+              </button>
+            </div>
+
+            <div className="cash-movement-form">
+              <TouchSelectField
+                label="Tipo"
+                value={editMovimientoForm.tipo}
+                options={[
+                  { value: "INGRESO", label: "Ingreso" },
+                  { value: "EGRESO", label: "Egreso" },
+                ]}
+                onChange={(value) => setEditMovimientoForm((prev) => ({ ...prev, tipo: value as TipoMovimientoCaja }))}
+              />
+              <TouchSelectField
+                label="Categoría"
+                value={editMovimientoForm.categoria}
+                options={movimientoCategorias}
+                onChange={(value) => setEditMovimientoForm((prev) => ({ ...prev, categoria: value as CategoriaMovimientoCaja }))}
+              />
+              <FormField label="Monto">
+                <input
+                  type="number"
+                  min={1}
+                  value={editMovimientoForm.monto}
+                  onChange={(event) => setEditMovimientoForm((prev) => ({ ...prev, monto: event.target.value }))}
+                  className={`${inputClassName} text-lg`}
+                  placeholder="Monto"
+                />
+              </FormField>
+              <FormField label="Descripción">
+                <input
+                  value={editMovimientoForm.descripcion}
+                  onChange={(event) => setEditMovimientoForm((prev) => ({ ...prev, descripcion: event.target.value }))}
+                  className={`${inputClassName} text-lg`}
+                  placeholder="Descripción"
+                />
+              </FormField>
+              <Button
+                onClick={() => setEditMovementPasswordOpen(true)}
+                disabled={editarMovimiento.isPending || editMovimientoForm.monto === ""}
+                className="min-h-[56px] text-base"
+                fullWidth
+              >
+                Guardar cambios
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editMovementPasswordOpen && movementToEdit && (
+        <AdminPasswordModal
+          title={`Editar movimiento #${movementToEdit.id}`}
+          description="Confirma los cambios con la contraseña de administrador."
+          isPending={editarMovimiento.isPending}
+          onClose={() => {
+            setEditMovementPasswordOpen(false);
+          }}
+          onConfirm={handleConfirmEditMovement}
+        />
+      )}
+
+      {movementToDelete && (
+        <AdminPasswordModal
+          title={`Eliminar movimiento #${movementToDelete.id}`}
+          description="Confirma con la contraseña de administrador. El movimiento se quitará de la caja."
+          isPending={eliminarMovimiento.isPending}
+          onClose={() => setMovementToDelete(null)}
+          onConfirm={(password) => eliminarMovimiento.mutate({ id: movementToDelete.id, masterPassword: password })}
         />
       )}
 

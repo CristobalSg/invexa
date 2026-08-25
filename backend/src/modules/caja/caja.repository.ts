@@ -511,4 +511,91 @@ export class CajaRepository {
 
     return result.rows;
   }
+
+  async findMovimientoByIdForUpdate(client: PoolClient, id: number): Promise<CajaMovimientoRow | null> {
+    const result = await client.query<CajaMovimientoRow>(
+      `
+        SELECT
+          mc.id,
+          mc.sesion_caja_id,
+          mc.usuario_id,
+          u.nombre AS usuario_nombre,
+          mc.tipo,
+          mc.categoria,
+          mc.monto,
+          mc.descripcion,
+          mc.creado_en
+        FROM movimientos_caja mc
+        INNER JOIN usuarios u ON u.id = mc.usuario_id
+        WHERE mc.id = $1
+        LIMIT 1
+        FOR UPDATE OF mc
+      `,
+      [id],
+    );
+
+    return result.rows[0] ?? null;
+  }
+
+  async updateMovimiento(
+    client: PoolClient,
+    id: number,
+    data: {
+      readonly tipo: string;
+      readonly categoria: string;
+      readonly monto: number;
+      readonly descripcion?: string | null;
+    },
+  ): Promise<CajaMovimientoRow | null> {
+    const result = await client.query<CajaMovimientoRow>(
+      `
+        UPDATE movimientos_caja mc
+        SET
+          tipo = $2::tipo_movimiento_caja,
+          categoria = $3::categoria_movimiento_caja,
+          monto = $4::numeric,
+          descripcion = $5
+        FROM usuarios u
+        WHERE mc.id = $1
+          AND u.id = mc.usuario_id
+        RETURNING
+          mc.id,
+          mc.sesion_caja_id,
+          mc.usuario_id,
+          u.nombre AS usuario_nombre,
+          mc.tipo,
+          mc.categoria,
+          mc.monto,
+          mc.descripcion,
+          mc.creado_en
+      `,
+      [id, data.tipo, data.categoria, data.monto, data.descripcion ?? null],
+    );
+
+    return result.rows[0] ?? null;
+  }
+
+  async deleteMovimiento(client: PoolClient, id: number): Promise<CajaMovimientoRow | null> {
+    const result = await client.query<CajaMovimientoRow>(
+      `
+        DELETE FROM movimientos_caja mc
+        USING usuarios u
+        WHERE mc.id = $1
+          AND u.id = mc.usuario_id
+        RETURNING
+          mc.id,
+          mc.sesion_caja_id,
+          mc.usuario_id,
+          u.nombre AS usuario_nombre,
+          mc.tipo,
+          mc.categoria,
+          mc.monto,
+          mc.descripcion,
+          mc.creado_en
+      `,
+      [id],
+    );
+
+    return result.rows[0] ?? null;
+  }
 }

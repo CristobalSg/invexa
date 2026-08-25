@@ -83,6 +83,28 @@ export class AuthRepository {
     return result.rows;
   }
 
+  async updatePassword(id: number, contrasenaHash: string): Promise<UsuarioAuthRow | null> {
+    const result = await this.pool.query<UsuarioAuthRow>(
+      `
+        UPDATE usuarios
+        SET contrasena_hash = $2
+        WHERE id = $1
+          AND activo = TRUE
+        RETURNING
+          id,
+          nombre_usuario,
+          contrasena_hash,
+          nombre,
+          email,
+          rol,
+          activo
+      `,
+      [id, contrasenaHash],
+    );
+
+    return result.rows[0] ?? null;
+  }
+
   async createDevice(data: {
     readonly id: string;
     readonly nombre: string;

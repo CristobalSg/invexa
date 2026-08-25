@@ -116,7 +116,7 @@ const toStockFormValue = (product: Producto) => {
 
 interface ProductFormCreateProps {
   initialData?: Producto;
-  onSuccess?: () => void;
+  onSuccess?: (product: Producto, action: "created" | "updated") => void;
   formId?: string;
   hideActions?: boolean;
   requireAdminPasswordForCreate?: boolean;
@@ -319,9 +319,9 @@ export default function ProductFormCreate({
   }
 
   async function createWithInput(input: CreateProductInput) {
-    await createProduct(input);
+    const product = await createProduct(input);
     resetAfterCreate();
-    if (onSuccess) onSuccess();
+    if (onSuccess) onSuccess(product, "created");
   }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -336,14 +336,13 @@ export default function ProductFormCreate({
 
     try {
       if (initialData) {
-        await updateProduct(initialData.id , input);
+        const product = await updateProduct(initialData.id , input);
         setMessage("Producto actualizado con éxito");
+        if (onSuccess) onSuccess(product, "updated");
       } else {
         await createWithInput(input);
         return;
       }
-
-      if (onSuccess) onSuccess();
     } catch (error) {
       setMessage("Error al guardar el producto");
       console.error(error);

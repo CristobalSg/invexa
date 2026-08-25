@@ -260,6 +260,45 @@ export const profileLoginSchema = {
   },
 } as const;
 
+export const recoverProfilePasswordSchema = {
+  body: {
+    type: 'object',
+    required: ['usuario_id', 'master_password', 'contraseña', 'confirmar_contraseña'],
+    additionalProperties: false,
+    properties: {
+      usuario_id: {
+        type: 'integer',
+        minimum: 1,
+      },
+      master_password: {
+        type: 'string',
+        minLength: 1,
+        maxLength: 200,
+      },
+      contraseña: {
+        type: 'string',
+        minLength: 4,
+        maxLength: 200,
+      },
+      confirmar_contraseña: {
+        type: 'string',
+        minLength: 4,
+        maxLength: 200,
+      },
+    },
+  },
+  response: {
+    200: {
+      type: 'object',
+      required: ['success', 'data'],
+      properties: {
+        success: { type: 'boolean' },
+        data: authUserResponseSchema,
+      },
+    },
+  },
+} as const;
+
 export const meSchema = {
   response: {
     200: {

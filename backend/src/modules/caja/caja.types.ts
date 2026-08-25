@@ -85,6 +85,10 @@ export interface CerrarCajaBody {
   readonly efectivo_contado: number;
 }
 
+export interface ForzarCerrarCajaBody extends CerrarCajaBody {
+  readonly master_password: string;
+}
+
 export interface CajaSessionParams {
   readonly id: number;
 }
@@ -151,5 +155,17 @@ export interface CrearMovimientoCajaBody {
   readonly categoria: CategoriaMovimientoCaja;
   readonly monto: number;
   readonly descripcion?: string | null;
+  readonly master_password: string;
+}
+
+export interface EditarMovimientoCajaBody {
+  readonly tipo: TipoMovimientoCaja;
+  readonly categoria: CategoriaMovimientoCaja;
+  readonly monto: number;
+  readonly descripcion?: string | null;
+  readonly master_password: string;
+}
+
+export interface EliminarMovimientoCajaBody {
   readonly master_password: string;
 }
