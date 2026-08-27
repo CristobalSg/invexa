@@ -39,6 +39,7 @@ export default function ProductList({ products = [], onDecrease, onIncrease, onR
           const cartItemId = product.cartItemId ?? product.id.toString()
           const lockedQuantity = isWeighableProduct(product)
           const limitedByStock = blocksSalesByStock(product)
+          const lineTotal = product.precio_venta * product.quantity
 
           return (
             <div
@@ -49,7 +50,7 @@ export default function ProductList({ products = [], onDecrease, onIncrease, onR
               <div className="min-w-0">
                 <p className="pos-cart-name">{product.nombre}</p>
                 <p className="pos-cart-meta">
-                  ${product.precio_venta.toLocaleString()}{lockedQuantity ? "/kg" : " c/u"} · {formatQuantity(product.quantity, lockedQuantity)}
+                  ${lineTotal.toLocaleString()}
                 </p>
               </div>
 

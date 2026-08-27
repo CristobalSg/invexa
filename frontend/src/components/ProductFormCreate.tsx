@@ -120,6 +120,7 @@ interface ProductFormCreateProps {
   formId?: string;
   hideActions?: boolean;
   requireAdminPasswordForCreate?: boolean;
+  requireAdminPasswordForUpdate?: boolean;
 }
 
 export default function ProductFormCreate({
@@ -128,10 +129,11 @@ export default function ProductFormCreate({
   formId,
   hideActions = false,
   requireAdminPasswordForCreate = false,
+  requireAdminPasswordForUpdate = false,
 }: ProductFormCreateProps) {
   const [form, setForm] = useState(createInitialFormState);
   const [message, setMessage] = useState("");
-  const [pendingCreateInput, setPendingCreateInput] = useState<CreateProductInput | null>(null);
+  const [pendingSaveInput, setPendingSaveInput] = useState<CreateProductInput | null>(null);
   const barcodeInputRef = useRef<HTMLInputElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
   const priceInputRef = useRef<HTMLInputElement>(null);
@@ -336,8 +338,8 @@ export default function ProductFormCreate({
     const input = buildProductInput();
     if (!input) return;
 
-    if (!initialData && requireAdminPasswordForCreate) {
-      setPendingCreateInput(input);
+    if ((!initialData && requireAdminPasswordForCreate) || (initialData && requireAdminPasswordForUpdate)) {
+      setPendingSaveInput(input);
       return;
     }
 
@@ -356,12 +358,18 @@ export default function ProductFormCreate({
     }
   }
 
-  async function handleAuthorizedCreate(masterPassword: string) {
-    if (!pendingCreateInput) return;
+  async function handleAuthorizedSave(masterPassword: string) {
+    if (!pendingSaveInput) return;
 
     try {
-      await createWithInput({ ...pendingCreateInput, master_password: masterPassword });
-      setPendingCreateInput(null);
+      if (initialData) {
+        const product = await updateProduct(initialData.id, { ...pendingSaveInput, master_password: masterPassword });
+        setMessage("Producto actualizado con éxito");
+        if (onSuccess) onSuccess(product, "updated");
+      } else {
+        await createWithInput({ ...pendingSaveInput, master_password: masterPassword });
+      }
+      setPendingSaveInput(null);
     } catch (error) {
       setMessage("Error al guardar el producto");
       console.error(error);
@@ -602,12 +610,12 @@ export default function ProductFormCreate({
           </Button>
         </FormActions>
       )}
-      {pendingCreateInput && (
+      {pendingSaveInput && (
         <AdminPasswordModal
           title="Autorizar producto"
-          description="Ingresa la contraseña de administrador para crear este producto."
-          onClose={() => setPendingCreateInput(null)}
-          onConfirm={handleAuthorizedCreate}
+          description={`Ingresa la contraseña de administrador para ${initialData ? "editar" : "crear"} este producto.`}
+          onClose={() => setPendingSaveInput(null)}
+          onConfirm={handleAuthorizedSave}
         />
       )}
     </form>

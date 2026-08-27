@@ -16,6 +16,7 @@ import {
 import { ProductosService } from './productos.service.js';
 import type {
   CreateProductoBody,
+  DeactivateProductoBody,
   PaginationQuery,
   ProductoCodigoParams,
   ProductoParams,
@@ -77,18 +78,18 @@ export const productosRoutes: FastifyPluginAsync = async (fastify) => {
 
   fastify.patch<{ Params: ProductoParams; Body: UpdateProductoBody }>(
     '/:id',
-    { preHandler: ownerOnly, schema: updateProductoSchema },
+    { preHandler: createProducts, schema: updateProductoSchema },
     async (request, reply) => {
-      const producto = await service.update(request.params.id, request.body);
+      const producto = await service.update(request.params.id, request.body, request.user.rol);
       return ok(reply, producto);
     },
   );
 
-  fastify.patch<{ Params: ProductoParams }>(
+  fastify.patch<{ Params: ProductoParams; Body: DeactivateProductoBody }>(
     '/:id/desactivar',
-    { preHandler: ownerOnly, schema: deactivateProductoSchema },
+    { preHandler: createProducts, schema: deactivateProductoSchema },
     async (request, reply) => {
-      const producto = await service.deactivate(request.params.id);
+      const producto = await service.deactivate(request.params.id, request.body ?? {}, request.user.rol);
       return ok(reply, producto);
     },
   );

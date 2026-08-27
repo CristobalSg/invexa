@@ -23,6 +23,7 @@ import { getCategorias, getProveedores } from "../services/catalogService";
 import { Button, FormField, inputClassName } from "../components/FormControls";
 import ProductTile from "../components/ProductTile";
 import TouchSelectField from "../components/TouchSelectField";
+import AdminPasswordModal from "../components/AdminPasswordModal";
 
 const modoInventarioLabels: Record<ModoInventarioProducto, string> = {
   SIN_INVENTARIO: "Sin inventario",
@@ -38,6 +39,10 @@ export default function ProductsPage() {
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
   const [productToEdit, setProductToEdit] = useState<Producto | null>(null);
   const [productToView, setProductToView] = useState<Producto | null>(null);
+  const [productActionToAuthorize, setProductActionToAuthorize] = useState<{
+    type: "delete" | "reactivate";
+    product: Producto;
+  } | null>(null);
   const [createdProductAlert, setCreatedProductAlert] = useState<Producto | null>(null);
   const [codigo, setCodigo] = useState("");
   const [nombre, setNombre] = useState("");
@@ -48,6 +53,7 @@ export default function ProductsPage() {
   const storedUser = getStoredUser();
   const isOwner = storedUser?.rol === "OWNER";
   const canCreateProduct = storedUser?.rol === "OWNER" || storedUser?.rol === "CASHIER";
+  const canManageProduct = canCreateProduct;
 
   const queryClient = useQueryClient();
   const normalizedCodigo = codigo.trim();
@@ -93,16 +99,18 @@ export default function ProductsPage() {
   ].filter(Boolean).length;
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => deleteProduct(id),
+    mutationFn: ({ id, masterPassword }: { id: string; masterPassword?: string }) => deleteProduct(id, masterPassword),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["products"] });
+      setProductActionToAuthorize(null);
     },
   });
 
   const reactivateMutation = useMutation({
-    mutationFn: (id: string) => reactivateProduct(id),
+    mutationFn: ({ id, masterPassword }: { id: string; masterPassword?: string }) => reactivateProduct(id, masterPassword),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["products"] });
+      setProductActionToAuthorize(null);
     },
   });
 
@@ -114,13 +122,37 @@ export default function ProductsPage() {
 
   const handleDelete = (id: string) => {
     if (confirm("¿Estás seguro de que deseas eliminar este producto?")) {
-      deleteMutation.mutate(id);
+      if (!isOwner && productToView) {
+        setProductActionToAuthorize({ type: "delete", product: productToView });
+        return;
+      }
+
+      deleteMutation.mutate({ id });
       setProductToView(null);
     }
   };
 
   const handleReactivate = (id: string) => {
-    reactivateMutation.mutate(id);
+    if (!isOwner && productToView) {
+      setProductActionToAuthorize({ type: "reactivate", product: productToView });
+      return;
+    }
+
+    reactivateMutation.mutate({ id });
+    setProductToView(null);
+  };
+
+  const handleAuthorizedProductAction = (masterPassword: string) => {
+    if (!productActionToAuthorize) return;
+
+    const id = productActionToAuthorize.product.id.toString();
+    if (productActionToAuthorize.type === "delete") {
+      deleteMutation.mutate({ id, masterPassword });
+      setProductToView(null);
+      return;
+    }
+
+    reactivateMutation.mutate({ id, masterPassword });
     setProductToView(null);
   };
 
@@ -184,10 +216,21 @@ export default function ProductsPage() {
           formId={productFormId}
           hideActions
           requireAdminPasswordForCreate={!isOwner}
+          requireAdminPasswordForUpdate={!isOwner}
           initialData={productToEdit ?? undefined}
           onSuccess={handleSuccess}
         />
       </ProductModal>
+
+      {productActionToAuthorize && (
+        <AdminPasswordModal
+          title={productActionToAuthorize.type === "delete" ? "Eliminar producto" : "Reactivar producto"}
+          description="Confirma esta acción con la contraseña de administrador."
+          isPending={deleteMutation.isPending || reactivateMutation.isPending}
+          onClose={() => setProductActionToAuthorize(null)}
+          onConfirm={handleAuthorizedProductAction}
+        />
+      )}
 
       {isFiltersOpen && (
         <div
@@ -395,7 +438,7 @@ export default function ProductsPage() {
               <span><b>Estado</b>{productToView.activo ? "Activo" : "Desactivado"}</span>
             </div>
 
-            {isOwner && (
+            {canManageProduct && (
               <div className="inventory-detail-actions">
                 <button type="button" className="inventory-detail-action edit" onClick={() => handleEdit(productToView)}>
                   <PencilIcon className="h-5 w-5" />

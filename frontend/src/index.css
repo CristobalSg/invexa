@@ -3733,8 +3733,8 @@ html.hide-cursor *::after {
 .pos-cart-meta {
   margin-top: 4px;
   color: #4d5058;
-  font-size: 12px;
-  font-weight: 850;
+  font-size: 15px;
+  font-weight: 950;
 }
 
 .pos-cart-line-total {

@@ -169,6 +169,7 @@ export const updateProductoSchema = {
       precio_venta: { type: 'number', exclusiveMinimum: 0 },
       stock: { type: 'number', minimum: 0 },
       activo: { type: 'boolean' },
+      master_password: { type: 'string', minLength: 1, maxLength: 200 },
     },
   },
   response: {
@@ -178,6 +179,13 @@ export const updateProductoSchema = {
 
 export const deactivateProductoSchema = {
   params: idParamsSchema,
+  body: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      master_password: { type: 'string', minLength: 1, maxLength: 200 },
+    },
+  },
   response: {
     200: successProductoResponseSchema,
   },

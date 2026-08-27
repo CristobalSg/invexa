@@ -76,7 +76,11 @@ export class ProductosService {
     return this.mapProducto(producto);
   }
 
-  async update(id: number, data: UpdateProductoBody): Promise<Producto> {
+  async update(id: number, data: UpdateProductoBody, userRole: UserRole): Promise<Producto> {
+    if (userRole !== 'OWNER') {
+      await assertValidOwnerPassword(this.pool, data.master_password ?? '');
+    }
+
     const current = await this.repository.findById(id);
 
     if (!current) {
@@ -104,7 +108,11 @@ export class ProductosService {
     return this.mapProducto(producto);
   }
 
-  async deactivate(id: number): Promise<Producto> {
+  async deactivate(id: number, data: { readonly master_password?: string }, userRole: UserRole): Promise<Producto> {
+    if (userRole !== 'OWNER') {
+      await assertValidOwnerPassword(this.pool, data.master_password ?? '');
+    }
+
     const producto = await this.repository.deactivate(id);
 
     if (!producto) {

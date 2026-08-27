@@ -65,13 +65,19 @@ export async function updateProduct(id: number, product: Partial<CreateProductIn
   return data;
 }
 
-export async function deleteProduct(id: string | number): Promise<Producto> {
-  const { data } = await api.patch<Producto>(`${ENDPOINT}/${id}/desactivar`);
+export async function deleteProduct(id: string | number, master_password?: string): Promise<Producto> {
+  const { data } = await api.patch<Producto>(
+    `${ENDPOINT}/${id}/desactivar`,
+    master_password ? { master_password } : {},
+  );
   return data;
 }
 
-export async function reactivateProduct(id: string | number): Promise<Producto> {
-  const { data } = await api.patch<Producto>(`${ENDPOINT}/${id}`, { activo: true });
+export async function reactivateProduct(id: string | number, master_password?: string): Promise<Producto> {
+  const { data } = await api.patch<Producto>(
+    `${ENDPOINT}/${id}`,
+    { activo: true, ...(master_password ? { master_password } : {}) },
+  );
   return data;
 }
 

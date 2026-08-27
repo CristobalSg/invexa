@@ -102,6 +102,11 @@ export interface UpdateProductoBody {
   readonly precio_venta?: number;
   readonly stock?: number;
   readonly activo?: boolean;
+  readonly master_password?: string;
+}
+
+export interface DeactivateProductoBody {
+  readonly master_password?: string;
 }
 
 export interface ResetProduceProductInput {
