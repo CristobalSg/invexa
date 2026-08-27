@@ -1,11 +1,17 @@
+import type { FastifyBaseLogger } from 'fastify';
 import type { Pool } from 'pg';
 
 import { BadRequestError, ForbiddenError, NotFoundError } from '../../utils/errors.js';
 import { assertValidOwnerPassword } from '../../utils/master-authorization.js';
 import { withTransaction } from '../../utils/transactions.js';
+import type { MailService } from '../../services/mail.service.js';
 import type { CajaRepository } from './caja.repository.js';
 import type {
   AbrirCajaBody,
+  CajaCierreCorreoResumen,
+  CajaConsignacionProveedorVenta,
+  CajaConsignacionProveedorVentaRow,
+  CajaConsignacionProveedorVentas,
   CajaResumenFinanciero,
   CajaMovimiento,
   CajaMovimientoRow,
@@ -28,6 +34,8 @@ export class CajaService {
   constructor(
     private readonly repository: CajaRepository,
     private readonly pool: Pool,
+    private readonly mailService?: MailService,
+    private readonly logger?: FastifyBaseLogger,
   ) {}
 
   async abrir(usuarioId: number, data: AbrirCajaBody, deviceId?: string): Promise<CajaSessionDetalle> {
@@ -59,7 +67,7 @@ export class CajaService {
   }
 
   async cerrar(usuarioId: number, data: CerrarCajaBody, deviceId?: string): Promise<CajaSessionDetalle> {
-    return withTransaction(this.pool, async (client) => {
+    const session = await withTransaction(this.pool, async (client) => {
       if (deviceId) {
         await this.repository.lockDeviceCashSessions(client, deviceId);
       } else {
@@ -96,6 +104,9 @@ export class CajaService {
 
       return this.mapSessionDetalle(session, resumen);
     });
+
+    const notificacionCorreos = await this.sendCashCloseEmailSafely(session);
+    return { ...session, notificacion_correos: notificacionCorreos };
   }
 
   async forzarCerrar(data: ForzarCerrarCajaBody, deviceId?: string): Promise<CajaSessionDetalle> {
@@ -105,7 +116,7 @@ export class CajaService {
 
     await assertValidOwnerPassword(this.pool, data.master_password);
 
-    return withTransaction(this.pool, async (client) => {
+    const session = await withTransaction(this.pool, async (client) => {
       await this.repository.lockDeviceCashSessions(client, deviceId);
 
       const openSession = await this.repository.findOpenByDeviceId(client, deviceId);
@@ -132,10 +143,14 @@ export class CajaService {
 
       return this.mapSessionDetalle(session, resumen);
     });
+
+    const notificacionCorreos = await this.sendCashCloseEmailSafely(session);
+    return { ...session, notificacion_correos: notificacionCorreos };
   }
 
   async crearMovimiento(
     usuarioId: number,
+    rol: CajaUserContext['rol'],
     data: CrearMovimientoCajaBody,
     deviceId?: string,
   ): Promise<CajaMovimiento> {
@@ -143,7 +158,9 @@ export class CajaService {
       throw new BadRequestError('El monto debe ser mayor a 0');
     }
 
-    await assertValidOwnerPassword(this.pool, data.master_password);
+    if (rol === 'OWNER') {
+      await assertValidOwnerPassword(this.pool, data.master_password ?? '');
+    }
 
     return withTransaction(this.pool, async (client) => {
       if (deviceId) {
@@ -446,5 +463,118 @@ export class CajaService {
   private round(value: number, decimals: number): number {
     const factor = 10 ** decimals;
     return Math.round((value + Number.EPSILON) * factor) / factor;
+  }
+
+  private async sendCashCloseEmailSafely(session: CajaSessionDetalle): Promise<CajaCierreCorreoResumen> {
+    const summary: CajaCierreCorreoResumen = {
+      sistema_enviado: false,
+      proveedores_enviados: 0,
+      proveedores_omitidos: 0,
+      proveedores_fallidos: 0,
+    };
+
+    if (!this.mailService) {
+      return summary;
+    }
+
+    try {
+      summary.sistema_enviado = await this.mailService.sendCashCloseEmail(session);
+    } catch (error) {
+      this.logger?.error({ error, caja_session_id: session.id }, 'Error sending cash close email');
+    }
+
+    let consignmentRows: CajaConsignacionProveedorVentaRow[] = [];
+
+    try {
+      consignmentRows = await this.repository.findConsignacionVentasBySessionId(session.id);
+    } catch (error) {
+      this.logger?.error(
+        { error, caja_session_id: session.id },
+        'Error loading consignment provider sales for cash close email',
+      );
+      return summary;
+    }
+
+    for (const providerSales of this.groupConsignmentSalesByProvider(consignmentRows)) {
+      const email = providerSales.proveedor_email?.trim();
+
+      if (!email || !this.mailService.isValidEmail(email)) {
+        this.logger?.warn(
+          {
+            caja_session_id: session.id,
+            proveedor_id: providerSales.proveedor_id,
+            proveedor_nombre: providerSales.proveedor_nombre,
+            proveedor_numero: providerSales.proveedor_email,
+          },
+          'Proveedor sin correo valido en campo numero/telefono. Email de consignacion omitido.',
+        );
+        summary.proveedores_omitidos += 1;
+        continue;
+      }
+
+      try {
+        const sent = await this.mailService.sendConsignmentProviderCashCloseEmail(email, session, providerSales);
+        if (sent) {
+          summary.proveedores_enviados += 1;
+        } else {
+          summary.proveedores_omitidos += 1;
+        }
+      } catch (error) {
+        summary.proveedores_fallidos += 1;
+        this.logger?.error(
+          {
+            error,
+            caja_session_id: session.id,
+            proveedor_id: providerSales.proveedor_id,
+            proveedor_nombre: providerSales.proveedor_nombre,
+          },
+          'Error sending consignment provider cash close email',
+        );
+      }
+    }
+
+    return summary;
+  }
+
+  private groupConsignmentSalesByProvider(
+    rows: CajaConsignacionProveedorVentaRow[],
+  ): CajaConsignacionProveedorVentas[] {
+    const byProvider = new Map<string, {
+      proveedor_id: number | null;
+      proveedor_nombre: string;
+      proveedor_email: string | null;
+      items: CajaConsignacionProveedorVenta[];
+    }>();
+
+    for (const row of rows) {
+      const key = row.proveedor_id === null ? 'sin-proveedor' : String(row.proveedor_id);
+      const current = byProvider.get(key) ?? {
+        proveedor_id: row.proveedor_id,
+        proveedor_nombre: row.proveedor_nombre,
+        proveedor_email: row.proveedor_email,
+        items: [],
+      };
+
+      current.items.push({
+        producto_id: row.producto_id,
+        producto_nombre: row.producto_nombre,
+        producto_unidad_venta: row.producto_unidad_venta,
+        precio_unitario: Number(row.precio_unitario),
+        cantidad: Number(row.cantidad),
+        subtotal: Number(row.subtotal),
+        descuento: Number(row.descuento),
+        total_final: Number(row.total_final),
+      });
+
+      byProvider.set(key, current);
+    }
+
+    return Array.from(byProvider.values()).map((provider) => ({
+      ...provider,
+      total: this.round(
+        provider.items.reduce((sum, item) => sum + item.total_final, 0),
+        2,
+      ),
+    }));
   }
 }

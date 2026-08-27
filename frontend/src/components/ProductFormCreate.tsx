@@ -138,6 +138,7 @@ export default function ProductFormCreate({
   const stockInputRef = useRef<HTMLInputElement>(null);
   const { data: categorias } = useQuery({ queryKey: ["categorias"], queryFn: () => getCategorias() });
   const { data: proveedores } = useQuery({ queryKey: ["proveedores"], queryFn: () => getProveedores({ activo: true }) });
+  const firstCategoriaId = categorias?.items[0]?.id;
 
   useEffect(() => {
     const focusTimer = window.setTimeout(() => barcodeInputRef.current?.focus(), 80);
@@ -163,10 +164,16 @@ export default function ProductFormCreate({
         cantidad_por_caja: "",
         activo: initialData.activo,
       });
-    } else if (!form.categoria_id && categorias?.items[0]) {
-      setForm((prev) => ({ ...prev, categoria_id: categorias.items[0].id }));
     }
-  }, [initialData, categorias, form.categoria_id]);
+  }, [initialData]);
+
+  useEffect(() => {
+    if (initialData || !firstCategoriaId) return;
+
+    setForm((prev) => (
+      prev.categoria_id ? prev : { ...prev, categoria_id: firstCategoriaId }
+    ));
+  }, [initialData, firstCategoriaId]);
 
   const selectedCategoria = categorias?.items.find((cat) => cat.id === Number(form.categoria_id));
   const packageCost = Number(form.costo_caja);

@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from 'fastify';
 
 import { authMiddleware } from '../../middlewares/auth.middleware.js';
 import { roleMiddleware } from '../../middlewares/role.middleware.js';
+import { MailService } from '../../services/mail.service.js';
 import { AuthService } from '../auth/auth.service.js';
 import { created, ok } from '../../utils/responses.js';
 import { CajaRepository } from './caja.repository.js';
@@ -31,7 +32,8 @@ import type {
 
 export const cajaRoutes: FastifyPluginAsync = async (fastify) => {
   const repository = new CajaRepository(fastify.pg);
-  const service = new CajaService(repository, fastify.pg);
+  const mailService = new MailService(fastify.log);
+  const service = new CajaService(repository, fastify.pg, mailService, fastify.log);
   const authService = new AuthService(fastify);
   const cajaAccess = [authMiddleware, roleMiddleware(['OWNER', 'CASHIER'])];
   const ownerOnly = [authMiddleware, roleMiddleware(['OWNER'])];
@@ -80,6 +82,7 @@ export const cajaRoutes: FastifyPluginAsync = async (fastify) => {
     async (request, reply) => {
       const movimiento = await service.crearMovimiento(
         request.user.id,
+        request.user.rol,
         request.body,
         await getDeviceId(request),
       );

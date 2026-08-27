@@ -75,6 +75,14 @@ export interface CajaResumenConsignacionProveedor {
 export interface CajaSessionDetalle extends CajaSession {
   readonly resumen: CajaResumenFinanciero;
   readonly movimientos?: CajaMovimiento[];
+  readonly notificacion_correos?: CajaCierreCorreoResumen;
+}
+
+export interface CajaCierreCorreoResumen {
+  sistema_enviado: boolean;
+  proveedores_enviados: number;
+  proveedores_omitidos: number;
+  proveedores_fallidos: number;
 }
 
 export interface AbrirCajaBody {
@@ -138,6 +146,39 @@ export interface CajaMovimientoRow {
   readonly creado_en: Date;
 }
 
+export interface CajaConsignacionProveedorVentaRow {
+  readonly proveedor_id: number | null;
+  readonly proveedor_nombre: string;
+  readonly proveedor_email: string | null;
+  readonly producto_id: number;
+  readonly producto_nombre: string;
+  readonly producto_unidad_venta: 'UNIDAD' | 'PESO';
+  readonly precio_unitario: string;
+  readonly cantidad: string;
+  readonly subtotal: string;
+  readonly descuento: string;
+  readonly total_final: string;
+}
+
+export interface CajaConsignacionProveedorVenta {
+  readonly producto_id: number;
+  readonly producto_nombre: string;
+  readonly producto_unidad_venta: 'UNIDAD' | 'PESO';
+  readonly precio_unitario: number;
+  readonly cantidad: number;
+  readonly subtotal: number;
+  readonly descuento: number;
+  readonly total_final: number;
+}
+
+export interface CajaConsignacionProveedorVentas {
+  readonly proveedor_id: number | null;
+  readonly proveedor_nombre: string;
+  readonly proveedor_email: string | null;
+  readonly total: number;
+  readonly items: CajaConsignacionProveedorVenta[];
+}
+
 export interface CajaMovimiento {
   readonly id: number;
   readonly sesion_caja_id: number;
@@ -155,7 +196,7 @@ export interface CrearMovimientoCajaBody {
   readonly categoria: CategoriaMovimientoCaja;
   readonly monto: number;
   readonly descripcion?: string | null;
-  readonly master_password: string;
+  readonly master_password?: string;
 }
 
 export interface EditarMovimientoCajaBody {

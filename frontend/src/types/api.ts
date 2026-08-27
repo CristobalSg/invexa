@@ -168,6 +168,12 @@ export interface CajaSession {
   abierta: boolean;
   resumen: CajaResumen;
   movimientos: CajaMovimiento[];
+  notificacion_correos?: {
+    sistema_enviado: boolean;
+    proveedores_enviados: number;
+    proveedores_omitidos: number;
+    proveedores_fallidos: number;
+  };
 }
 
 export interface CierreCajaDiarioItem {

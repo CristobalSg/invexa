@@ -80,7 +80,7 @@ export default function SideList({
           <p className="text-sm text-gray-500">No se encontraron productos</p>
         </div>
       ) : (
-        <div className="pos-product-grid">
+        <div className="pos-product-grid quick-product-grid">
           {filtered.map((prod) => {
             const isFeatured = featuredProductIds.includes(prod.id)
 
@@ -89,6 +89,8 @@ export default function SideList({
                 key={prod.id}
                 product={prod}
                 isFeatured={isFeatured}
+                density="compact"
+                compactVariant="quick"
                 onClick={() => onProductClick(prod)}
                 onToggleFeatured={onToggleFeatured ? () => onToggleFeatured(prod.id) : undefined}
               />

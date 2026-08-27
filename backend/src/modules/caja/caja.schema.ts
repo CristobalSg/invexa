@@ -135,6 +135,16 @@ const cajaSessionDetalleSchema = {
     ...cajaSessionSchema.properties,
     resumen: resumenSchema,
     movimientos: { type: 'array', items: movimientoCajaSchema },
+    notificacion_correos: {
+      type: 'object',
+      required: ['sistema_enviado', 'proveedores_enviados', 'proveedores_omitidos', 'proveedores_fallidos'],
+      properties: {
+        sistema_enviado: { type: 'boolean' },
+        proveedores_enviados: { type: 'number' },
+        proveedores_omitidos: { type: 'number' },
+        proveedores_fallidos: { type: 'number' },
+      },
+    },
   },
 } as const;
 
@@ -209,7 +219,7 @@ export const forzarCerrarCajaSchema = {
 export const crearMovimientoCajaSchema = {
   body: {
     type: 'object',
-    required: ['tipo', 'categoria', 'monto', 'master_password'],
+    required: ['tipo', 'categoria', 'monto'],
     additionalProperties: false,
     properties: {
       tipo: { type: 'string', enum: ['INGRESO', 'EGRESO'] },

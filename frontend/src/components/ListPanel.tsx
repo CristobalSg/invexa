@@ -14,6 +14,7 @@ export interface ListPanelItem {
   amount?: ReactNode;
   amountClassName?: string;
   action?: ReactNode;
+  onClick?: () => void;
   expandedContent?: ReactNode;
 }
 
@@ -87,7 +88,17 @@ export default function ListPanel({
 
             return (
               <div key={item.id}>
-                <div className="flex items-center gap-3 px-5 py-3.5 hover:bg-[#fbfaf7]">
+                <div
+                  role={item.onClick ? "button" : undefined}
+                  tabIndex={item.onClick ? 0 : undefined}
+                  onClick={item.onClick}
+                  onKeyDown={(event) => {
+                    if (!item.onClick || (event.key !== "Enter" && event.key !== " ")) return;
+                    event.preventDefault();
+                    item.onClick();
+                  }}
+                  className={`flex items-center gap-3 px-5 py-3.5 hover:bg-[#fbfaf7] ${item.onClick ? "cursor-pointer" : ""}`}
+                >
                   <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] bg-[#faf8f1] text-[#747780]">
                     {ItemIcon && <ItemIcon className="h-5 w-5" />}
                   </span>
@@ -110,7 +121,15 @@ export default function ListPanel({
                       {item.amount}
                     </div>
                   )}
-                  {item.action && <div className="shrink-0">{item.action}</div>}
+                  {item.action && (
+                    <div
+                      className="shrink-0"
+                      onClick={(event) => event.stopPropagation()}
+                      onKeyDown={(event) => event.stopPropagation()}
+                    >
+                      {item.action}
+                    </div>
+                  )}
                 </div>
                 {item.expandedContent && (
                   <div className="border-t border-[#f0f0f2] bg-[#fbfaf7] px-5 py-3">

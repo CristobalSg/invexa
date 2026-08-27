@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BanknotesIcon, FunnelIcon, ShoppingBagIcon } from "@heroicons/react/24/outline";
-import { anularVenta, getVentas } from "../services/transactionService";
+import { BanknotesIcon, ChevronDownIcon, FunnelIcon, ShoppingBagIcon } from "@heroicons/react/24/outline";
+import { anularVenta, getVenta, getVentas } from "../services/transactionService";
 import type { EstadoVenta, MetodoPago } from "../types/api";
 import ListPanel from "../components/ListPanel";
 import ModuleCard from "../components/ModuleCard";
@@ -19,10 +19,16 @@ export default function VentasPage() {
   const [fecha, setFecha] = useState("");
   const [message, setMessage] = useState("");
   const [ventaAnularId, setVentaAnularId] = useState<number | null>(null);
+  const [expandedVentaId, setExpandedVentaId] = useState<number | null>(null);
   const [motivoAnulacion, setMotivoAnulacion] = useState("");
   const { data, isLoading } = useQuery({
     queryKey: ["ventas", estado, metodo, fecha],
     queryFn: () => getVentas({ estado: estado || undefined, metodo_pago: metodo || undefined, fecha_desde: fecha || undefined, fecha_hasta: fecha || undefined }),
+  });
+  const ventaDetalle = useQuery({
+    queryKey: ["venta", expandedVentaId],
+    queryFn: () => getVenta(expandedVentaId!),
+    enabled: expandedVentaId !== null,
   });
   const anulacion = useMutation({
     mutationFn: ({ id, motivo, password }: { id: number; motivo: string; password: string }) =>
@@ -94,6 +100,7 @@ export default function VentasPage() {
           icon: BanknotesIcon,
           title: `Venta #${venta.id}`,
           description: venta.usuario_nombre,
+          onClick: () => setExpandedVentaId((current) => (current === venta.id ? null : venta.id)),
           meta: [
             new Date(venta.creado_en).toLocaleString(),
             venta.metodo_pago,
@@ -108,13 +115,21 @@ export default function VentasPage() {
               : []),
           ],
           amount: (
-            <div>
-              <small className="block text-[11px] font-semibold uppercase tracking-[0.08em] text-[#8b8e98]">
-                Cobrado
-              </small>
-              {money(venta.total)}
+            <div className="flex items-center justify-end gap-2">
+              <div>
+                <small className="block text-[11px] font-semibold uppercase tracking-[0.08em] text-[#8b8e98]">
+                  Cobrado
+                </small>
+                {money(venta.total)}
+              </div>
+              <ChevronDownIcon className={`h-5 w-5 text-[#8b8e98] transition ${expandedVentaId === venta.id ? "rotate-180" : ""}`} />
             </div>
           ),
+          badge: expandedVentaId === venta.id ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-[#ecfdf5] px-2 py-1 text-xs font-bold text-[#047857]">
+              Detalle abierto
+            </span>
+          ) : undefined,
           action: venta.estado === "COMPLETADA" ? (
             <button
               onClick={() => {
@@ -125,6 +140,37 @@ export default function VentasPage() {
             >
               Anular
             </button>
+          ) : undefined,
+          expandedContent: expandedVentaId === venta.id ? (
+            ventaDetalle.isLoading ? (
+              <p className="text-sm text-gray-500">Cargando detalle...</p>
+            ) : ventaDetalle.data ? (
+              <div className="space-y-3">
+                <div className="grid gap-2 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm md:grid-cols-4">
+                  <span><b className="block text-xs uppercase text-gray-500">Subtotal</b>{money(ventaDetalle.data.subtotal)}</span>
+                  <span><b className="block text-xs uppercase text-gray-500">Descuento</b>{money(ventaDetalle.data.descuento)}</span>
+                  <span><b className="block text-xs uppercase text-gray-500">Método</b>{ventaDetalle.data.metodo_pago}</span>
+                  <span><b className="block text-xs uppercase text-gray-500">Modalidad</b>{ventaDetalle.data.modalidad}</span>
+                </div>
+                {ventaDetalle.data.detalles.map((detalle) => (
+                  <div key={detalle.id} className="grid gap-2 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm md:grid-cols-[1fr_auto_auto_auto_auto]">
+                    <div>
+                      <p className="font-semibold text-gray-900">{detalle.producto_nombre}</p>
+                      <p className="text-xs text-gray-500">
+                        Producto #{detalle.producto_id}
+                        {detalle.proveedor_nombre ? ` · ${detalle.proveedor_nombre}` : ""}
+                      </p>
+                    </div>
+                    <span className="text-gray-600">Cantidad {detalle.cantidad}</span>
+                    <span className="text-gray-600">Precio {money(detalle.precio_unitario)}</span>
+                    <span className="text-gray-600">Desc. {money(detalle.descuento)}</span>
+                    <span className="font-semibold text-gray-900">{money(detalle.total_final)}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-red-600">No se pudo cargar el detalle.</p>
+            )
           ) : undefined,
         }))}
       />

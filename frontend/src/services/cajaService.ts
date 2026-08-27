@@ -32,7 +32,7 @@ export async function crearMovimientoCaja(input: {
   categoria: CategoriaMovimientoCaja;
   monto: number;
   descripcion?: string | null;
-  master_password: string;
+  master_password?: string;
 }) {
   const { data } = await api.post<CajaMovimiento>("/caja/movimientos", input);
   return data;

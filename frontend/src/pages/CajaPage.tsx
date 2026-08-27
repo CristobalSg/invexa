@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowDownTrayIcon,
@@ -21,7 +21,7 @@ import {
   getCajaActual,
   getCajaSesiones,
 } from "../services/cajaService";
-import type { CajaMovimiento, CategoriaMovimientoCaja, TipoMovimientoCaja } from "../types/api";
+import type { CajaMovimiento, CajaSession, CategoriaMovimientoCaja, TipoMovimientoCaja } from "../types/api";
 import ListPanel from "../components/ListPanel";
 import ModuleCard from "../components/ModuleCard";
 import { Button, FormField, inputClassName } from "../components/FormControls";
@@ -65,12 +65,51 @@ const movimientoCategorias: Array<{ value: CategoriaMovimientoCaja; label: strin
 const categoriaLabel = (value: CategoriaMovimientoCaja) =>
   movimientoCategorias.find((category) => category.value === value)?.label ?? value;
 
+type CajaToastTone = "success" | "warning" | "error";
+
+interface CajaToast {
+  readonly title: string;
+  readonly description: string;
+  readonly tone: CajaToastTone;
+}
+
+const buildCloseToast = (session: CajaSession): CajaToast => {
+  const mail = session.notificacion_correos;
+
+  if (!mail) {
+    return {
+      title: "Caja cerrada correctamente",
+      description: "El cierre quedó guardado. No se recibió el estado del envío de correos.",
+      tone: "warning",
+    };
+  }
+
+  if (mail.sistema_enviado && mail.proveedores_fallidos === 0 && mail.proveedores_omitidos === 0) {
+    const providerText = mail.proveedores_enviados === 0
+      ? "No había proveedores con ventas en consignación por notificar."
+      : `Se enviaron ${mail.proveedores_enviados} correo${mail.proveedores_enviados === 1 ? "" : "s"} a proveedor${mail.proveedores_enviados === 1 ? "" : "es"}.`;
+
+    return {
+      title: "Caja cerrada y correos enviados",
+      description: `El cierre quedó guardado y el correo del sistema fue enviado. ${providerText}`,
+      tone: "success",
+    };
+  }
+
+  return {
+    title: "Caja cerrada correctamente",
+    description: `El cierre quedó guardado. Correos: sistema ${mail.sistema_enviado ? "enviado" : "no enviado"}, proveedores enviados ${mail.proveedores_enviados}, omitidos ${mail.proveedores_omitidos}, fallidos ${mail.proveedores_fallidos}.`,
+    tone: mail.proveedores_fallidos > 0 || !mail.sistema_enviado ? "warning" : "success",
+  };
+};
+
 export default function CajaPage() {
   const queryClient = useQueryClient();
   const currentUser = getStoredUser();
   const isOwner = currentUser?.rol === "OWNER";
   const [monto, setMonto] = useState("");
   const [message, setMessage] = useState("");
+  const [toast, setToast] = useState<CajaToast | null>(null);
   const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
   const [closeFinalConfirmOpen, setCloseFinalConfirmOpen] = useState(false);
   const [movementModalOpen, setMovementModalOpen] = useState(false);
@@ -111,6 +150,13 @@ export default function CajaPage() {
     ]);
   };
 
+  useEffect(() => {
+    if (!toast) return;
+
+    const timer = window.setTimeout(() => setToast(null), 6500);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
+
   const abrir = useMutation({
     mutationFn: () => abrirCaja(monto === "" ? 0 : Number(monto)),
     onSuccess: async () => {
@@ -123,8 +169,9 @@ export default function CajaPage() {
 
   const cerrar = useMutation({
     mutationFn: (efectivoContadoFinal: number) => cerrarCaja(efectivoContadoFinal),
-    onSuccess: async () => {
-      setMessage("Caja cerrada correctamente.");
+    onSuccess: async (session) => {
+      setMessage("");
+      setToast(buildCloseToast(session));
       await invalidateCaja();
       await queryClient.refetchQueries({ queryKey: ["caja-sesiones"] });
       setCloseConfirmOpen(false);
@@ -137,13 +184,13 @@ export default function CajaPage() {
   });
 
   const crearMovimiento = useMutation({
-    mutationFn: (masterPassword: string) =>
+    mutationFn: (masterPassword?: string) =>
       crearMovimientoCaja({
         tipo: movimientoForm.tipo,
         categoria: movimientoForm.categoria,
         monto: Number(movimientoForm.monto),
         descripcion: movimientoForm.descripcion || null,
-        master_password: masterPassword,
+        ...(masterPassword ? { master_password: masterPassword } : {}),
       }),
     onSuccess: async () => {
       setMessage("Movimiento registrado.");
@@ -186,8 +233,12 @@ export default function CajaPage() {
 
   const forceClose = useMutation({
     mutationFn: (masterPassword: string) => forzarCerrarCaja(Number(forceCloseAmount || 0), masterPassword),
-    onSuccess: async () => {
-      setMessage("Caja cerrada forzadamente. Ya puedes abrir una nueva caja.");
+    onSuccess: async (session) => {
+      setMessage("");
+      setToast({
+        ...buildCloseToast(session),
+        title: "Caja cerrada forzadamente",
+      });
       setForceCloseAmount("");
       setForceClosePasswordOpen(false);
       await invalidateCaja();
@@ -270,10 +321,28 @@ export default function CajaPage() {
     editarMovimiento.mutate({ id: movementToEdit.id, masterPassword });
   };
 
+  const handleRegisterMovement = () => {
+    if (isOwner) {
+      setMovementPasswordOpen(true);
+      return;
+    }
+
+    crearMovimiento.mutate(undefined);
+  };
+
   if (isLoading) return <p>Cargando caja...</p>;
 
   return (
     <div className="admin-page space-y-6">
+      {toast && (
+        <div className={`cash-close-toast ${toast.tone}`} role="status" aria-live="polite">
+          <CheckCircleIcon className="h-7 w-7" />
+          <div>
+            <h2>{toast.title}</h2>
+            <p>{toast.description}</p>
+          </div>
+        </div>
+      )}
       <h1 className="admin-page-title">Caja</h1>
 
       <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
@@ -368,7 +437,7 @@ export default function CajaPage() {
                 ],
                 amount: `${movimiento.tipo === "INGRESO" ? "+" : "-"}${money(movimiento.monto)}`,
                 amountClassName: movimiento.tipo === "INGRESO" ? "text-green-700" : "text-red-700",
-                action: (
+                action: isOwner ? (
                   <div className="flex flex-wrap justify-end gap-2">
                     <button
                       type="button"
@@ -388,7 +457,7 @@ export default function CajaPage() {
                       Eliminar
                     </button>
                   </div>
-                ),
+                ) : undefined,
               }))}
             />
           )}
@@ -479,7 +548,7 @@ export default function CajaPage() {
                 />
               </FormField>
               <Button
-                onClick={() => setMovementPasswordOpen(true)}
+                onClick={handleRegisterMovement}
                 disabled={crearMovimiento.isPending || movimientoForm.monto === ""}
                 className="min-h-[56px] text-base"
                 fullWidth

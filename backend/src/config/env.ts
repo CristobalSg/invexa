@@ -14,6 +14,9 @@ export interface EnvConfig {
   readonly corsOrigin: string;
   readonly rateLimitMax: number;
   readonly rateLimitTimeWindow: string;
+  readonly mailUser: string | undefined;
+  readonly mailAppPassword: string | undefined;
+  readonly mailTo: string | undefined;
 }
 
 const readRequired = (key: string): string => {
@@ -52,6 +55,11 @@ const readNodeEnv = (): NodeEnv => {
   throw new Error('NODE_ENV must be one of: development, test, production');
 };
 
+const readOptional = (key: string): string | undefined => {
+  const value = process.env[key]?.trim();
+  return value ? value : undefined;
+};
+
 export const env: EnvConfig = {
   nodeEnv: readNodeEnv(),
   port: readNumber('PORT', 3001),
@@ -64,4 +72,7 @@ export const env: EnvConfig = {
   corsOrigin: process.env.CORS_ORIGIN ?? '*',
   rateLimitMax: readNumber('RATE_LIMIT_MAX', 100),
   rateLimitTimeWindow: process.env.RATE_LIMIT_TIME_WINDOW ?? '1 minute',
+  mailUser: readOptional('MAIL_USER'),
+  mailAppPassword: readOptional('MAIL_APP_PASSWORD'),
+  mailTo: readOptional('MAIL_TO'),
 };

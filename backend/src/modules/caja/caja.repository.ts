@@ -1,6 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
 
 import type {
+  CajaConsignacionProveedorVentaRow,
   CajaResumenRow,
   CajaMovimientoRow,
   CajaSessionListRow,
@@ -440,6 +441,45 @@ export class CajaRepository {
     );
 
     return result.rows[0] as CajaResumenRow;
+  }
+
+  async findConsignacionVentasBySessionId(sessionId: number): Promise<CajaConsignacionProveedorVentaRow[]> {
+    const result = await this.pool.query<CajaConsignacionProveedorVentaRow>(
+      `
+        SELECT
+          dv.proveedor_id,
+          COALESCE(pr.nombre, 'Sin proveedor') AS proveedor_nombre,
+          -- TODO: reemplazar telefono por un campo email dedicado en proveedores.
+          pr.telefono AS proveedor_email,
+          dv.producto_id,
+          p.nombre AS producto_nombre,
+          p.unidad_venta AS producto_unidad_venta,
+          dv.precio_unitario,
+          SUM(dv.cantidad)::text AS cantidad,
+          SUM(dv.subtotal)::text AS subtotal,
+          SUM(dv.descuento)::text AS descuento,
+          SUM(dv.total_final)::text AS total_final
+        FROM detalle_ventas dv
+        INNER JOIN ventas v ON v.id = dv.venta_id
+        INNER JOIN productos p ON p.id = dv.producto_id
+        LEFT JOIN proveedores pr ON pr.id = dv.proveedor_id
+        WHERE v.sesion_caja_id = $1
+          AND v.estado = 'COMPLETADA'
+          AND dv.tipo_propiedad = 'CONSIGNACION'
+        GROUP BY
+          dv.proveedor_id,
+          pr.nombre,
+          pr.telefono,
+          dv.producto_id,
+          p.nombre,
+          p.unidad_venta,
+          dv.precio_unitario
+        ORDER BY proveedor_nombre ASC, producto_nombre ASC, dv.precio_unitario ASC
+      `,
+      [sessionId],
+    );
+
+    return result.rows;
   }
 
   async createMovimiento(

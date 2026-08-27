@@ -1,7 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { CurrencyDollarIcon, EllipsisHorizontalIcon, MagnifyingGlassIcon, WalletIcon, XMarkIcon } from "@heroicons/react/24/outline";
+import {
+  ArrowsRightLeftIcon,
+  BanknotesIcon,
+  CreditCardIcon,
+  CurrencyDollarIcon,
+  MagnifyingGlassIcon,
+  PlusIcon,
+  WalletIcon,
+  XMarkIcon,
+} from "@heroicons/react/24/outline";
 import InputForm from "../components/InputForm";
 import MainList from "../components/MainList";
 import SideList from "../components/SideList";
@@ -21,6 +30,7 @@ type MixedPaymentMethod = "EFECTIVO" | "TARJETA" | "TRANSFERENCIA";
 type PaymentAmounts = Record<MixedPaymentMethod, string>;
 type QuickProductsModal = `categoria-${number}`;
 type ProductShelfFilter = "featured" | "offers";
+type CategoryButton = { id: number; name: string; index: number };
 
 const isWeighableProduct = (product: Producto) =>
   product.unidad_venta === "PESO";
@@ -58,10 +68,25 @@ const paymentMethodLabels: Record<MetodoPago, string> = {
   MIXTO: "Mixto",
 };
 
+const paymentMethodHints: Record<MetodoPago, string> = {
+  EFECTIVO: "Pago en billetes",
+  TARJETA: "POS / débito",
+  TRANSFERENCIA: "Banco",
+  MIXTO: "Combinar",
+};
+
+const paymentMethodIcons = {
+  EFECTIVO: BanknotesIcon,
+  TARJETA: CreditCardIcon,
+  TRANSFERENCIA: ArrowsRightLeftIcon,
+  MIXTO: WalletIcon,
+} satisfies Record<MetodoPago, typeof BanknotesIcon>;
+
 const cashSuggestionAmounts = [1000, 2000, 5000, 10000, 20000];
 const featuredProductsStorageKey = "pos-featured-products";
+const featuredCategoriesStorageKey = "pos-featured-categories";
 const productModalPageSize = 30;
-const categoryModalPageSize = 8;
+const categoryFavoriteSlots = 6;
 
 const toInputAmount = (value: number) => (value > 0 ? String(value) : "");
 const toAmount = (value: string) => Number(value) || 0;
@@ -183,6 +208,18 @@ const readFeaturedProductIds = () => {
   }
 };
 
+const readFeaturedCategoryIds = () => {
+  try {
+    const stored = window.sessionStorage.getItem(featuredCategoriesStorageKey);
+    if (!stored) return [];
+    const parsed = JSON.parse(stored);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((id) => Number.isInteger(id) && id > 0).slice(0, categoryFavoriteSlots);
+  } catch {
+    return [];
+  }
+};
+
 export default function Home() {
   const queryClient = useQueryClient();
   const barcodeInputRef = useRef<HTMLInputElement>(null);
@@ -206,10 +243,10 @@ export default function Home() {
   const [grams, setGrams] = useState("");
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [categoryModalOpen, setCategoryModalOpen] = useState(false);
-  const [categoryModalPage, setCategoryModalPage] = useState(1);
   const [quickProductsModal, setQuickProductsModal] = useState<QuickProductsModal | null>(null);
   const [quickProductsPage, setQuickProductsPage] = useState(1);
   const [featuredProductIds, setFeaturedProductIds] = useState<number[]>(readFeaturedProductIds);
+  const [featuredCategoryIds, setFeaturedCategoryIds] = useState<number[]>(readFeaturedCategoryIds);
   const [modalidadVenta, setModalidadVenta] = useState<ModalidadVenta>("NORMAL");
   const [salePasswordOpen, setSalePasswordOpen] = useState(false);
   const [metodoPago, setMetodoPago] = useState<MetodoPago>("EFECTIVO");
@@ -259,13 +296,13 @@ export default function Home() {
       const priorityDiff = getCategorySortPriority(first.name) - getCategorySortPriority(second.name);
       return priorityDiff === 0 ? first.index - second.index : priorityDiff;
     });
-  const categoryButtons = allCategoryButtons.slice(0, 6);
-  const extraCategoryButtons = allCategoryButtons.slice(6);
-  const categoryModalTotalPages = Math.max(1, Math.ceil(extraCategoryButtons.length / categoryModalPageSize));
-  const pagedExtraCategoryButtons = extraCategoryButtons.slice(
-    (categoryModalPage - 1) * categoryModalPageSize,
-    categoryModalPage * categoryModalPageSize,
-  );
+  const featuredCategoryButtons = featuredCategoryIds.reduce<CategoryButton[]>((acc, categoryId) => {
+    const category = allCategoryButtons.find((item) => item.id === categoryId);
+    if (category) acc.push(category);
+    return acc;
+  }, []);
+  const selectedFeaturedCategoryIds = featuredCategoryButtons.map((category) => category.id);
+  const categorySlots = Array.from({ length: categoryFavoriteSlots }, (_, index) => featuredCategoryButtons[index] ?? null);
   const quickCategoryId = quickProductsModal?.startsWith("categoria-")
     ? Number(quickProductsModal.replace("categoria-", ""))
     : null;
@@ -332,12 +369,12 @@ export default function Home() {
   }, [quickCategoryId]);
 
   useEffect(() => {
-    setCategoryModalPage((current) => Math.min(current, categoryModalTotalPages));
-  }, [categoryModalTotalPages]);
-
-  useEffect(() => {
     window.sessionStorage.setItem(featuredProductsStorageKey, JSON.stringify(featuredProductIds));
   }, [featuredProductIds]);
+
+  useEffect(() => {
+    window.sessionStorage.setItem(featuredCategoriesStorageKey, JSON.stringify(featuredCategoryIds));
+  }, [featuredCategoryIds]);
 
   const toggleFeaturedProduct = (productId: number) => {
     setFeaturedProductIds((prev) =>
@@ -346,6 +383,23 @@ export default function Home() {
         : [...prev, productId],
     );
     focusBarcodeInput();
+  };
+
+  const toggleFeaturedCategory = (categoryId: number) => {
+    setFeaturedCategoryIds((prev) => {
+      const validIds = new Set(allCategoryButtons.map((category) => category.id));
+      const current = prev.filter((id) => validIds.has(id));
+
+      if (current.includes(categoryId)) {
+        return current.filter((id) => id !== categoryId);
+      }
+
+      if (current.length >= categoryFavoriteSlots) {
+        return current;
+      }
+
+      return [...current, categoryId];
+    });
   };
 
   const setCart = (updater: CartProduct[] | ((items: CartProduct[]) => CartProduct[])) => {
@@ -773,37 +827,50 @@ export default function Home() {
           </div>
 
           <div className="pos-category-strip">
-            {categoryButtons.map((category) => (
-              <button
-                key={category.id}
-                type="button"
-                onClick={() => {
-                  setQuickProductsModal(`categoria-${category.id}`);
-                }}
-                className={`pos-category-card ${quickCategoryId === category.id ? "active" : ""}`}
-              >
-                <span className="pos-category-visual">
-                  {categoryImagesBySlug[slugifyAssetName(category.name)] ? (
-                    <img src={categoryImagesBySlug[slugifyAssetName(category.name)]} alt="" />
-                  ) : (
-                    getCategoryVisual(category.name)
-                  )}
-                </span>
-                <span className="pos-category-label">{category.name}</span>
-              </button>
+            {categorySlots.map((category, index) => (
+              category ? (
+                <button
+                  key={category.id}
+                  type="button"
+                  onClick={() => {
+                    setQuickProductsModal(`categoria-${category.id}`);
+                  }}
+                  className={`pos-category-card ${quickCategoryId === category.id ? "active" : ""}`}
+                >
+                  <span className="pos-category-visual">
+                    {categoryImagesBySlug[slugifyAssetName(category.name)] ? (
+                      <img src={categoryImagesBySlug[slugifyAssetName(category.name)]} alt="" />
+                    ) : (
+                      getCategoryVisual(category.name)
+                    )}
+                  </span>
+                  <span className="pos-category-label">{category.name}</span>
+                </button>
+              ) : (
+                <button
+                  key={`empty-category-${index}`}
+                  type="button"
+                  onClick={() => setCategoryModalOpen(true)}
+                  className="pos-category-card pos-category-empty"
+                  aria-label={`Seleccionar categoría ${index + 1}`}
+                  title="Seleccionar categoría"
+                >
+                  <span className="pos-category-visual">
+                    <span>{index + 1}</span>
+                  </span>
+                  <span className="pos-category-label">Vacío</span>
+                </button>
+              )
             ))}
             <button
               type="button"
-              onClick={() => {
-                setCategoryModalOpen(true);
-                setCategoryModalPage(1);
-              }}
-              className="pos-category-card"
-              aria-label="Ver más categorías"
-              title="Ver más categorías"
+              onClick={() => setCategoryModalOpen(true)}
+              className="pos-category-card pos-category-add"
+              aria-label="Elegir categorías favoritas"
+              title="Elegir categorías favoritas"
             >
               <span className="pos-category-visual">
-                <EllipsisHorizontalIcon className="h-8 w-8 text-[#6fab89]" />
+                <PlusIcon className="h-8 w-8 text-[#6fab89]" />
               </span>
               <span className="pos-category-label">Más</span>
             </button>
@@ -1061,7 +1128,15 @@ export default function Home() {
         </div>
       )}
       {weighableProduct && (
-        <div className="flow-modal-backdrop">
+        <div
+          className="flow-modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setWeighableProduct(null);
+              focusBarcodeInput();
+            }
+          }}
+        >
           <div className="flow-modal weight-modal max-w-md p-0">
             <div className="p-6 pb-4">
               <span className="pos-kicker">Producto por peso</span>
@@ -1203,7 +1278,6 @@ export default function Home() {
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) {
               setCategoryModalOpen(false);
-              setCategoryModalPage(1);
               focusBarcodeInput();
             }
           }}
@@ -1212,33 +1286,49 @@ export default function Home() {
             <div className="pos-section-row">
               <div>
                 <span className="pos-kicker">Categorías</span>
-                <h2 className="flow-modal-title">Más categorías</h2>
+                <h2 className="flow-modal-title">Elegir favoritos</h2>
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setCategoryModalOpen(false);
-                  setCategoryModalPage(1);
-                  focusBarcodeInput();
-                }}
-                className="rounded-xl border border-[#ececf0] bg-white px-3 py-2 text-sm font-bold text-[#5f626b] hover:bg-[#f7f7f9]"
-              >
-                Cerrar
-              </button>
+              <div className="flex items-center gap-2">
+                {selectedFeaturedCategoryIds.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setFeaturedCategoryIds([])}
+                    className="rounded-xl border border-[#ececf0] bg-white px-3 py-2 text-sm font-bold text-[#5f626b] hover:bg-[#f7f7f9]"
+                  >
+                    Limpiar
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCategoryModalOpen(false);
+                    focusBarcodeInput();
+                  }}
+                  className="rounded-xl border border-[#ececf0] bg-white px-3 py-2 text-sm font-bold text-[#5f626b] hover:bg-[#f7f7f9]"
+                >
+                  Cerrar
+                </button>
+              </div>
+            </div>
+
+            <div className="category-favorite-summary">
+              <span>{selectedFeaturedCategoryIds.length}/{categoryFavoriteSlots} seleccionadas</span>
+              <small>Toca las categorías en el orden que quieres dejarlas.</small>
             </div>
 
             <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-              {pagedExtraCategoryButtons.map((category) => (
+              {allCategoryButtons.map((category) => {
+                const selectionOrder = selectedFeaturedCategoryIds.indexOf(category.id) + 1;
+                const isSelected = selectionOrder > 0;
+                const isDisabled = !isSelected && selectedFeaturedCategoryIds.length >= categoryFavoriteSlots;
+
+                return (
                 <button
                   key={category.id}
                   type="button"
-                  onClick={() => {
-                    setQuickProductsModal(`categoria-${category.id}`);
-                    setCategoryModalOpen(false);
-                    setCategoryModalPage(1);
-                    setQuickProductsPage(1);
-                  }}
-                  className={`pos-category-card ${quickCategoryId === category.id ? "active" : ""}`}
+                  onClick={() => toggleFeaturedCategory(category.id)}
+                  disabled={isDisabled}
+                  className={`pos-category-card category-picker-card ${isSelected ? "selected" : ""}`}
                 >
                   <span className="pos-category-visual">
                     {categoryImagesBySlug[slugifyAssetName(category.name)] ? (
@@ -1246,37 +1336,18 @@ export default function Home() {
                     ) : (
                       getCategoryVisual(category.name)
                     )}
+                    {isSelected && <span className="category-picker-order">{selectionOrder}</span>}
                   </span>
                   <span className="pos-category-label">{category.name}</span>
                 </button>
-              ))}
-              {extraCategoryButtons.length === 0 && (
+                );
+              })}
+              {allCategoryButtons.length === 0 && (
                 <p className="col-span-full rounded-2xl border border-[#ececf0] bg-[#fafafa] p-6 text-center text-sm text-[#8b8e98]">
-                  No hay más categorías disponibles.
+                  No hay categorías disponibles.
                 </p>
               )}
             </div>
-            {extraCategoryButtons.length > 0 && (
-              <div className="pos-modal-pagination">
-                <button
-                  type="button"
-                  onClick={() => setCategoryModalPage((current) => Math.max(1, current - 1))}
-                  disabled={categoryModalPage <= 1}
-                >
-                  Anterior
-                </button>
-                <span>
-                  Página {categoryModalPage} de {categoryModalTotalPages}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setCategoryModalPage((current) => Math.min(categoryModalTotalPages, current + 1))}
-                  disabled={categoryModalPage >= categoryModalTotalPages}
-                >
-                  Siguiente
-                </button>
-              </div>
-            )}
           </div>
         </div>
       )}
@@ -1345,14 +1416,20 @@ export default function Home() {
                 <label className="mt-5 block text-sm font-bold text-[#5f626b]">Método de pago</label>
                 <div className="mt-2 grid grid-cols-2 gap-2">
                   {(["EFECTIVO", "TARJETA", "TRANSFERENCIA", "MIXTO"] as MetodoPago[]).map((method) => {
+                    const MethodIcon = paymentMethodIcons[method];
+
                     return (
                       <button
                         key={method}
                         type="button"
                         onClick={() => handlePaymentMethodChange(method)}
-                        className={`flow-payment-option ${metodoPago === method ? "active" : ""}`}
+                        className={`flow-payment-option payment-method-option payment-method-${method.toLowerCase()} ${metodoPago === method ? "active" : ""}`}
                       >
-                        {paymentMethodLabels[method]}
+                        <MethodIcon className="h-6 w-6" />
+                        <span>
+                          <strong>{paymentMethodLabels[method]}</strong>
+                          <small>{paymentMethodHints[method]}</small>
+                        </span>
                       </button>
                     );
                   })}

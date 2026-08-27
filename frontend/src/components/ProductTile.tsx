@@ -1,12 +1,4 @@
-import { Menu, MenuButton, MenuItem, MenuItems } from "@headlessui/react";
-import {
-  ArrowPathIcon,
-  EllipsisHorizontalIcon,
-  PencilIcon,
-  PlusIcon,
-  StarIcon as StarIconOutline,
-  TrashIcon,
-} from "@heroicons/react/24/outline";
+import { PlusIcon, StarIcon as StarIconOutline } from "@heroicons/react/24/outline";
 import { StarIcon as StarIconSolid } from "@heroicons/react/24/solid";
 import type { Producto } from "../types/api";
 
@@ -15,12 +7,9 @@ interface ProductTileProps {
   isFeatured?: boolean;
   mode?: "sale" | "inventory";
   density?: "normal" | "compact";
-  inventoryModeLabel?: string;
+  compactVariant?: "default" | "quick";
   onClick?: () => void;
   onToggleFeatured?: () => void;
-  onEdit?: () => void;
-  onDelete?: () => void;
-  onReactivate?: () => void;
 }
 
 const productImageModules = import.meta.glob("../assets/images/products/**/*.{png,jpg,jpeg,webp,avif}", {
@@ -61,15 +50,37 @@ export default function ProductTile({
   isFeatured = false,
   mode = "sale",
   density = "normal",
-  inventoryModeLabel,
+  compactVariant = "default",
   onClick,
   onToggleFeatured,
-  onEdit,
-  onDelete,
-  onReactivate,
 }: ProductTileProps) {
   const productImage = productImagesBySlug[slugifyAssetName(product.nombre)];
   const isCompact = density === "compact";
+  const isQuickCompact = isCompact && compactVariant === "quick";
+
+  if (mode === "inventory") {
+    return (
+      <button
+        type="button"
+        className={`inventory-product-card inventory-product-card-compact text-left ${product.activo ? "" : "inactive"}`}
+        onClick={onClick}
+      >
+        <span className="inventory-product-card-visual">
+          {productImage ? <img src={productImage} alt="" /> : productVisual(product)}
+        </span>
+        <span className="inventory-product-card-main">
+          <span className="inventory-product-card-name">{product.nombre}</span>
+          <span className="inventory-product-card-price">
+            - ${product.precio_venta.toLocaleString()}{isWeighableProduct(product) ? "/kg" : ""}
+          </span>
+        </span>
+        <span className="inventory-product-card-category">
+          {product.categoria_nombre} · Quedan {product.stock} {isWeighableProduct(product) ? "kg" : "un."}
+        </span>
+      </button>
+    );
+  }
+
   const content = (
     <>
       <div className="pos-product-visual">
@@ -97,81 +108,16 @@ export default function ProductTile({
         </span>
       )}
       <div className="pos-product-name">{product.nombre}</div>
-      {mode === "inventory" && !product.activo && (
-        <span className="inventory-status-badge">Desactivado</span>
-      )}
       {!isCompact && (
         <div className="pos-product-unit">
           {product.categoria_nombre} · {product.stock} {isWeighableProduct(product) ? "kg" : "un."}
         </div>
       )}
-      {mode === "inventory" && (
-        <div className="inventory-product-meta">
-          <span>{product.codigo_barras ?? "Sin código"}</span>
-          <span>{product.tipo_propiedad}</span>
-          <span>{product.unidad_venta === "PESO" ? "Peso" : "Unidad"}</span>
-          <span>{inventoryModeLabel}</span>
-          <span>{product.proveedor_nombre ?? "Sin proveedor"}</span>
-        </div>
-      )}
-      <div className="pos-product-footer">
+      <div className={`pos-product-footer ${isCompact ? "compact" : ""}`}>
         <span className="pos-product-price">
           ${product.precio_venta.toLocaleString()}{isWeighableProduct(product) ? "/kg" : ""}
         </span>
-        {mode === "inventory" ? (
-          (onEdit || onDelete || onReactivate) && (
-            <Menu as="span" className="relative inline-block text-left">
-              <MenuButton className="pos-options-btn" onClick={(event) => event.stopPropagation()}>
-                <EllipsisHorizontalIcon className="h-5 w-5" />
-                <span>Opciones</span>
-              </MenuButton>
-              <MenuItems className="absolute right-0 z-50 mt-2 w-40 origin-top-right rounded-2xl border border-[#ececf0] bg-white p-1 shadow-[0_18px_50px_rgba(31,35,48,.16)] focus:outline-none">
-                {onEdit && (
-                  <MenuItem>
-                    {({ focus }) => (
-                      <button
-                        type="button"
-                        onClick={onEdit}
-                        className={`${focus ? "bg-[#faf9ff] text-[#7652ed]" : "text-[#25262c]"} flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold`}
-                      >
-                        <PencilIcon className="h-4 w-4" />
-                        Editar
-                      </button>
-                    )}
-                  </MenuItem>
-                )}
-                {onReactivate && (
-                  <MenuItem>
-                    {({ focus }) => (
-                      <button
-                        type="button"
-                        onClick={onReactivate}
-                        className={`${focus ? "bg-emerald-50 text-emerald-700" : "text-emerald-700"} flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold`}
-                      >
-                        <ArrowPathIcon className="h-4 w-4" />
-                        Reactivar
-                      </button>
-                    )}
-                  </MenuItem>
-                )}
-                {onDelete && (
-                  <MenuItem>
-                    {({ focus }) => (
-                      <button
-                        type="button"
-                        onClick={onDelete}
-                        className={`${focus ? "bg-red-50 text-red-700" : "text-red-600"} flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold`}
-                      >
-                        <TrashIcon className="h-4 w-4" />
-                        Eliminar
-                      </button>
-                    )}
-                  </MenuItem>
-                )}
-              </MenuItems>
-            </Menu>
-          )
-        ) : !isCompact ? (
+        {!isCompact ? (
           <span className="pos-add-btn" aria-hidden="true">
             <PlusIcon className="h-5 w-5" />
           </span>
@@ -180,16 +126,8 @@ export default function ProductTile({
     </>
   );
 
-  if (mode === "inventory") {
-    return (
-      <div className={`pos-product-card inventory-product-card text-left ${product.activo ? "" : "inactive"}`}>
-        {content}
-      </div>
-    );
-  }
-
   return (
-    <button type="button" className={`pos-product-card text-left ${isCompact ? "compact" : ""}`} onClick={onClick}>
+    <button type="button" className={`pos-product-card text-left ${isCompact ? "compact" : ""} ${isQuickCompact ? "quick" : ""}`} onClick={onClick}>
       {content}
     </button>
   );
