@@ -38,6 +38,11 @@ export async function getProducts(filters: ProductFilters = {}): Promise<Paginat
   return data;
 }
 
+export async function getProduct(id: number): Promise<Producto> {
+  const { data } = await api.get<Producto>(`${ENDPOINT}/${id}`);
+  return data;
+}
+
 export async function getAllProducts(filters: ProductFilters = {}): Promise<Producto[]> {
   const firstPage = await getProducts({ ...filters, page: 1, limit: 100 });
   const totalPages = firstPage.pagination.totalPages;

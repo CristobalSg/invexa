@@ -17,6 +17,7 @@ import {
   getCajaSessionSchema,
   listMovimientosCajaSchema,
   listCajaSessionsSchema,
+  reenviarCorreoCierreCajaSchema,
 } from './caja.schema.js';
 import { CajaService } from './caja.service.js';
 import type {
@@ -161,6 +162,22 @@ export const cajaRoutes: FastifyPluginAsync = async (fastify) => {
     { preHandler: cajaAccess, schema: getCajaSessionSchema },
     async (request, reply) => {
       const session = await service.findById(
+        {
+          id: request.user.id,
+          rol: request.user.rol,
+        },
+        request.params.id,
+      );
+
+      return ok(reply, session);
+    },
+  );
+
+  fastify.post<{ Params: CajaSessionParams }>(
+    '/sesiones/:id/reenviar-correo',
+    { preHandler: cajaAccess, schema: reenviarCorreoCierreCajaSchema },
+    async (request, reply) => {
+      const session = await service.reenviarCorreoCierre(
         {
           id: request.user.id,
           rol: request.user.rol,

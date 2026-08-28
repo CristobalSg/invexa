@@ -403,7 +403,7 @@ export class VentasService {
     modalidad: string,
   ): number {
     if (modalidad === 'PRECIO_COSTO' || modalidad === 'RETIRO_DUENO') {
-      if (producto.costo_actual === null) {
+      if (producto.costo_actual === null || Number(producto.costo_actual) <= 0) {
         throw new BadRequestError(`Producto ${producto.nombre} no tiene costo registrado`);
       }
 

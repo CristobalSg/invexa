@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { keepPreviousData, useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
 import {
   ArrowPathIcon,
   CheckCircleIcon,
-  FunnelIcon,
+  ClipboardDocumentListIcon,
   PencilIcon,
   PlusIcon,
   TrashIcon,
@@ -12,14 +13,16 @@ import {
 import {
   getProducts,
   deleteProduct,
+  getProduct,
   reactivateProduct,
 } from "../services/productService";
-import type { ModoInventarioProducto, Producto } from "../types/api";
+import type { ModoInventarioProducto, MovimientoInventario, Producto, TipoMovimientoInventario } from "../types/api";
 
 import { ProductModal } from "../components/ProductModal";
 import ProductFormCreate from "../components/ProductFormCreate";
 import { getStoredUser } from "../services/authService";
 import { getCategorias, getProveedores } from "../services/catalogService";
+import { getMovimientos } from "../services/inventoryService";
 import { Button, FormField, inputClassName } from "../components/FormControls";
 import ProductTile from "../components/ProductTile";
 import TouchSelectField from "../components/TouchSelectField";
@@ -34,11 +37,35 @@ const modoInventarioLabels: Record<ModoInventarioProducto, string> = {
 type EstadoProductoFiltro = "ACTIVOS" | "DESHABILITADOS" | "TODOS";
 const productFormId = "inventory-product-form";
 
+const movimientoInventarioLabels: Record<TipoMovimientoInventario, string> = {
+  VENTA: "Venta",
+  COMPRA: "Compra",
+  AJUSTE: "Ajuste",
+  MERMA: "Merma",
+  DEVOLUCION: "Devolución",
+  ANULACION: "Anulación",
+};
+
+const money = (value: number | null | undefined) => value === null || value === undefined ? "-" : `$${value.toLocaleString()}`;
+
+const getStockDelta = (movement: MovimientoInventario) => {
+  if (movement.stock_anterior === null || movement.stock_nuevo === null) {
+    return movement.cantidad;
+  }
+
+  return Number((movement.stock_nuevo - movement.stock_anterior).toFixed(3));
+};
+
 export default function ProductsPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const editProductId = Number(searchParams.get("editar") ?? 0);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isFiltersOpen, setIsFiltersOpen] = useState(false);
   const [productToEdit, setProductToEdit] = useState<Producto | null>(null);
   const [productToView, setProductToView] = useState<Producto | null>(null);
+  const [productToAudit, setProductToAudit] = useState<Producto | null>(null);
+  const [auditTipo, setAuditTipo] = useState("");
+  const [auditDesde, setAuditDesde] = useState("");
+  const [auditHasta, setAuditHasta] = useState("");
   const [productActionToAuthorize, setProductActionToAuthorize] = useState<{
     type: "delete" | "reactivate";
     product: Producto;
@@ -76,10 +103,37 @@ export default function ProductsPage() {
   });
   const { data: categorias } = useQuery({ queryKey: ["categorias"], queryFn: () => getCategorias() });
   const { data: proveedores } = useQuery({ queryKey: ["proveedores"], queryFn: () => getProveedores({ activo: true }) });
+  const editProductQuery = useQuery({
+    queryKey: ["product", editProductId],
+    queryFn: () => getProduct(editProductId),
+    enabled: editProductId > 0,
+  });
+  const movimientosAuditoria = useQuery({
+    queryKey: ["inventario-auditoria", productToAudit?.id, auditTipo, auditDesde, auditHasta],
+    queryFn: () =>
+      getMovimientos({
+        page: 1,
+        limit: 100,
+        producto_id: productToAudit?.id,
+        tipo: auditTipo ? (auditTipo as TipoMovimientoInventario) : undefined,
+        fecha_desde: auditDesde || undefined,
+        fecha_hasta: auditHasta || undefined,
+      }),
+    enabled: Boolean(productToAudit),
+  });
 
   useEffect(() => {
     setPage(1);
   }, [categoriaId, codigo, estado, nombre, proveedorId]);
+
+  useEffect(() => {
+    if (!editProductQuery.data) return;
+
+    setProductToView(null);
+    setProductToEdit(editProductQuery.data);
+    setIsModalOpen(true);
+    setSearchParams({}, { replace: true });
+  }, [editProductQuery.data, setSearchParams]);
 
   useEffect(() => {
     if (!createdProductAlert) return;
@@ -90,13 +144,13 @@ export default function ProductsPage() {
 
   const productosFiltrados = products?.items ?? [];
   const pagination = products?.pagination;
-  const activeFiltersCount = [
+  const hasActiveFilters = [
     normalizedCodigo,
     normalizedNombre,
     categoriaId,
     proveedorId,
     estado !== "ACTIVOS" ? estado : "",
-  ].filter(Boolean).length;
+  ].filter(Boolean).length > 0;
 
   const deleteMutation = useMutation({
     mutationFn: ({ id, masterPassword }: { id: string; masterPassword?: string }) => deleteProduct(id, masterPassword),
@@ -161,6 +215,11 @@ export default function ProductsPage() {
     setProductToEdit(null);
   };
 
+  const openProductAudit = (product: Producto) => {
+    setProductToAudit(product);
+    setProductToView(null);
+  };
+
   const handleSuccess = (product: Producto, action: "created" | "updated") => {
     queryClient.invalidateQueries({ queryKey: ["products"] });
     handleCloseModal();
@@ -169,37 +228,109 @@ export default function ProductsPage() {
     }
   };
 
+  const clearFilters = () => {
+    setCodigo("");
+    setNombre("");
+    setCategoriaId("");
+    setProveedorId("");
+    setEstado("ACTIVOS");
+  };
+
   return (
     <div className="admin-page space-y-6">
-      <div className="flex justify-between items-center mb-4">
-        <h1 className="admin-page-title">Gestión de Inventario</h1>
+      <div className="inventory-header">
+        <div className="inventory-title-block">
+          <h1 className="admin-page-title">Gestión de Inventario</h1>
+          <p className="text-sm font-semibold text-gray-500">
+            {pagination ? `${pagination.total} productos · Página ${pagination.page} de ${Math.max(1, pagination.totalPages)}` : "Cargando productos..."}
+          </p>
+        </div>
+        <div className="inventory-filter-bar">
+          <div className="inventory-filter-grid">
+            <FormField label="Código de barra">
+              <input
+                value={codigo}
+                onChange={(event) => setCodigo(event.target.value)}
+                className={inputClassName}
+                placeholder="Buscar por código"
+              />
+            </FormField>
+            <FormField label="Nombre">
+              <input
+                value={nombre}
+                onChange={(event) => setNombre(event.target.value)}
+                className={inputClassName}
+                placeholder="Buscar por nombre"
+              />
+            </FormField>
+            <TouchSelectField
+              label="Categoría"
+              value={categoriaId}
+              options={[
+                { value: "", label: "Todas" },
+                ...(categorias?.items ?? []).map((category) => ({
+                  value: String(category.id),
+                  label: category.nombre,
+                })),
+              ]}
+              onChange={setCategoriaId}
+              placeholder="Todas"
+            />
+            <TouchSelectField
+              label="Proveedor"
+              value={proveedorId}
+              options={[
+                { value: "", label: "Todos" },
+                ...(proveedores?.items ?? []).map((provider) => ({
+                  value: String(provider.id),
+                  label: provider.nombre,
+                })),
+              ]}
+              onChange={setProveedorId}
+              placeholder="Todos"
+            />
+            <TouchSelectField
+              label="Estado"
+              value={estado}
+              options={[
+                { value: "ACTIVOS", label: "Activos" },
+                { value: "DESHABILITADOS", label: "Deshabilitados" },
+                { value: "TODOS", label: "Todos" },
+              ]}
+              onChange={(value) => setEstado(value as EstadoProductoFiltro)}
+            />
+          </div>
+          <button
+            type="button"
+            className="inventory-filter-clear"
+            onClick={clearFilters}
+            disabled={!hasActiveFilters}
+          >
+            Limpiar
+          </button>
+        </div>
       </div>
       {error && <p className="text-sm text-red-500">Error al cargar productos</p>}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm font-semibold text-gray-500">
-          {pagination ? `${pagination.total} productos · Página ${pagination.page} de ${Math.max(1, pagination.totalPages)}` : "Cargando productos..."}
-        </p>
-        {pagination && pagination.totalPages > 1 && (
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setPage((current) => Math.max(1, current - 1))}
-              disabled={pagination.page <= 1}
-              className="rounded-xl border border-[#ececf0] bg-white px-4 py-2 text-sm font-bold text-[#5f626b] disabled:opacity-40"
-            >
-              Anterior
-            </button>
-            <button
-              type="button"
-              onClick={() => setPage((current) => Math.min(pagination.totalPages, current + 1))}
-              disabled={pagination.page >= pagination.totalPages}
-              className="rounded-xl border border-[#ececf0] bg-white px-4 py-2 text-sm font-bold text-[#5f626b] disabled:opacity-40"
-            >
-              Siguiente
-            </button>
-          </div>
-        )}
-      </div>
+      {pagination && pagination.totalPages > 1 && (
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setPage((current) => Math.max(1, current - 1))}
+            disabled={pagination.page <= 1}
+            className="rounded-xl border border-[#ececf0] bg-white px-4 py-2 text-sm font-bold text-[#5f626b] disabled:opacity-40"
+          >
+            Anterior
+          </button>
+          <button
+            type="button"
+            onClick={() => setPage((current) => Math.min(pagination.totalPages, current + 1))}
+            disabled={pagination.page >= pagination.totalPages}
+            className="rounded-xl border border-[#ececf0] bg-white px-4 py-2 text-sm font-bold text-[#5f626b] disabled:opacity-40"
+          >
+            Siguiente
+          </button>
+        </div>
+      )}
       {isFetching && <p className="text-sm text-gray-500">Actualizando productos...</p>}
 
       <ProductModal
@@ -230,109 +361,6 @@ export default function ProductsPage() {
           onClose={() => setProductActionToAuthorize(null)}
           onConfirm={handleAuthorizedProductAction}
         />
-      )}
-
-      {isFiltersOpen && (
-        <div
-          className="flow-modal-backdrop"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) {
-              setIsFiltersOpen(false);
-            }
-          }}
-        >
-          <div className="inventory-filter-modal" role="dialog" aria-modal="true">
-            <div className="inventory-detail-head">
-              <div>
-                <p>Inventario</p>
-                <h2>Filtros</h2>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsFiltersOpen(false)}
-                className="inventory-detail-close"
-                aria-label="Cerrar filtros"
-                title="Cerrar"
-              >
-                <XMarkIcon className="h-6 w-6" />
-              </button>
-            </div>
-
-            <div className="inventory-filter-grid">
-              <FormField label="Código de barra">
-                <input
-                  value={codigo}
-                  onChange={(event) => setCodigo(event.target.value)}
-                  className={inputClassName}
-                  placeholder="Buscar por código"
-                />
-              </FormField>
-              <FormField label="Nombre">
-                <input
-                  value={nombre}
-                  onChange={(event) => setNombre(event.target.value)}
-                  className={inputClassName}
-                  placeholder="Buscar por nombre"
-                />
-              </FormField>
-              <TouchSelectField
-                label="Categoría"
-                value={categoriaId}
-                options={[
-                  { value: "", label: "Todas" },
-                  ...(categorias?.items ?? []).map((category) => ({
-                    value: String(category.id),
-                    label: category.nombre,
-                  })),
-                ]}
-                onChange={setCategoriaId}
-                placeholder="Todas"
-              />
-              <TouchSelectField
-                label="Proveedor"
-                value={proveedorId}
-                options={[
-                  { value: "", label: "Todos" },
-                  ...(proveedores?.items ?? []).map((provider) => ({
-                    value: String(provider.id),
-                    label: provider.nombre,
-                  })),
-                ]}
-                onChange={setProveedorId}
-                placeholder="Todos"
-              />
-              <TouchSelectField
-                label="Estado"
-                value={estado}
-                options={[
-                  { value: "ACTIVOS", label: "Activos" },
-                  { value: "DESHABILITADOS", label: "Deshabilitados" },
-                  { value: "TODOS", label: "Todos" },
-                ]}
-                onChange={(value) => setEstado(value as EstadoProductoFiltro)}
-              />
-            </div>
-
-            <div className="inventory-filter-actions">
-              <button
-                type="button"
-                className="inventory-filter-clear"
-                onClick={() => {
-                  setCodigo("");
-                  setNombre("");
-                  setCategoriaId("");
-                  setProveedorId("");
-                  setEstado("ACTIVOS");
-                }}
-              >
-                Limpiar
-              </button>
-              <button type="button" className="inventory-filter-apply" onClick={() => setIsFiltersOpen(false)}>
-                Aplicar
-              </button>
-            </div>
-          </div>
-        </div>
       )}
 
       {createdProductAlert && (
@@ -371,18 +399,8 @@ export default function ProductsPage() {
         )}
       </div>
 
-      <div className="inventory-floating-actions">
-        <button
-          type="button"
-          onClick={() => setIsFiltersOpen(true)}
-          className={`inventory-filter-fab ${activeFiltersCount > 0 ? "active" : ""}`}
-          aria-label="Filtros"
-          title="Filtros"
-        >
-          <FunnelIcon className="h-7 w-7" />
-          {activeFiltersCount > 0 && <span>{activeFiltersCount}</span>}
-        </button>
-        {canCreateProduct && (
+      {canCreateProduct && (
+        <div className="inventory-floating-actions">
           <button
             type="button"
             onClick={() => {
@@ -395,8 +413,8 @@ export default function ProductsPage() {
           >
             <PlusIcon className="h-8 w-8" />
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
       {productToView && (
         <div
@@ -444,6 +462,10 @@ export default function ProductsPage() {
                   <PencilIcon className="h-5 w-5" />
                   Editar
                 </button>
+                <button type="button" className="inventory-detail-action audit" onClick={() => openProductAudit(productToView)}>
+                  <ClipboardDocumentListIcon className="h-5 w-5" />
+                  Auditar
+                </button>
                 {productToView.activo ? (
                   <button
                     type="button"
@@ -465,6 +487,108 @@ export default function ProductsPage() {
                 )}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {productToAudit && (
+        <div
+          className="flow-modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setProductToAudit(null);
+            }
+          }}
+        >
+          <div className="inventory-audit-modal" role="dialog" aria-modal="true">
+            <div className="inventory-detail-head">
+              <div className="min-w-0">
+                <p>Auditoría de producto</p>
+                <h2>{productToAudit.nombre}</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setProductToAudit(null)}
+                className="inventory-detail-close"
+                aria-label="Cerrar auditoría"
+                title="Cerrar"
+              >
+                <XMarkIcon className="h-6 w-6" />
+              </button>
+            </div>
+
+            <div className="inventory-audit-summary">
+              <span><b>Stock actual</b>{productToAudit.stock} {productToAudit.unidad_venta === "PESO" ? "kg" : "un."}</span>
+              <span><b>Código</b>{productToAudit.codigo_barras ?? "Sin código"}</span>
+              <span><b>Categoría</b>{productToAudit.categoria_nombre}</span>
+              <span><b>Proveedor</b>{productToAudit.proveedor_nombre ?? "Sin proveedor"}</span>
+            </div>
+
+            <div className="inventory-audit-filters">
+              <TouchSelectField
+                label="Tipo"
+                value={auditTipo}
+                options={[
+                  { value: "", label: "Todos" },
+                  ...Object.entries(movimientoInventarioLabels).map(([value, label]) => ({ value, label })),
+                ]}
+                onChange={setAuditTipo}
+                placeholder="Todos"
+              />
+              <FormField label="Desde">
+                <input type="date" value={auditDesde} onChange={(event) => setAuditDesde(event.target.value)} className={inputClassName} />
+              </FormField>
+              <FormField label="Hasta">
+                <input type="date" value={auditHasta} onChange={(event) => setAuditHasta(event.target.value)} className={inputClassName} />
+              </FormField>
+              <button
+                type="button"
+                className="inventory-filter-clear"
+                onClick={() => {
+                  setAuditTipo("");
+                  setAuditDesde("");
+                  setAuditHasta("");
+                }}
+                disabled={!auditTipo && !auditDesde && !auditHasta}
+              >
+                Limpiar
+              </button>
+            </div>
+
+            <div className="inventory-audit-timeline">
+              {movimientosAuditoria.isLoading && <p className="inventory-audit-empty">Cargando historial...</p>}
+              {!movimientosAuditoria.isLoading && (movimientosAuditoria.data?.items ?? []).length === 0 && (
+                <p className="inventory-audit-empty">Sin movimientos para este producto.</p>
+              )}
+              {(movimientosAuditoria.data?.items ?? []).map((movement) => {
+                const delta = getStockDelta(movement);
+                const unit = productToAudit.unidad_venta === "PESO" ? "kg" : "un.";
+                const detail =
+                  movement.venta_id !== null
+                    ? `Venta #${movement.venta_id} · ${movement.venta_metodo_pago ?? "Sin método"} · ${money(movement.venta_total_final)}`
+                    : movement.compra_id !== null
+                      ? `Compra #${movement.compra_id} · Costo ${money(movement.compra_costo_unitario)} · Subtotal ${money(movement.compra_subtotal_costo)}`
+                      : movement.motivo ?? "Movimiento manual";
+
+                return (
+                  <article key={movement.id} className={`inventory-audit-item ${delta < 0 ? "negative" : "positive"}`}>
+                    <div className="inventory-audit-item-main">
+                      <span>{movimientoInventarioLabels[movement.tipo]}</span>
+                      <strong>{delta > 0 ? "+" : ""}{delta} {unit}</strong>
+                    </div>
+                    <p>{detail}</p>
+                    <div className="inventory-audit-meta">
+                      <span>{new Date(movement.creado_en).toLocaleString()}</span>
+                      <span>{movement.usuario_nombre ?? "Sin usuario"}</span>
+                      <span>Stock {movement.stock_anterior ?? "-"} -&gt; {movement.stock_nuevo ?? "-"}</span>
+                      {movement.venta_sesion_caja_id && <span>Caja #{movement.venta_sesion_caja_id}</span>}
+                      {movement.compra_precio_anterior !== null && <span>Precio {money(movement.compra_precio_anterior)} -&gt; {money(movement.compra_precio_final)}</span>}
+                      {movement.motivo && <span>{movement.motivo}</span>}
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}

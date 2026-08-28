@@ -1,4 +1,4 @@
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 
 import type {
   CreateProductoBody,
@@ -206,8 +206,8 @@ export class ProductosRepository {
     return result.rows[0] ?? null;
   }
 
-  async create(data: CreateProductoBody): Promise<ProductoRow> {
-    const result = await this.pool.query<ProductoRow>(
+  async create(data: CreateProductoBody, client: Pool | PoolClient = this.pool): Promise<ProductoRow> {
+    const result = await client.query<ProductoRow>(
       `
         INSERT INTO productos (
           nombre,
@@ -252,11 +252,11 @@ export class ProductosRepository {
       ],
     );
 
-    return (await this.findById((result.rows[0] as { readonly id: number }).id)) as ProductoRow;
+    return (await this.findByIdWithClient(client, (result.rows[0] as { readonly id: number }).id)) as ProductoRow;
   }
 
-  async update(id: number, data: UpdateProductoBody): Promise<ProductoRow | null> {
-    const result = await this.pool.query<{ readonly id: number }>(
+  async update(id: number, data: UpdateProductoBody, client: Pool | PoolClient = this.pool): Promise<ProductoRow | null> {
+    const result = await client.query<{ readonly id: number }>(
       `
         UPDATE productos
         SET
@@ -307,7 +307,74 @@ export class ProductosRepository {
       return null;
     }
 
-    return this.findById(result.rows[0].id);
+    return this.findByIdWithClient(client, result.rows[0].id);
+  }
+
+  async findByIdWithClient(client: Pool | PoolClient, id: number): Promise<ProductoRow | null> {
+    const result = await client.query<ProductoRow>(
+      `
+        SELECT
+          p.id,
+          p.nombre,
+          p.codigo_barras,
+          p.categoria_id,
+          c.nombre AS categoria_nombre,
+          p.tipo_propiedad,
+          p.unidad_venta,
+          p.modo_inventario,
+          p.proveedor_id,
+          pr.nombre AS proveedor_nombre,
+          p.costo_actual,
+          p.precio_venta,
+          p.stock,
+          p.activo,
+          p.creado_en,
+          p.actualizado_en
+        FROM productos p
+        INNER JOIN categorias_producto c ON c.id = p.categoria_id
+        LEFT JOIN proveedores pr ON pr.id = p.proveedor_id
+        WHERE p.id = $1
+        LIMIT 1
+      `,
+      [id],
+    );
+
+    return result.rows[0] ?? null;
+  }
+
+  async createMovimientoAjuste(
+    client: PoolClient,
+    data: {
+      readonly productoId: number;
+      readonly usuarioId: number;
+      readonly cantidad: number;
+      readonly stockAnterior: number;
+      readonly stockNuevo: number;
+      readonly motivo: string;
+    },
+  ): Promise<void> {
+    await client.query(
+      `
+        INSERT INTO movimientos_inventario (
+          producto_id,
+          usuario_id,
+          tipo,
+          cantidad,
+          stock_anterior,
+          stock_nuevo,
+          motivo
+        )
+        VALUES ($1, $2, 'AJUSTE', $3::numeric, $4::numeric, $5::numeric, $6)
+      `,
+      [
+        data.productoId,
+        data.usuarioId,
+        data.cantidad,
+        data.stockAnterior,
+        data.stockNuevo,
+        data.motivo,
+      ],
+    );
   }
 
   async deactivate(id: number): Promise<ProductoRow | null> {

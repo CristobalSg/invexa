@@ -299,6 +299,7 @@ export interface MovimientoInventario {
   id: number;
   producto_id: number;
   producto_nombre: string;
+  usuario_id: number | null;
   usuario_nombre: string | null;
   tipo: TipoMovimientoInventario;
   cantidad: number;
@@ -306,6 +307,20 @@ export interface MovimientoInventario {
   stock_nuevo: number | null;
   venta_id: number | null;
   compra_id: number | null;
+  venta_metodo_pago: MetodoPago | null;
+  venta_total: number | null;
+  venta_modalidad: ModalidadVenta | null;
+  venta_estado: EstadoVenta | null;
+  venta_sesion_caja_id: number | null;
+  venta_precio_unitario: number | null;
+  venta_descuento: number | null;
+  venta_total_final: number | null;
+  compra_total_costo: number | null;
+  compra_estado: "COMPLETADA" | "ANULADA" | null;
+  compra_costo_unitario: number | null;
+  compra_precio_anterior: number | null;
+  compra_precio_final: number | null;
+  compra_subtotal_costo: number | null;
   motivo: string | null;
   creado_en: string;
 }

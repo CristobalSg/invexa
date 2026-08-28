@@ -7,6 +7,7 @@ import {
   CheckCircleIcon,
   ClockIcon,
   CreditCardIcon,
+  EnvelopeIcon,
   TruckIcon,
   WalletIcon,
   XMarkIcon,
@@ -20,6 +21,7 @@ import {
   forzarCerrarCaja,
   getCajaActual,
   getCajaSesiones,
+  reenviarCorreoCierreCaja,
 } from "../services/cajaService";
 import type { CajaMovimiento, CajaSession, CategoriaMovimientoCaja, TipoMovimientoCaja } from "../types/api";
 import ListPanel from "../components/ListPanel";
@@ -246,10 +248,23 @@ export default function CajaPage() {
     onError: (error) => setMessage(error instanceof Error ? error.message : "No se pudo forzar el cierre de caja"),
   });
 
+  const reenviarCorreoCierre = useMutation({
+    mutationFn: (sessionId: number) => reenviarCorreoCierreCaja(sessionId),
+    onSuccess: (session) => {
+      setMessage("");
+      setToast({
+        ...buildCloseToast(session),
+        title: "Correo reenviado",
+      });
+    },
+    onError: (error) => setMessage(error instanceof Error ? error.message : "No se pudo reenviar el correo"),
+  });
+
   const diferenciaCierre =
     actual && efectivoContado !== ""
       ? Number(efectivoContado) - actual.resumen.monto_esperado_cierre
       : 0;
+  const reenviandoSesionId = reenviarCorreoCierre.isPending ? reenviarCorreoCierre.variables : null;
   const hasCashSales = Boolean(actual && actual.resumen.efectivo > 0);
   const hasDebitSales = Boolean(actual && actual.resumen.tarjeta > 0);
   const hasConsignationSales = Boolean(actual && actual.resumen.ventas_consignacion > 0);
@@ -482,6 +497,17 @@ export default function CajaPage() {
               ],
               amount: session.diferencia_cierre === null ? "-" : money(session.diferencia_cierre),
               amountClassName: (session.diferencia_cierre ?? 0) < 0 ? "text-red-700" : "text-green-700",
+              action: !session.abierta ? (
+                <button
+                  type="button"
+                  onClick={() => reenviarCorreoCierre.mutate(session.id)}
+                  disabled={reenviandoSesionId === session.id}
+                  className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-semibold text-[#7652ed] hover:bg-[#faf9ff] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <EnvelopeIcon className="h-4 w-4" />
+                  {reenviandoSesionId === session.id ? "Enviando..." : "Reenviar correo"}
+                </button>
+              ) : undefined,
             }))}
           />
         </div>

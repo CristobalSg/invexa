@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  CheckCircleIcon,
   ClipboardDocumentListIcon,
   DevicePhoneMobileIcon,
   MagnifyingGlassIcon,
@@ -43,6 +44,13 @@ type MasterAction =
   | { type: "clear-items" }
   | { type: "cancel-purchase"; compraId: number; motivo: string };
 type PurchaseAddMode = "codigo" | "buscar";
+type PurchaseToastTone = "success" | "warning" | "error";
+
+interface PurchaseToast {
+  readonly title: string;
+  readonly description: string;
+  readonly tone: PurchaseToastTone;
+}
 
 const money = (value: number) => `$${value.toLocaleString()}`;
 const toNumber = (value: string) => Number(value) || 0;
@@ -53,7 +61,6 @@ const slugifyAssetName = (value: string) =>
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
 const isWeightProduct = (product: Producto) => product.unidad_venta === "PESO";
-const initialQuantity = (product: Producto) => (isWeightProduct(product) ? "1000" : "1");
 const quantityStep = (product: Producto) => (isWeightProduct(product) ? 1 : 1);
 const quantityMin = (product: Producto) => (isWeightProduct(product) ? 1 : 1);
 const quantityForBackend = (item: CompraItemForm) => {
@@ -105,6 +112,7 @@ export default function ComprasPage() {
   const [productPage, setProductPage] = useState(1);
   const [items, setItems] = useState<CompraItemForm[]>([]);
   const [message, setMessage] = useState("");
+  const [toast, setToast] = useState<PurchaseToast | null>(null);
   const [masterAction, setMasterAction] = useState<MasterAction | null>(null);
   const [expandedCompraId, setExpandedCompraId] = useState<number | null>(null);
   const [mobilePurchasesOpen, setMobilePurchasesOpen] = useState(false);
@@ -138,6 +146,13 @@ export default function ComprasPage() {
     setProductPage(1);
   }, [addMode, categoriaId, normalizedName]);
 
+  useEffect(() => {
+    if (!toast) return;
+
+    const timer = window.setTimeout(() => setToast(null), 6500);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
+
   const productosFiltrados = productsListEnabled ? productos?.items ?? [] : [];
   const productPagination = productsListEnabled ? productos?.pagination : undefined;
 
@@ -146,18 +161,21 @@ export default function ComprasPage() {
     0,
   );
 
+  const notify = (toastMessage: PurchaseToast) => {
+    setToast(toastMessage);
+    setMessage(toastMessage.description);
+  };
+
   const openProductDraft = (product: Producto) => {
     setMessage("");
     const existingItem = items.find((item) => item.producto.id === product.id);
 
     setPurchaseItemDraft({
       producto: product,
-      cantidad: existingItem
-        ? String(toNumber(existingItem.cantidad) + toNumber(initialQuantity(product)))
-        : initialQuantity(product),
+      cantidad: existingItem?.cantidad ?? "",
       costo_unitario: existingItem?.costo_unitario ?? (product.costo_actual === null ? "" : String(product.costo_actual)),
       precio_final: existingItem?.precio_final ?? String(product.precio_venta),
-      actualizar_precio_venta: existingItem?.actualizar_precio_venta ?? true,
+      actualizar_precio_venta: false,
       editingProductId: existingItem?.producto.id,
     });
   };
@@ -190,7 +208,11 @@ export default function ComprasPage() {
     const validationMessage = createItemValidationMessage(draftItem);
 
     if (validationMessage) {
-      setMessage(validationMessage);
+      notify({
+        title: "Falta información",
+        description: validationMessage,
+        tone: "warning",
+      });
       return;
     }
 
@@ -215,7 +237,11 @@ export default function ComprasPage() {
 
     const product = await getProductByBarcode(barcode);
     if (!product) {
-      setMessage("No se encontró un producto con ese código. Puedes buscarlo por nombre o categoría.");
+      notify({
+        title: "Producto no encontrado",
+        description: "No se encontró un producto con ese código. Puedes buscarlo por nombre o categoría.",
+        tone: "warning",
+      });
       return;
     }
 
@@ -249,9 +275,17 @@ export default function ComprasPage() {
       setPurchaseItemsOpen(false);
       setRecentPurchasesOpen(true);
       closeMasterModal();
-      setMessage("Compra registrada.");
+      notify({
+        title: "Compra registrada",
+        description: "La compra quedó guardada y el inventario fue actualizado.",
+        tone: "success",
+      });
     },
-    onError: (error) => setMessage(error instanceof Error ? error.message : "No se pudo registrar compra"),
+    onError: (error) => notify({
+      title: "No se pudo registrar compra",
+      description: error instanceof Error ? error.message : "No se pudo registrar compra",
+      tone: "error",
+    }),
   });
 
   const anulacion = useMutation({
@@ -260,9 +294,17 @@ export default function ComprasPage() {
       queryClient.invalidateQueries({ queryKey: ["compras"] });
       queryClient.invalidateQueries({ queryKey: ["products"] });
       closeMasterModal();
-      setMessage("Compra anulada.");
+      notify({
+        title: "Compra anulada",
+        description: "La anulación quedó guardada y el inventario fue actualizado.",
+        tone: "success",
+      });
     },
-    onError: (error) => setMessage(error instanceof Error ? error.message : "No se pudo anular compra"),
+    onError: (error) => notify({
+      title: "No se pudo anular compra",
+      description: error instanceof Error ? error.message : "No se pudo anular compra",
+      tone: "error",
+    }),
   });
 
   const canSubmit =
@@ -301,7 +343,11 @@ export default function ComprasPage() {
     try {
       await authorizeAdmin(masterPassword);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "No se pudo autorizar");
+      notify({
+        title: "No se pudo autorizar",
+        description: error instanceof Error ? error.message : "No se pudo autorizar",
+        tone: "error",
+      });
       return;
     }
 
@@ -328,13 +374,21 @@ export default function ComprasPage() {
 
   const handleSubmitCompra = () => {
     if (items.length === 0) {
-      setMessage("Agrega al menos un producto a la compra.");
+      notify({
+        title: "Compra incompleta",
+        description: "Agrega al menos un producto a la compra.",
+        tone: "warning",
+      });
       return;
     }
 
     const validationMessage = items.map(createItemValidationMessage).find(Boolean);
     if (validationMessage) {
-      setMessage(validationMessage);
+      notify({
+        title: "Falta información",
+        description: validationMessage,
+        tone: "warning",
+      });
       return;
     }
 
@@ -343,6 +397,15 @@ export default function ComprasPage() {
 
   return (
     <div className="admin-page space-y-6">
+      {toast && (
+        <div className={`cash-close-toast ${toast.tone}`} role="status" aria-live="polite">
+          <CheckCircleIcon className="h-7 w-7" />
+          <div>
+            <h2>{toast.title}</h2>
+            <p>{toast.description}</p>
+          </div>
+        </div>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="admin-page-title">Compras</h1>
         <button
@@ -576,7 +639,7 @@ export default function ComprasPage() {
                     Limpiar
                   </Button>
                   <Button
-                    disabled={items.length === 0 || mutation.isPending}
+                    disabled={mutation.isPending}
                     onClick={handleSubmitCompra}
                   >
                     {mutation.isPending ? "Registrando..." : "Registrar compra"}

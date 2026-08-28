@@ -62,7 +62,7 @@ export const productosRoutes: FastifyPluginAsync = async (fastify) => {
     '/',
     { preHandler: createProducts, schema: createProductoSchema },
     async (request, reply) => {
-      const producto = await service.create(request.body, request.user.rol);
+      const producto = await service.create(request.body, request.user.id, request.user.rol);
       return created(reply, producto);
     },
   );
@@ -80,7 +80,7 @@ export const productosRoutes: FastifyPluginAsync = async (fastify) => {
     '/:id',
     { preHandler: createProducts, schema: updateProductoSchema },
     async (request, reply) => {
-      const producto = await service.update(request.params.id, request.body, request.user.rol);
+      const producto = await service.update(request.params.id, request.body, request.user.id, request.user.rol);
       return ok(reply, producto);
     },
   );

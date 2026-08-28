@@ -27,6 +27,11 @@ export async function forzarCerrarCaja(efectivo_contado: number, master_password
   return data;
 }
 
+export async function reenviarCorreoCierreCaja(id: number) {
+  const { data } = await api.post<CajaSession>(`/caja/sesiones/${id}/reenviar-correo`);
+  return data;
+}
+
 export async function crearMovimientoCaja(input: {
   tipo: TipoMovimientoCaja;
   categoria: CategoriaMovimientoCaja;

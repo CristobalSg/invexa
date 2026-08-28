@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   ArrowsRightLeftIcon,
   BanknotesIcon,
@@ -221,6 +221,7 @@ const readFeaturedCategoryIds = () => {
 };
 
 export default function Home() {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const barcodeInputRef = useRef<HTMLInputElement>(null);
   const productSearchInputRef = useRef<HTMLInputElement>(null);
@@ -426,6 +427,13 @@ export default function Home() {
     const quantity = p.quantity ?? 0;
     return acc + (p.costo_actual ?? p.precio_venta) * quantity;
   }, 0);
+  const ownerWithdrawalCostBlockers = Array.from(
+    new Map(
+      cart
+        .filter((product) => product.costo_actual === null || product.costo_actual <= 0)
+        .map((product) => [product.id, product]),
+    ).values(),
+  );
   const totalFinal =
     modalidadVenta === "RETIRO_DUENO"
       ? 0
@@ -442,7 +450,7 @@ export default function Home() {
   const cashSuggestions = createCashSuggestions(totalCobrar);
   const canConfirmSale =
     modalidadVenta === "RETIRO_DUENO"
-        ? true
+        ? ownerWithdrawalCostBlockers.length === 0
         : metodoPago === "EFECTIVO"
           ? cashReceivedAmount >= totalCobrar
           : metodoPago === "MIXTO"
@@ -501,6 +509,11 @@ export default function Home() {
   };
 
   const handleFinishSale = async (adminPassword?: string) => {
+    if (modalidadVenta === "RETIRO_DUENO" && ownerWithdrawalCostBlockers.length > 0) {
+      setMessage("Completa el costo de los productos bloqueados antes de registrar el retiro.");
+      return;
+    }
+
     if (metodoPago === "EFECTIVO" && cashReceivedAmount < totalCobrar) {
       setMessage("El monto recibido no alcanza para pagar la venta.");
       return;
@@ -729,6 +742,12 @@ export default function Home() {
     setSalePasswordOpen(false);
     setCashReceived(toInputAmount(metodoPago === "EFECTIVO" ? roundToNearestTen(nextTotal) : nextTotal));
     setMixedAmounts(createMixedAmounts(mixedMethods, nextTotal));
+  };
+
+  const handleEditCostFromWithdrawal = (productId: number) => {
+    setPaymentModalOpen(false);
+    setSalePasswordOpen(false);
+    navigate(`/productos?editar=${productId}`);
   };
 
   const renderModalPagination = (
@@ -1560,8 +1579,27 @@ export default function Home() {
                   </div>
                 )}
                 {modalidadVenta === "RETIRO_DUENO" && (
-                  <div className="rounded-[20px] border border-[#ececf0] bg-[#fafafa] p-4 text-sm text-[#5f626b]">
-                    Este registro descontará stock y quedará marcado como retiro de dueño. No suma efectivo al cierre de caja.
+                  <div className="owner-withdrawal-info">
+                    <p>
+                      Este registro descontará stock y quedará marcado como retiro de dueño. No suma efectivo al cierre de caja.
+                    </p>
+                    {ownerWithdrawalCostBlockers.length > 0 && (
+                      <div className="owner-withdrawal-blockers">
+                        <strong>Productos sin costo registrado</strong>
+                        <div>
+                          {ownerWithdrawalCostBlockers.map((product) => (
+                            <button
+                              key={product.id}
+                              type="button"
+                              onClick={() => handleEditCostFromWithdrawal(product.id)}
+                            >
+                              <span>{product.nombre}</span>
+                              <small>{product.costo_actual === null ? "Sin costo" : "Costo $0"}</small>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

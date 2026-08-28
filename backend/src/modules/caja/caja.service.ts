@@ -362,6 +362,17 @@ export class CajaService {
     return this.mapSessionDetalle(session, resumen, movimientos);
   }
 
+  async reenviarCorreoCierre(user: CajaUserContext, id: number): Promise<CajaSessionDetalle> {
+    const session = await this.findById(user, id);
+
+    if (session.abierta || !session.cerrada_en) {
+      throw new BadRequestError('Solo se pueden reenviar correos de cajas cerradas');
+    }
+
+    const notificacionCorreos = await this.sendCashCloseEmailSafely(session);
+    return { ...session, notificacion_correos: notificacionCorreos };
+  }
+
   private mapSessionDetalle(
     row: CajaSessionRow | CajaSessionListRow,
     resumen: CajaResumenRow,

@@ -364,3 +364,17 @@ export const getCajaSessionSchema = {
     },
   },
 } as const;
+
+export const reenviarCorreoCierreCajaSchema = {
+  params: idParamsSchema,
+  response: {
+    200: {
+      type: 'object',
+      required: ['success', 'data'],
+      properties: {
+        success: { type: 'boolean' },
+        data: cajaSessionDetalleSchema,
+      },
+    },
+  },
+} as const;

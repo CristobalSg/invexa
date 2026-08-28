@@ -57,6 +57,7 @@ export default function ProductTile({
   const productImage = productImagesBySlug[slugifyAssetName(product.nombre)];
   const isCompact = density === "compact";
   const isQuickCompact = isCompact && compactVariant === "quick";
+  const isOutOfStock = product.stock <= 0;
 
   if (mode === "inventory") {
     return (
@@ -86,6 +87,7 @@ export default function ProductTile({
       <div className="pos-product-visual">
         {productImage ? <img src={productImage} alt="" /> : productVisual(product)}
       </div>
+      {isOutOfStock && <span className="pos-product-stock-badge">Sin stock</span>}
       {onToggleFeatured && (
         <span
           role="button"
@@ -127,7 +129,7 @@ export default function ProductTile({
   );
 
   return (
-    <button type="button" className={`pos-product-card text-left ${isCompact ? "compact" : ""} ${isQuickCompact ? "quick" : ""}`} onClick={onClick}>
+    <button type="button" className={`pos-product-card text-left ${isCompact ? "compact" : ""} ${isQuickCompact ? "quick" : ""} ${isOutOfStock ? "out-of-stock" : ""}`} onClick={onClick}>
       {content}
     </button>
   );

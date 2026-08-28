@@ -3,6 +3,7 @@ import type { Pool } from 'pg';
 import type { UserRole } from '../../plugins/jwt.plugin.js';
 import { BadRequestError, ConflictError, NotFoundError } from '../../utils/errors.js';
 import { assertValidOwnerPassword } from '../../utils/master-authorization.js';
+import { withTransaction } from '../../utils/transactions.js';
 import type { ProductosRepository } from './productos.repository.js';
 import type {
   CreateProductoBody,
@@ -60,7 +61,7 @@ export class ProductosService {
     return this.mapProducto(producto);
   }
 
-  async create(data: CreateProductoBody, userRole: UserRole): Promise<Producto> {
+  async create(data: CreateProductoBody, usuarioId: number, userRole: UserRole): Promise<Producto> {
     if (userRole !== 'OWNER') {
       await assertValidOwnerPassword(this.pool, data.master_password);
     }
@@ -72,11 +73,26 @@ export class ProductosService {
     );
     await this.ensureCodigoAvailable(data.codigo_barras ?? null);
 
-    const producto = await this.repository.create(data);
-    return this.mapProducto(producto);
+    return withTransaction(this.pool, async (client) => {
+      const producto = await this.repository.create(data, client);
+      const stockInicial = Number(producto.stock);
+
+      if (producto.modo_inventario !== 'SIN_INVENTARIO' && stockInicial > 0) {
+        await this.repository.createMovimientoAjuste(client, {
+          productoId: producto.id,
+          usuarioId,
+          cantidad: stockInicial,
+          stockAnterior: 0,
+          stockNuevo: stockInicial,
+          motivo: 'Creacion de producto con stock inicial',
+        });
+      }
+
+      return this.mapProducto(producto);
+    });
   }
 
-  async update(id: number, data: UpdateProductoBody, userRole: UserRole): Promise<Producto> {
+  async update(id: number, data: UpdateProductoBody, usuarioId: number, userRole: UserRole): Promise<Producto> {
     if (userRole !== 'OWNER') {
       await assertValidOwnerPassword(this.pool, data.master_password ?? '');
     }
@@ -99,13 +115,30 @@ export class ProductosService {
       await this.ensureCodigoAvailable(data.codigo_barras ?? null, id);
     }
 
-    const producto = await this.repository.update(id, data);
+    return withTransaction(this.pool, async (client) => {
+      const producto = await this.repository.update(id, data, client);
 
-    if (!producto) {
-      throw new NotFoundError('Producto no encontrado');
-    }
+      if (!producto) {
+        throw new NotFoundError('Producto no encontrado');
+      }
 
-    return this.mapProducto(producto);
+      const stockAnterior = Number(current.stock);
+      const stockNuevo = Number(producto.stock);
+      const stockCambiado = Object.hasOwn(data, 'stock') && stockAnterior !== stockNuevo;
+
+      if (stockCambiado && producto.modo_inventario !== 'SIN_INVENTARIO') {
+        await this.repository.createMovimientoAjuste(client, {
+          productoId: producto.id,
+          usuarioId,
+          cantidad: this.round(Math.abs(stockNuevo - stockAnterior), 3),
+          stockAnterior,
+          stockNuevo,
+          motivo: 'Ajuste manual de stock desde producto',
+        });
+      }
+
+      return this.mapProducto(producto);
+    });
   }
 
   async deactivate(id: number, data: { readonly master_password?: string }, userRole: UserRole): Promise<Producto> {
@@ -197,5 +230,10 @@ export class ProductosService {
       creado_en: row.creado_en.toISOString(),
       actualizado_en: row.actualizado_en.toISOString(),
     };
+  }
+
+  private round(value: number, decimals: number): number {
+    const factor = 10 ** decimals;
+    return Math.round((value + Number.EPSILON) * factor) / factor;
   }
 }
