@@ -22,6 +22,7 @@ interface ListPanelProps {
   title: string;
   items: ListPanelItem[];
   icon?: IconComponent;
+  action?: ReactNode;
   emptyMessage?: string;
   isLoading?: boolean;
   loadingMessage?: string;
@@ -34,6 +35,7 @@ export default function ListPanel({
   title,
   items,
   icon: HeaderIcon,
+  action,
   emptyMessage = "Sin registros.",
   isLoading = false,
   loadingMessage = "Cargando...",
@@ -67,13 +69,16 @@ export default function ListPanel({
 
   return (
     <section className="overflow-hidden rounded-[28px] border border-white/90 bg-white shadow-[0_18px_50px_rgba(31,35,48,.08)]">
-      <div className="flex items-center gap-3 border-b border-[#efeff2] px-5 py-4">
-        {HeaderIcon && (
-          <span className="flex h-10 w-10 items-center justify-center rounded-[14px] bg-[#f7f7f9] text-[#7652ed]">
-            <HeaderIcon className="h-5 w-5" />
-          </span>
-        )}
-        <h2 className="font-bold tracking-[-0.02em] text-[#17181d]">{title}</h2>
+      <div className="flex items-center justify-between gap-3 border-b border-[#efeff2] px-5 py-4">
+        <div className="flex min-w-0 items-center gap-3">
+          {HeaderIcon && (
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] bg-[#f7f7f9] text-[#7652ed]">
+              <HeaderIcon className="h-5 w-5" />
+            </span>
+          )}
+          <h2 className="font-bold tracking-[-0.02em] text-[#17181d]">{title}</h2>
+        </div>
+        {action && <div className="shrink-0">{action}</div>}
       </div>
 
       {isLoading ? (

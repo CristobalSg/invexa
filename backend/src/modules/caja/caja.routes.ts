@@ -15,6 +15,7 @@ import {
   forzarCerrarCajaSchema,
   crearMovimientoCajaSchema,
   getCajaSessionSchema,
+  getCajaSessionConsignacionSchema,
   listMovimientosCajaSchema,
   listCajaSessionsSchema,
   reenviarCorreoCierreCajaSchema,
@@ -170,6 +171,22 @@ export const cajaRoutes: FastifyPluginAsync = async (fastify) => {
       );
 
       return ok(reply, session);
+    },
+  );
+
+  fastify.get<{ Params: CajaSessionParams }>(
+    '/sesiones/:id/consignacion',
+    { preHandler: cajaAccess, schema: getCajaSessionConsignacionSchema },
+    async (request, reply) => {
+      const providerSales = await service.findConsignacionBySession(
+        {
+          id: request.user.id,
+          rol: request.user.rol,
+        },
+        request.params.id,
+      );
+
+      return ok(reply, providerSales);
     },
   );
 

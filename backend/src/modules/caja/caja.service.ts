@@ -362,6 +362,15 @@ export class CajaService {
     return this.mapSessionDetalle(session, resumen, movimientos);
   }
 
+  async findConsignacionBySession(
+    user: CajaUserContext,
+    id: number,
+  ): Promise<CajaConsignacionProveedorVentas[]> {
+    await this.findById(user, id);
+    const rows = await this.repository.findConsignacionVentasBySessionId(id);
+    return this.groupConsignmentSalesByProvider(rows);
+  }
+
   async reenviarCorreoCierre(user: CajaUserContext, id: number): Promise<CajaSessionDetalle> {
     const session = await this.findById(user, id);
 

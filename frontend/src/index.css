@@ -3005,6 +3005,23 @@ html.hide-cursor *::after {
   gap: 12px;
 }
 
+.top-product-rankings {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.top-product-ranking {
+  min-width: 0;
+}
+
+.top-product-ranking > h3 {
+  margin: 0 0 10px;
+  color: #5f626b;
+  font-size: 13px;
+  font-weight: 950;
+}
+
 .payment-stat-row {
   display: grid;
   gap: 7px;
@@ -3065,7 +3082,8 @@ html.hide-cursor *::after {
   font-weight: 950;
 }
 
-.top-product-row h3 {
+.top-product-row h3,
+.top-product-row h4 {
   margin: 0;
   overflow: hidden;
   color: var(--flow-ink);
@@ -3161,6 +3179,149 @@ html.hide-cursor *::after {
 
 .reports-table tbody tr:hover {
   background: #fbfbfc;
+}
+
+.reports-low-stock-modal {
+  width: min(980px, calc(100vw - 24px));
+}
+
+.reports-low-stock-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 180px)) minmax(220px, 1fr);
+  gap: 12px;
+  align-items: center;
+  margin-top: 20px;
+}
+
+.reports-low-stock-summary span {
+  border-radius: 18px;
+  background: #fff7ed;
+  padding: 14px 16px;
+  color: #9a3412;
+  font-size: 24px;
+  font-weight: 950;
+}
+
+.reports-low-stock-summary small {
+  display: block;
+  margin-bottom: 3px;
+  color: #c2410c;
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+
+.reports-low-stock-summary p {
+  margin: 0;
+  color: #8b8e98;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.reports-low-stock-categories {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.reports-low-stock-category {
+  overflow: hidden;
+  border: 1px solid #ececf0;
+  border-radius: 22px;
+  background: #fff;
+}
+
+.reports-low-stock-category > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid #efeff2;
+  background: #fbfaf7;
+  padding: 13px 15px;
+}
+
+.reports-low-stock-category > header > div {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.reports-low-stock-category h3 {
+  overflow: hidden;
+  margin: 0;
+  color: #17181d;
+  font-size: 15px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reports-low-stock-category > header > strong {
+  display: grid;
+  min-width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 10px;
+  background: #ffedd5;
+  color: #9a3412;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.reports-low-stock-category article {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 15px;
+}
+
+.reports-low-stock-category article + article {
+  border-top: 1px solid #f0f0f2;
+}
+
+.reports-low-stock-category article span {
+  min-width: 0;
+}
+
+.reports-low-stock-category article b,
+.reports-low-stock-category article small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reports-low-stock-category article b {
+  color: #25262c;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.reports-low-stock-category article small {
+  margin-top: 2px;
+  color: #9b9da5;
+  font-size: 11px;
+}
+
+.reports-low-stock-category article > strong {
+  color: #b45309;
+  font-size: 16px;
+  font-weight: 950;
+}
+
+.reports-low-stock-limit {
+  margin: 16px 0 0;
+  border-radius: 14px;
+  background: #fff7ed;
+  padding: 10px 12px;
+  color: #9a3412;
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .cash-close-modal {
@@ -3440,7 +3601,8 @@ html.hide-cursor *::after {
   margin-top: 12px;
 }
 
-.cash-close-provider-list div {
+.cash-close-provider-list div,
+.cash-close-provider-list button {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -3449,6 +3611,18 @@ html.hide-cursor *::after {
   border-radius: 14px;
   background: #fff;
   padding: 10px 12px;
+}
+
+.cash-close-provider-list button {
+  width: 100%;
+  text-align: left;
+  transition: .16s ease;
+}
+
+.cash-close-provider-list button:hover {
+  border-color: #d8d1ff;
+  background: #faf9ff;
+  transform: translateY(-1px);
 }
 
 .cash-close-provider-list span {
@@ -3482,6 +3656,79 @@ html.hide-cursor *::after {
 .cash-close-card.actions {
   display: grid;
   gap: 12px;
+}
+
+.cash-session-state {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  border-radius: 14px;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+
+.cash-session-state.open {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.cash-session-state.closed {
+  background: #f3f4f6;
+  color: #5f626b;
+}
+
+.cash-session-positive {
+  color: #047857 !important;
+}
+
+.cash-session-negative {
+  color: #b91c1c !important;
+}
+
+.cash-session-movements,
+.cash-detail-items {
+  grid-column: 1 / -1;
+}
+
+.cash-session-movements .cash-close-lines,
+.cash-detail-items .cash-close-lines {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.cash-session-movements .cash-close-lines b,
+.cash-detail-items .cash-close-lines b {
+  min-width: 0;
+}
+
+.cash-session-movements .cash-close-lines small,
+.cash-detail-items .cash-close-lines small {
+  display: block;
+  margin-top: 3px;
+  overflow: hidden;
+  color: #8b8e98;
+  font-size: 11px;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.purchase-detail-grid {
+  grid-template-columns: minmax(240px, .65fr) minmax(0, 1.35fr);
+}
+
+.purchase-detail-items {
+  grid-column: auto;
+}
+
+.cash-provider-detail-backdrop {
+  z-index: 60;
+}
+
+.cash-provider-detail-modal {
+  width: min(900px, 100%);
 }
 
 .cash-close-audit {
@@ -4842,6 +5089,15 @@ html.hide-cursor *::after {
     grid-template-columns: 1fr;
   }
 
+  .cash-session-movements .cash-close-lines,
+  .cash-detail-items .cash-close-lines {
+    grid-template-columns: 1fr;
+  }
+
+  .purchase-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
   .inventory-filter-bar {
     grid-template-columns: 1fr;
   }
@@ -4926,6 +5182,15 @@ html.hide-cursor *::after {
 
   .reports-metric-grid,
   .reports-split {
+    grid-template-columns: 1fr;
+  }
+
+  .reports-low-stock-summary,
+  .reports-low-stock-categories {
+    grid-template-columns: 1fr;
+  }
+
+  .top-product-rankings {
     grid-template-columns: 1fr;
   }
 

@@ -83,6 +83,7 @@ const paymentMethodIcons = {
 } satisfies Record<MetodoPago, typeof BanknotesIcon>;
 
 const cashSuggestionAmounts = [1000, 2000, 5000, 10000, 20000];
+const saleCartsStorageKey = "pos-sale-carts";
 const featuredProductsStorageKey = "pos-featured-products";
 const featuredCategoriesStorageKey = "pos-featured-categories";
 const productModalPageSize = 30;
@@ -196,6 +197,40 @@ const createCashSuggestions = (total: number) => {
   return uniqueAmounts;
 };
 
+const readSaleCarts = (): CartSession[] => {
+  try {
+    const stored = window.sessionStorage.getItem(saleCartsStorageKey);
+    if (!stored) return [createCartSession(1)];
+
+    const parsed: unknown = JSON.parse(stored);
+    if (!Array.isArray(parsed) || parsed.length === 0) return [createCartSession(1)];
+
+    const cartsAreValid = parsed.every((cartSession) =>
+      cartSession !== null &&
+      typeof cartSession === "object" &&
+      typeof cartSession.id === "string" &&
+      typeof cartSession.name === "string" &&
+      Array.isArray(cartSession.items) &&
+      cartSession.items.every((item: unknown) =>
+        item !== null &&
+        typeof item === "object" &&
+        "id" in item &&
+        typeof item.id === "number" &&
+        "quantity" in item &&
+        typeof item.quantity === "number" &&
+        Number.isFinite(item.quantity) &&
+        item.quantity > 0 &&
+        "cartItemId" in item &&
+        typeof item.cartItemId === "string",
+      ),
+    );
+
+    return cartsAreValid ? parsed as CartSession[] : [createCartSession(1)];
+  } catch {
+    return [createCartSession(1)];
+  }
+};
+
 const readFeaturedProductIds = () => {
   try {
     const stored = window.sessionStorage.getItem(featuredProductsStorageKey);
@@ -236,7 +271,7 @@ export default function Home() {
   const [isPriceLookupLoading, setIsPriceLookupLoading] = useState(false);
   const [barcodeClearSignal, setBarcodeClearSignal] = useState(0);
   const [productShelfFilter, setProductShelfFilter] = useState<ProductShelfFilter>("featured");
-  const [carts, setCarts] = useState<CartSession[]>(() => [createCartSession(1)]);
+  const [carts, setCarts] = useState<CartSession[]>(readSaleCarts);
   const [activeCartId] = useState(() => "");
   const [message, setMessage] = useState("");
   const [centerAlert, setCenterAlert] = useState("");
@@ -333,21 +368,31 @@ export default function Home() {
   const resolvedActiveCartId = activeCartId || carts[0]?.id || "";
   const activeCart = carts.find((cartSession) => cartSession.id === resolvedActiveCartId) ?? carts[0];
   const cart = activeCart?.items ?? [];
+  const isBarcodeFocusBlocked = Boolean(
+    isProductSearchOpen ||
+    isPriceLookupOpen ||
+    categoryModalOpen ||
+    quickProductsModal ||
+    paymentModalOpen ||
+    salePasswordOpen ||
+    weighableProduct ||
+    centerAlert,
+  );
 
   const focusBarcodeInput = (force = false) => {
     window.setTimeout(() => {
-      if (
-        force ||
-        (!isProductSearchOpen && !isPriceLookupOpen && !categoryModalOpen && !quickProductsModal && !paymentModalOpen && !salePasswordOpen && !weighableProduct)
-      ) {
+      if (force || !isBarcodeFocusBlocked) {
         barcodeInputRef.current?.focus();
       }
     }, 0);
   };
 
   useEffect(() => {
-    focusBarcodeInput(true);
-  }, []);
+    if (isBarcodeFocusBlocked) return;
+
+    const focusTimer = window.setTimeout(() => barcodeInputRef.current?.focus(), 0);
+    return () => window.clearTimeout(focusTimer);
+  }, [isBarcodeFocusBlocked]);
 
   useEffect(() => {
     if (isProductSearchOpen) {
@@ -372,6 +417,10 @@ export default function Home() {
   useEffect(() => {
     window.sessionStorage.setItem(featuredProductsStorageKey, JSON.stringify(featuredProductIds));
   }, [featuredProductIds]);
+
+  useEffect(() => {
+    window.sessionStorage.setItem(saleCartsStorageKey, JSON.stringify(carts));
+  }, [carts]);
 
   useEffect(() => {
     window.sessionStorage.setItem(featuredCategoriesStorageKey, JSON.stringify(featuredCategoryIds));
@@ -716,6 +765,8 @@ export default function Home() {
       setPriceLookupMessage(error instanceof Error ? error.message : "No se pudo consultar el precio");
     } finally {
       setIsPriceLookupLoading(false);
+      setPriceLookupCode("");
+      window.setTimeout(() => priceLookupInputRef.current?.focus(), 0);
     }
   };
 
@@ -780,7 +831,15 @@ export default function Home() {
   };
 
   return (
-    <div className="pos-main-content">
+    <div
+      className="pos-main-content"
+      onPointerDown={(event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+        if (target.closest("button, a, input, textarea, select, [contenteditable='true'], .flow-modal-backdrop")) return;
+        focusBarcodeInput();
+      }}
+    >
       <section className="pos-catalog-panel">
         <header className="pos-header-row">
           <div>

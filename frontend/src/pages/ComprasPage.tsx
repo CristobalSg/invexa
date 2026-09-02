@@ -68,6 +68,7 @@ const quantityForBackend = (item: CompraItemForm) => {
   return isWeightProduct(item.producto) ? quantity / 1000 : quantity;
 };
 const quantityLabel = (product: Producto) => (isWeightProduct(product) ? "Gramos" : "Unidades");
+const purchaseItemsStorageKey = "purchase-draft-items";
 const purchaseProductPageSize = 12;
 const purchaseAddModes: Array<{ value: PurchaseAddMode; label: string; icon: typeof QrCodeIcon }> = [
   { value: "codigo", label: "Por código", icon: QrCodeIcon },
@@ -100,6 +101,40 @@ const createItemValidationMessage = (item: CompraItemForm) => {
   return null;
 };
 
+const readPurchaseItems = (): CompraItemForm[] => {
+  try {
+    const stored = window.sessionStorage.getItem(purchaseItemsStorageKey);
+    if (!stored) return [];
+
+    const parsed: unknown = JSON.parse(stored);
+    if (!Array.isArray(parsed)) return [];
+
+    const itemsAreValid = parsed.every((item) =>
+      item !== null &&
+      typeof item === "object" &&
+      "producto" in item &&
+      item.producto !== null &&
+      typeof item.producto === "object" &&
+      "id" in item.producto &&
+      typeof item.producto.id === "number" &&
+      "cantidad" in item &&
+      typeof item.cantidad === "string" &&
+      "costo_unitario" in item &&
+      typeof item.costo_unitario === "string" &&
+      "precio_final" in item &&
+      typeof item.precio_final === "string" &&
+      "actualizar_precio_venta" in item &&
+      typeof item.actualizar_precio_venta === "boolean" &&
+      "unlocked" in item &&
+      typeof item.unlocked === "boolean",
+    );
+
+    return itemsAreValid ? parsed as CompraItemForm[] : [];
+  } catch {
+    return [];
+  }
+};
+
 export default function ComprasPage() {
   const queryClient = useQueryClient();
   const { data: categorias } = useQuery({ queryKey: ["categorias"], queryFn: () => getCategorias() });
@@ -110,14 +145,14 @@ export default function ComprasPage() {
   const [categoriaId, setCategoriaId] = useState("");
   const [addMode, setAddMode] = useState<PurchaseAddMode>("codigo");
   const [productPage, setProductPage] = useState(1);
-  const [items, setItems] = useState<CompraItemForm[]>([]);
+  const [items, setItems] = useState<CompraItemForm[]>(readPurchaseItems);
   const [message, setMessage] = useState("");
   const [toast, setToast] = useState<PurchaseToast | null>(null);
   const [masterAction, setMasterAction] = useState<MasterAction | null>(null);
   const [expandedCompraId, setExpandedCompraId] = useState<number | null>(null);
   const [mobilePurchasesOpen, setMobilePurchasesOpen] = useState(false);
-  const [purchaseItemsOpen, setPurchaseItemsOpen] = useState(false);
-  const [recentPurchasesOpen, setRecentPurchasesOpen] = useState(true);
+  const [purchaseItemsOpen, setPurchaseItemsOpen] = useState(() => items.length > 0);
+  const [recentPurchasesOpen, setRecentPurchasesOpen] = useState(() => items.length === 0);
   const [purchaseItemDraft, setPurchaseItemDraft] = useState<CompraItemDraft | null>(null);
 
   const compraDetalle = useQuery({
@@ -152,6 +187,10 @@ export default function ComprasPage() {
     const timer = window.setTimeout(() => setToast(null), 6500);
     return () => window.clearTimeout(timer);
   }, [toast]);
+
+  useEffect(() => {
+    window.sessionStorage.setItem(purchaseItemsStorageKey, JSON.stringify(items));
+  }, [items]);
 
   const productosFiltrados = productsListEnabled ? productos?.items ?? [] : [];
   const productPagination = productsListEnabled ? productos?.pagination : undefined;
@@ -682,46 +721,18 @@ export default function ComprasPage() {
                     icon: ReceiptRefundIcon,
                     title: `Compra #${compra.id}`,
                     description: compra.usuario_nombre,
+                    onClick: () => setExpandedCompraId(compra.id),
                     meta: [new Date(compra.creado_en).toLocaleString(), compra.estado],
                     amount: money(compra.total_costo),
-                    action: (
+                    action: compra.estado === "COMPLETADA" ? (
                       <div className="flex gap-2">
-                        <button
-                          className="rounded-md px-3 py-1.5 text-sm font-semibold text-blue-700 hover:bg-blue-50"
-                          onClick={() => setExpandedCompraId((current) => (current === compra.id ? null : compra.id))}
-                        >
-                          {expandedCompraId === compra.id ? "Ocultar" : "Ver detalle"}
+                        <button className="rounded-md px-3 py-1.5 text-sm font-semibold text-red-600 hover:bg-red-50" onClick={() => {
+                          const motivo = window.prompt("Motivo de anulación de compra");
+                          if (motivo) setMasterAction({ type: "cancel-purchase", compraId: compra.id, motivo });
+                        }}>
+                          Anular
                         </button>
-                        {compra.estado === "COMPLETADA" && (
-                          <button className="rounded-md px-3 py-1.5 text-sm font-semibold text-red-600 hover:bg-red-50" onClick={() => {
-                            const motivo = window.prompt("Motivo de anulación de compra");
-                            if (motivo) setMasterAction({ type: "cancel-purchase", compraId: compra.id, motivo });
-                          }}>
-                            Anular
-                          </button>
-                        )}
                       </div>
-                    ),
-                    expandedContent: expandedCompraId === compra.id ? (
-                      compraDetalle.isLoading ? (
-                        <p className="text-sm text-gray-500">Cargando detalle...</p>
-                      ) : compraDetalle.data ? (
-                        <div className="space-y-2">
-                          {compraDetalle.data.detalles.map((detalle) => (
-                            <div key={detalle.id} className="grid gap-2 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm md:grid-cols-[1fr_auto_auto_auto]">
-                              <div>
-                                <p className="font-semibold text-gray-900">{detalle.producto_nombre}</p>
-                                <p className="text-xs text-gray-500">Producto #{detalle.producto_id}</p>
-                              </div>
-                              <span className="text-gray-600">Cantidad {detalle.cantidad}</span>
-                              <span className="text-gray-600">Costo {money(detalle.costo_unitario)}</span>
-                              <span className="font-semibold text-gray-900">{money(detalle.subtotal_costo)}</span>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-sm text-red-600">No se pudo cargar el detalle.</p>
-                      )
                     ) : undefined,
                   }))}
                 />
@@ -730,6 +741,84 @@ export default function ComprasPage() {
           </section>
         </div>
       </div>
+
+      {expandedCompraId !== null && (
+        <div
+          className="flow-modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setExpandedCompraId(null);
+          }}
+        >
+          <div className="cash-close-modal" role="dialog" aria-modal="true" aria-labelledby="purchase-detail-title">
+            <div className="cash-close-head">
+              <div>
+                <p>Detalle de compra</p>
+                <h2 id="purchase-detail-title">Compra #{expandedCompraId}</h2>
+              </div>
+              <div className="cash-close-head-actions">
+                {compraDetalle.data && (
+                  <span className={`cash-session-state ${compraDetalle.data.estado === "COMPLETADA" ? "open" : "closed"}`}>
+                    {compraDetalle.data.estado}
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setExpandedCompraId(null)}
+                  className="cash-close-x"
+                  aria-label="Cerrar detalle de compra"
+                  title="Cerrar"
+                >
+                  <XMarkIcon className="h-6 w-6" />
+                </button>
+              </div>
+            </div>
+
+            {compraDetalle.isLoading ? (
+              <p className="p-8 text-center text-sm font-semibold text-[#8b8e98]">Cargando detalle...</p>
+            ) : compraDetalle.data ? (
+              <div className="cash-close-grid purchase-detail-grid">
+                <section className="cash-close-card highlight">
+                  <div className="cash-close-card-title">
+                    <ReceiptRefundIcon className="h-6 w-6" />
+                    <span>Total de la compra</span>
+                  </div>
+                  <strong>{money(compraDetalle.data.total_costo)}</strong>
+                  <div className="cash-close-lines">
+                    <span><b>Productos</b>{compraDetalle.data.detalles.length}</span>
+                    <span><b>Responsable</b>{compraDetalle.data.usuario_nombre}</span>
+                    <span><b>Fecha</b>{new Date(compraDetalle.data.creado_en).toLocaleString()}</span>
+                    <span><b>Estado</b>{compraDetalle.data.estado}</span>
+                  </div>
+                </section>
+
+                <section className="cash-close-card cash-detail-items purchase-detail-items">
+                  <div className="cash-close-card-title">
+                    <ClipboardDocumentListIcon className="h-6 w-6" />
+                    <span>Productos comprados</span>
+                  </div>
+                  <div className="cash-close-lines">
+                    {compraDetalle.data.detalles.map((detalle) => (
+                      <span key={detalle.id}>
+                        <b>
+                          {detalle.producto_nombre}
+                          <small>
+                            Cantidad {detalle.cantidad} · Costo unitario {money(detalle.costo_unitario)} · Precio final {money(detalle.precio_final)}
+                          </small>
+                        </b>
+                        <strong className={detalle.tiene_alerta_precio ? "cash-session-negative" : ""}>
+                          {money(detalle.subtotal_costo)}
+                        </strong>
+                      </span>
+                    ))}
+                  </div>
+                </section>
+              </div>
+            ) : (
+              <p className="p-8 text-center text-sm font-semibold text-red-600">No se pudo cargar el detalle.</p>
+            )}
+          </div>
+        </div>
+      )}
 
       {purchaseItemDraft && (
         <div

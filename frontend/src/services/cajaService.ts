@@ -1,6 +1,7 @@
 import api from "../lib/axios";
 import type {
   CajaMovimiento,
+  CajaConsignacionProveedorVentas,
   CajaSession,
   CategoriaMovimientoCaja,
   PaginatedResult,
@@ -29,6 +30,11 @@ export async function forzarCerrarCaja(efectivo_contado: number, master_password
 
 export async function reenviarCorreoCierreCaja(id: number) {
   const { data } = await api.post<CajaSession>(`/caja/sesiones/${id}/reenviar-correo`);
+  return data;
+}
+
+export async function getCajaConsignacionBySession(id: number) {
+  const { data } = await api.get<CajaConsignacionProveedorVentas[]>(`/caja/sesiones/${id}/consignacion`);
   return data;
 }
 

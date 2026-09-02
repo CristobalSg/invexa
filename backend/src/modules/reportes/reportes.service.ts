@@ -18,6 +18,7 @@ import type {
   ProductoReporteRow,
   ProductoTop,
   ProductoTopRow,
+  ProductosTop,
   VentasMensual,
   VentasMensualRow,
   VentasResumen,
@@ -57,18 +58,30 @@ export class ReportesService {
     };
   }
 
-  async productosTop(query: PaginationQuery): Promise<PaginatedResult<ProductoTop>> {
-    const page = query.page ?? 1;
-    const limit = query.limit ?? 20;
+  async productosTop(query: PaginationQuery): Promise<ProductosTop> {
+    const page = 1;
+    const limit = Math.min(query.limit ?? 10, 10);
     const rows = await this.repository.productosTop({ ...query, page, limit });
-    const total = rows[0] ? Number(rows[0].total_count) : 0;
+    const mappedRows = rows.map((row) => ({
+      item: this.mapProductoTop(row),
+      cantidadRank: Number(row.cantidad_rank),
+      ingresosRank: Number(row.ingresos_rank),
+    }));
 
-    return this.paginate(
-      rows.map((row) => this.mapProductoTop(row)),
-      page,
-      limit,
-      total,
-    );
+    return {
+      por_unidades: mappedRows
+        .filter(({ item, cantidadRank }) => item.unidad_venta === 'UNIDAD' && cantidadRank <= limit)
+        .sort((first, second) => first.cantidadRank - second.cantidadRank)
+        .map(({ item }) => item),
+      por_peso: mappedRows
+        .filter(({ item, cantidadRank }) => item.unidad_venta === 'PESO' && cantidadRank <= limit)
+        .sort((first, second) => first.cantidadRank - second.cantidadRank)
+        .map(({ item }) => item),
+      por_ingresos: mappedRows
+        .filter(({ ingresosRank }) => ingresosRank <= limit)
+        .sort((first, second) => first.ingresosRank - second.ingresosRank)
+        .map(({ item }) => item),
+    };
   }
 
   async inventario(query: PaginationQuery): Promise<InventarioPaginatedResult> {
@@ -199,8 +212,9 @@ export class ReportesService {
     return {
       producto_id: row.producto_id,
       producto_nombre: row.producto_nombre,
+      unidad_venta: row.unidad_venta,
       cantidad_vendida: Number(row.cantidad_vendida),
-      total_vendido: Number(row.total_vendido),
+      ingresos: Number(row.ingresos),
     };
   }
 

@@ -5,7 +5,7 @@ import type {
   InventarioItem,
   InventarioReporte,
   PaginatedResult,
-  ProductoTop,
+  ProductosTop,
   VentasMensual,
   VentasResumen,
 } from "../types/api";
@@ -29,7 +29,7 @@ export async function getCierreCajaDiario(params: Pick<DateRange, "fecha_desde">
 }
 
 export async function getProductosTop(params: PageRange = {}) {
-  const { data } = await api.get<PaginatedResult<ProductoTop>>("/reportes/productos/top", { params: { page: 1, limit: 10, ...params } });
+  const { data } = await api.get<ProductosTop>("/reportes/productos/top", { params: { page: 1, limit: 10, ...params } });
   return data;
 }
 

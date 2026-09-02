@@ -148,6 +148,42 @@ const cajaSessionDetalleSchema = {
   },
 } as const;
 
+const cajaConsignacionProveedorVentasSchema = {
+  type: 'object',
+  required: ['proveedor_id', 'proveedor_nombre', 'total', 'items'],
+  properties: {
+    proveedor_id: { type: ['number', 'null'] },
+    proveedor_nombre: { type: 'string' },
+    total: { type: 'number' },
+    items: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: [
+          'producto_id',
+          'producto_nombre',
+          'producto_unidad_venta',
+          'precio_unitario',
+          'cantidad',
+          'subtotal',
+          'descuento',
+          'total_final',
+        ],
+        properties: {
+          producto_id: { type: 'number' },
+          producto_nombre: { type: 'string' },
+          producto_unidad_venta: { type: 'string', enum: ['UNIDAD', 'PESO'] },
+          precio_unitario: { type: 'number' },
+          cantidad: { type: 'number' },
+          subtotal: { type: 'number' },
+          descuento: { type: 'number' },
+          total_final: { type: 'number' },
+        },
+      },
+    },
+  },
+} as const;
+
 const nullableCajaSessionDetalleSchema = {
   anyOf: [cajaSessionDetalleSchema, { type: 'null' }],
 } as const;
@@ -360,6 +396,20 @@ export const getCajaSessionSchema = {
       properties: {
         success: { type: 'boolean' },
         data: cajaSessionDetalleSchema,
+      },
+    },
+  },
+} as const;
+
+export const getCajaSessionConsignacionSchema = {
+  params: idParamsSchema,
+  response: {
+    200: {
+      type: 'object',
+      required: ['success', 'data'],
+      properties: {
+        success: { type: 'boolean' },
+        data: { type: 'array', items: cajaConsignacionProveedorVentasSchema },
       },
     },
   },

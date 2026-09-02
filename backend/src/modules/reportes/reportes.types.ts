@@ -125,16 +125,25 @@ export interface VentasMensual {
 export interface ProductoTopRow {
   readonly producto_id: number;
   readonly producto_nombre: string;
+  readonly unidad_venta: 'UNIDAD' | 'PESO';
   readonly cantidad_vendida: string;
-  readonly total_vendido: string;
-  readonly total_count: string;
+  readonly ingresos: string;
+  readonly cantidad_rank: string;
+  readonly ingresos_rank: string;
 }
 
 export interface ProductoTop {
   readonly producto_id: number;
   readonly producto_nombre: string;
+  readonly unidad_venta: 'UNIDAD' | 'PESO';
   readonly cantidad_vendida: number;
-  readonly total_vendido: number;
+  readonly ingresos: number;
+}
+
+export interface ProductosTop {
+  readonly por_unidades: ProductoTop[];
+  readonly por_peso: ProductoTop[];
+  readonly por_ingresos: ProductoTop[];
 }
 
 export interface InventarioRow {

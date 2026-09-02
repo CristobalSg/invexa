@@ -12,6 +12,7 @@ import {
   ShoppingBagIcon,
   TruckIcon,
   WalletIcon,
+  XMarkIcon,
 } from "@heroicons/react/24/outline";
 import type { ComponentType, SVGProps } from "react";
 import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -27,24 +28,35 @@ import {
 import ListPanel from "../components/ListPanel";
 import ModuleCard from "../components/ModuleCard";
 import { Button, inputClassName } from "../components/FormControls";
-import type { CierreCajaDiario } from "../types/api";
+import type { CierreCajaDiario, InventarioItem, ProductoTop } from "../types/api";
 
 const money = (value: number) => `$${value.toLocaleString()}`;
 const number = (value: number) => value.toLocaleString("es-CL", { maximumFractionDigits: 2 });
 
 export default function StatsPage() {
   const [selectedDate, setSelectedDate] = useState(() => format(new Date(), "yyyy-MM-dd"));
+  const [stockByCategoryOpen, setStockByCategoryOpen] = useState(false);
 
   const resumen = useQuery({ queryKey: ["reportes", "resumen", selectedDate], queryFn: () => getVentasResumen({ fecha_desde: selectedDate, fecha_hasta: selectedDate }) });
   const cierreDiario = useQuery({ queryKey: ["reportes", "cierre-caja-diario", selectedDate], queryFn: () => getCierreCajaDiario({ fecha_desde: selectedDate }) });
   const mensual = useQuery({ queryKey: ["reportes", "mensual"], queryFn: () => getVentasMensual() });
-  const top = useQuery({ queryKey: ["reportes", "top"], queryFn: () => getProductosTop() });
+  const top = useQuery({
+    queryKey: ["reportes", "top", selectedDate],
+    queryFn: () => getProductosTop({ fecha_desde: selectedDate, fecha_hasta: selectedDate }),
+  });
   const inventario = useQuery({ queryKey: ["reportes", "inventario"], queryFn: () => getReporteInventario() });
   const bajoStock = useQuery({ queryKey: ["reportes", "bajo-stock"], queryFn: () => getBajoStock() });
+  const bajoStockByCategory = useQuery({
+    queryKey: ["reportes", "bajo-stock", "por-categoria"],
+    queryFn: () => getBajoStock({ limit: 100 }),
+    enabled: stockByCategoryOpen,
+  });
   const consignacion = useQuery({ queryKey: ["reportes", "consignacion"], queryFn: () => getConsignacion() });
-  const topItems = top.data?.items ?? [];
+  const topUnitItems = top.data?.por_unidades ?? [];
+  const topWeightItems = top.data?.por_peso ?? [];
+  const topIncomeItems = top.data?.por_ingresos ?? [];
   const consignacionItems = consignacion.data?.items ?? [];
-  const topProduct = topItems[0];
+  const topIncomeProduct = topIncomeItems[0];
   const inventoryValue = inventario.data?.resumen.valor_venta_total ?? 0;
   const inventoryCost = inventario.data?.resumen.valor_costo_total ?? 0;
   const consignationCommission = consignacionItems.reduce((total, item) => total + item.comision_estimada, 0);
@@ -53,6 +65,12 @@ export default function StatsPage() {
     (resumen.data?.tarjeta ?? 0) +
     (resumen.data?.transferencia ?? 0) +
     (resumen.data?.mixto ?? 0);
+  const lowStockCategories = Object.entries(
+    (bajoStockByCategory.data?.items ?? []).reduce<Record<string, InventarioItem[]>>((categories, item) => {
+      (categories[item.categoria_nombre] ??= []).push(item);
+      return categories;
+    }, {}),
+  ).sort(([firstCategory], [secondCategory]) => firstCategory.localeCompare(secondCategory, "es"));
 
   return (
     <div className="admin-page space-y-6">
@@ -80,7 +98,7 @@ export default function StatsPage() {
         <Metric icon={CubeIcon} title="Inventario venta" value={money(inventoryValue)} />
         <Metric icon={ArchiveBoxIcon} title="Costo inventario" value={money(inventoryCost)} />
         <Metric icon={TruckIcon} title="Comisión estimada" value={money(consignationCommission)} />
-        <Metric icon={ChartBarIcon} title="Producto líder" value={topProduct ? topProduct.producto_nombre : "-"} compact />
+        <Metric icon={ChartBarIcon} title="Líder por ingresos" value={topIncomeProduct ? topIncomeProduct.producto_nombre : "-"} compact />
       </div>
 
       <section className="reports-split">
@@ -93,19 +111,16 @@ export default function StatsPage() {
           </div>
         </ModuleCard>
 
-        <ModuleCard title="Top productos" icon={ChartBarIcon} contentClassName="p-5">
-          <div className="top-product-list">
-            {topItems.slice(0, 5).map((product, index) => (
-              <div key={product.producto_id} className="top-product-row">
-                <span className="top-product-rank">{index + 1}</span>
-                <div className="min-w-0">
-                  <h3>{product.producto_nombre}</h3>
-                  <p>{number(product.cantidad_vendida)} vendidos</p>
-                </div>
-                <strong>{money(product.total_vendido)}</strong>
-              </div>
-            ))}
-            {topItems.length === 0 && <p className="reports-empty">Sin ventas de productos todavía.</p>}
+        <ModuleCard
+          title="Top productos del período"
+          description="Unidades, peso e ingresos se calculan por separado."
+          icon={ChartBarIcon}
+          contentClassName="p-5"
+        >
+          <div className="top-product-rankings">
+            <TopProductList title="Top por unidades" items={topUnitItems} metric="units" />
+            <TopProductList title="Top por peso" items={topWeightItems} metric="weight" />
+            <TopProductList title="Top por ingresos" items={topIncomeItems} metric="income" />
           </div>
         </ModuleCard>
       </section>
@@ -182,7 +197,7 @@ export default function StatsPage() {
         )}
       </ModuleCard>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6">
         <ModuleCard title="Ventas mensuales" icon={ChartBarIcon}>
           <ResponsiveContainer width="100%" height={300}>
             <LineChart data={mensual.data ?? []}>
@@ -194,14 +209,39 @@ export default function StatsPage() {
             </LineChart>
           </ResponsiveContainer>
         </ModuleCard>
-        <ModuleCard title="Productos más vendidos" icon={ShoppingBagIcon}>
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+        <ModuleCard title="Top por unidades" description="Solo productos vendidos por unidad." icon={ShoppingBagIcon}>
           <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={top.data?.items ?? []}>
+            <BarChart data={topUnitItems.slice(0, 10)}>
               <CartesianGrid strokeDasharray="3 3" stroke="#efeff2" />
               <XAxis dataKey="producto_nombre" />
               <YAxis />
               <Tooltip />
-              <Bar dataKey="cantidad_vendida" fill="#28b486" radius={[8, 8, 0, 0]} />
+              <Bar name="Unidades" dataKey="cantidad_vendida" fill="#28b486" radius={[8, 8, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </ModuleCard>
+        <ModuleCard title="Top por peso" description="Kilogramos vendidos." icon={ArchiveBoxIcon}>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={topWeightItems.slice(0, 10)}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#efeff2" />
+              <XAxis dataKey="producto_nombre" />
+              <YAxis />
+              <Tooltip />
+              <Bar name="Kilogramos" dataKey="cantidad_vendida" fill="#7652ed" radius={[8, 8, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </ModuleCard>
+        <ModuleCard title="Top por ingresos" description="Total real después de descuentos." icon={BanknotesIcon}>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={topIncomeItems.slice(0, 10)}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#efeff2" />
+              <XAxis dataKey="producto_nombre" />
+              <YAxis />
+              <Tooltip formatter={(value) => money(Number(value))} />
+              <Bar name="Ingresos" dataKey="ingresos" fill="#f59e0b" radius={[8, 8, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </ModuleCard>
@@ -225,6 +265,11 @@ export default function StatsPage() {
         <ListPanel
           title="Bajo stock"
           icon={ExclamationTriangleIcon}
+          action={(
+            <Button variant="secondary" onClick={() => setStockByCategoryOpen(true)}>
+              Ver por categoría
+            </Button>
+          )}
           emptyMessage="Sin productos bajo stock."
           items={(bajoStock.data?.items ?? []).map((item) => ({
             id: item.producto_id,
@@ -250,11 +295,124 @@ export default function StatsPage() {
           }))}
         />
       </div>
+
+      {stockByCategoryOpen && (
+        <div
+          className="flow-modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setStockByCategoryOpen(false);
+          }}
+        >
+          <div className="flow-modal reports-low-stock-modal" role="dialog" aria-modal="true" aria-labelledby="low-stock-category-title">
+            <div className="pos-section-row">
+              <div>
+                <span className="pos-kicker">Inventario</span>
+                <h2 id="low-stock-category-title" className="flow-modal-title">Stock bajo por categoría</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setStockByCategoryOpen(false)}
+                className="cash-close-x"
+                aria-label="Cerrar stock bajo por categoría"
+                title="Cerrar"
+              >
+                <XMarkIcon className="h-6 w-6" />
+              </button>
+            </div>
+
+            <div className="reports-low-stock-summary">
+              <span>
+                <small>Categorías afectadas</small>
+                {lowStockCategories.length}
+              </span>
+              <span>
+                <small>Productos con stock bajo</small>
+                {bajoStockByCategory.data?.pagination.total ?? 0}
+              </span>
+              <p>Se consideran productos activos con 5 unidades o menos.</p>
+            </div>
+
+            {bajoStockByCategory.isLoading ? (
+              <p className="reports-empty">Cargando stock por categoría...</p>
+            ) : lowStockCategories.length > 0 ? (
+              <div className="reports-low-stock-categories">
+                {lowStockCategories.map(([categoryName, products]) => (
+                  <section key={categoryName} className="reports-low-stock-category">
+                    <header>
+                      <div>
+                        <span className="report-metric-icon">
+                          <ArchiveBoxIcon className="h-5 w-5" />
+                        </span>
+                        <h3>{categoryName}</h3>
+                      </div>
+                      <strong>{products.length}</strong>
+                    </header>
+                    <div>
+                      {products.map((product) => (
+                        <article key={product.producto_id}>
+                          <span>
+                            <b>{product.producto_nombre}</b>
+                            <small>{product.codigo_barras ?? "Sin código de barra"}</small>
+                          </span>
+                          <strong>{number(product.stock)}</strong>
+                        </article>
+                      ))}
+                    </div>
+                  </section>
+                ))}
+              </div>
+            ) : (
+              <p className="reports-empty">No hay productos con stock bajo.</p>
+            )}
+
+            {(bajoStockByCategory.data?.pagination.total ?? 0) > (bajoStockByCategory.data?.items.length ?? 0) && (
+              <p className="reports-low-stock-limit">
+                Se muestran los primeros {bajoStockByCategory.data?.items.length ?? 0} productos.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 type IconComponent = ComponentType<SVGProps<SVGSVGElement>>;
+
+function TopProductList({
+  title,
+  items,
+  metric,
+}: {
+  title: string;
+  items: ProductoTop[];
+  metric: "units" | "weight" | "income";
+}) {
+  return (
+    <section className="top-product-ranking">
+      <h3>{title}</h3>
+      <div className="top-product-list">
+        {items.slice(0, 5).map((product, index) => {
+          const quantityLabel = product.unidad_venta === "PESO"
+            ? `${number(product.cantidad_vendida)} kg`
+            : `${number(product.cantidad_vendida)} un.`;
+
+          return (
+            <div key={product.producto_id} className="top-product-row">
+              <span className="top-product-rank">{index + 1}</span>
+              <div className="min-w-0">
+                <h4>{product.producto_nombre}</h4>
+                <p>{metric === "income" ? quantityLabel : `Ingresos ${money(product.ingresos)}`}</p>
+              </div>
+              <strong>{metric === "income" ? money(product.ingresos) : quantityLabel}</strong>
+            </div>
+          );
+        })}
+        {items.length === 0 && <p className="reports-empty">Sin ventas para este ranking.</p>}
+      </div>
+    </section>
+  );
+}
 
 function Metric({
   icon: Icon,

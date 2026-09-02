@@ -132,38 +132,66 @@ export class ReportesRepository {
   async productosTop(
     query: Required<Pick<PaginationQuery, 'page' | 'limit'>> & PaginationQuery,
   ): Promise<ProductoTopRow[]> {
-    const offset = (query.page - 1) * query.limit;
     const result = await this.pool.query<ProductoTopRow>(
       `
         WITH ventas_filtradas AS (
-          SELECT id
+          SELECT id, total_sin_redondeo
           FROM ventas
           WHERE estado = 'COMPLETADA'
             AND ($1::date IS NULL OR ${localDate('creado_en')} >= $1)
             AND ($2::date IS NULL OR ${localDate('creado_en')} <= $2)
         ),
-        productos_vendidos AS (
+        lineas_atribuidas AS (
           SELECT
             dv.producto_id,
             p.nombre AS producto_nombre,
-            SUM(dv.cantidad) AS cantidad_vendida,
-            SUM(dv.total_final) AS total_vendido
+            p.unidad_venta,
+            dv.cantidad,
+            CASE
+              WHEN SUM(dv.total_final) OVER (PARTITION BY dv.venta_id) > 0
+                THEN dv.total_final * vf.total_sin_redondeo
+                  / SUM(dv.total_final) OVER (PARTITION BY dv.venta_id)
+              ELSE 0
+            END AS ingreso_atribuido
           FROM detalle_ventas dv
           INNER JOIN ventas_filtradas vf ON vf.id = dv.venta_id
           INNER JOIN productos p ON p.id = dv.producto_id
-          GROUP BY dv.producto_id, p.nombre
+        ),
+        productos_vendidos AS (
+          SELECT
+            producto_id,
+            producto_nombre,
+            unidad_venta,
+            SUM(cantidad) AS cantidad_vendida,
+            SUM(ingreso_atribuido) AS ingresos
+          FROM lineas_atribuidas
+          GROUP BY producto_id, producto_nombre, unidad_venta
+        ),
+        productos_rankeados AS (
+          SELECT
+            *,
+            ROW_NUMBER() OVER (
+              PARTITION BY unidad_venta
+              ORDER BY cantidad_vendida DESC, ingresos DESC, producto_id ASC
+            ) AS cantidad_rank,
+            ROW_NUMBER() OVER (
+              ORDER BY ingresos DESC, cantidad_vendida DESC, producto_id ASC
+            ) AS ingresos_rank
+          FROM productos_vendidos
         )
         SELECT
           producto_id,
           producto_nombre,
+          unidad_venta,
           cantidad_vendida::text,
-          total_vendido::text,
-          COUNT(*) OVER() AS total_count
-        FROM productos_vendidos
-        ORDER BY cantidad_vendida DESC, total_vendido DESC
-        LIMIT $3 OFFSET $4
+          ingresos::text,
+          cantidad_rank::text,
+          ingresos_rank::text
+        FROM productos_rankeados
+        WHERE cantidad_rank <= $3 OR ingresos_rank <= $3
+        ORDER BY ingresos_rank ASC
       `,
-      [query.fecha_desde ?? null, query.fecha_hasta ?? null, query.limit, offset],
+      [query.fecha_desde ?? null, query.fecha_hasta ?? null, query.limit],
     );
 
     return result.rows;

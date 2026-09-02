@@ -176,6 +176,24 @@ export interface CajaSession {
   };
 }
 
+export interface CajaConsignacionProductoVenta {
+  producto_id: number;
+  producto_nombre: string;
+  producto_unidad_venta: UnidadVentaProducto;
+  precio_unitario: number;
+  cantidad: number;
+  subtotal: number;
+  descuento: number;
+  total_final: number;
+}
+
+export interface CajaConsignacionProveedorVentas {
+  proveedor_id: number | null;
+  proveedor_nombre: string;
+  total: number;
+  items: CajaConsignacionProductoVenta[];
+}
+
 export interface CierreCajaDiarioItem {
   sesion_caja_id: number;
   usuario_id: number;
@@ -348,8 +366,15 @@ export interface VentasMensual {
 export interface ProductoTop {
   producto_id: number;
   producto_nombre: string;
+  unidad_venta: UnidadVentaProducto;
   cantidad_vendida: number;
-  total_vendido: number;
+  ingresos: number;
+}
+
+export interface ProductosTop {
+  por_unidades: ProductoTop[];
+  por_peso: ProductoTop[];
+  por_ingresos: ProductoTop[];
 }
 
 export interface InventarioItem {

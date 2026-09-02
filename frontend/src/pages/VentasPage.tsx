@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BanknotesIcon, ChevronDownIcon, FunnelIcon, ShoppingBagIcon } from "@heroicons/react/24/outline";
+import { BanknotesIcon, FunnelIcon, ShoppingBagIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { anularVenta, getVenta, getVentas } from "../services/transactionService";
 import type { EstadoVenta, MetodoPago } from "../types/api";
 import ListPanel from "../components/ListPanel";
@@ -100,7 +100,7 @@ export default function VentasPage() {
           icon: BanknotesIcon,
           title: `Venta #${venta.id}`,
           description: venta.usuario_nombre,
-          onClick: () => setExpandedVentaId((current) => (current === venta.id ? null : venta.id)),
+          onClick: () => setExpandedVentaId(venta.id),
           meta: [
             new Date(venta.creado_en).toLocaleString(),
             venta.metodo_pago,
@@ -115,21 +115,15 @@ export default function VentasPage() {
               : []),
           ],
           amount: (
-            <div className="flex items-center justify-end gap-2">
+            <div className="text-right">
               <div>
                 <small className="block text-[11px] font-semibold uppercase tracking-[0.08em] text-[#8b8e98]">
                   Cobrado
                 </small>
                 {money(venta.total)}
               </div>
-              <ChevronDownIcon className={`h-5 w-5 text-[#8b8e98] transition ${expandedVentaId === venta.id ? "rotate-180" : ""}`} />
             </div>
           ),
-          badge: expandedVentaId === venta.id ? (
-            <span className="inline-flex items-center gap-1 rounded-full bg-[#ecfdf5] px-2 py-1 text-xs font-bold text-[#047857]">
-              Detalle abierto
-            </span>
-          ) : undefined,
           action: venta.estado === "COMPLETADA" ? (
             <button
               onClick={() => {
@@ -141,39 +135,111 @@ export default function VentasPage() {
               Anular
             </button>
           ) : undefined,
-          expandedContent: expandedVentaId === venta.id ? (
-            ventaDetalle.isLoading ? (
-              <p className="text-sm text-gray-500">Cargando detalle...</p>
-            ) : ventaDetalle.data ? (
-              <div className="space-y-3">
-                <div className="grid gap-2 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm md:grid-cols-4">
-                  <span><b className="block text-xs uppercase text-gray-500">Subtotal</b>{money(ventaDetalle.data.subtotal)}</span>
-                  <span><b className="block text-xs uppercase text-gray-500">Descuento</b>{money(ventaDetalle.data.descuento)}</span>
-                  <span><b className="block text-xs uppercase text-gray-500">Método</b>{ventaDetalle.data.metodo_pago}</span>
-                  <span><b className="block text-xs uppercase text-gray-500">Modalidad</b>{ventaDetalle.data.modalidad}</span>
-                </div>
-                {ventaDetalle.data.detalles.map((detalle) => (
-                  <div key={detalle.id} className="grid gap-2 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm md:grid-cols-[1fr_auto_auto_auto_auto]">
-                    <div>
-                      <p className="font-semibold text-gray-900">{detalle.producto_nombre}</p>
-                      <p className="text-xs text-gray-500">
-                        Producto #{detalle.producto_id}
-                        {detalle.proveedor_nombre ? ` · ${detalle.proveedor_nombre}` : ""}
-                      </p>
-                    </div>
-                    <span className="text-gray-600">Cantidad {detalle.cantidad}</span>
-                    <span className="text-gray-600">Precio {money(detalle.precio_unitario)}</span>
-                    <span className="text-gray-600">Desc. {money(detalle.descuento)}</span>
-                    <span className="font-semibold text-gray-900">{money(detalle.total_final)}</span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-red-600">No se pudo cargar el detalle.</p>
-            )
-          ) : undefined,
         }))}
       />
+      {expandedVentaId !== null && (
+        <div
+          className="flow-modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setExpandedVentaId(null);
+          }}
+        >
+          <div className="cash-close-modal" role="dialog" aria-modal="true" aria-labelledby="sale-detail-title">
+            <div className="cash-close-head">
+              <div>
+                <p>Detalle de venta</p>
+                <h2 id="sale-detail-title">Venta #{expandedVentaId}</h2>
+              </div>
+              <div className="cash-close-head-actions">
+                {ventaDetalle.data && (
+                  <span className={`cash-session-state ${ventaDetalle.data.estado === "COMPLETADA" ? "open" : "closed"}`}>
+                    {ventaDetalle.data.estado}
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setExpandedVentaId(null)}
+                  className="cash-close-x"
+                  aria-label="Cerrar detalle de venta"
+                  title="Cerrar"
+                >
+                  <XMarkIcon className="h-6 w-6" />
+                </button>
+              </div>
+            </div>
+
+            {ventaDetalle.isLoading ? (
+              <p className="p-8 text-center text-sm font-semibold text-[#8b8e98]">Cargando detalle...</p>
+            ) : ventaDetalle.data ? (
+              <div className="cash-close-grid">
+                <section className="cash-close-card highlight">
+                  <div className="cash-close-card-title">
+                    <BanknotesIcon className="h-6 w-6" />
+                    <span>Total cobrado</span>
+                  </div>
+                  <strong>{money(ventaDetalle.data.total)}</strong>
+                  <div className="cash-close-lines">
+                    <span><b>Subtotal</b>{money(ventaDetalle.data.subtotal)}</span>
+                    <span><b>Descuentos</b>-{money(ventaDetalle.data.descuento)}</span>
+                    <span><b>Total sin redondeo</b>{money(ventaDetalle.data.total_sin_redondeo)}</span>
+                    <span><b>Redondeo</b>{signedMoney(ventaDetalle.data.redondeo)}</span>
+                  </div>
+                </section>
+
+                <section className="cash-close-card">
+                  <div className="cash-close-card-title">
+                    <BanknotesIcon className="h-6 w-6" />
+                    <span>Información del pago</span>
+                  </div>
+                  <div className="cash-close-split">
+                    <span><small>Método</small>{ventaDetalle.data.metodo_pago}</span>
+                    <span><small>Modalidad</small>{ventaDetalle.data.modalidad}</span>
+                    <span><small>Recibido</small>{ventaDetalle.data.monto_recibido === null ? "-" : money(ventaDetalle.data.monto_recibido)}</span>
+                    <span><small>Vuelto</small>{ventaDetalle.data.vuelto === null ? "-" : money(ventaDetalle.data.vuelto)}</span>
+                  </div>
+                </section>
+
+                <section className="cash-close-card">
+                  <div className="cash-close-card-title">
+                    <ShoppingBagIcon className="h-6 w-6" />
+                    <span>Información de la venta</span>
+                  </div>
+                  <div className="cash-close-lines">
+                    <span><b>Responsable</b>{ventaDetalle.data.usuario_nombre}</span>
+                    <span><b>Fecha</b>{new Date(ventaDetalle.data.creado_en).toLocaleString()}</span>
+                    <span><b>Caja</b>{ventaDetalle.data.sesion_caja_id ? `#${ventaDetalle.data.sesion_caja_id}` : "Sin caja"}</span>
+                    <span><b>Productos</b>{ventaDetalle.data.detalles.length}</span>
+                    {ventaDetalle.data.motivo_anulacion && <span><b>Motivo anulación</b>{ventaDetalle.data.motivo_anulacion}</span>}
+                  </div>
+                </section>
+
+                <section className="cash-close-card cash-detail-items">
+                  <div className="cash-close-card-title">
+                    <ShoppingBagIcon className="h-6 w-6" />
+                    <span>Productos vendidos</span>
+                  </div>
+                  <div className="cash-close-lines">
+                    {ventaDetalle.data.detalles.map((detalle) => (
+                      <span key={detalle.id}>
+                        <b>
+                          {detalle.producto_nombre}
+                          <small>
+                            Cantidad {detalle.cantidad} · Precio {money(detalle.precio_unitario)} · Descuento {money(detalle.descuento)}
+                            {detalle.proveedor_nombre ? ` · ${detalle.proveedor_nombre}` : ""}
+                          </small>
+                        </b>
+                        <strong>{money(detalle.total_final)}</strong>
+                      </span>
+                    ))}
+                  </div>
+                </section>
+              </div>
+            ) : (
+              <p className="p-8 text-center text-sm font-semibold text-red-600">No se pudo cargar el detalle.</p>
+            )}
+          </div>
+        </div>
+      )}
       {ventaAnularId && (
         <AdminPasswordModal
           title={`Anular venta #${ventaAnularId}`}

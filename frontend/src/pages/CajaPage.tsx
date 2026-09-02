@@ -8,6 +8,7 @@ import {
   ClockIcon,
   CreditCardIcon,
   EnvelopeIcon,
+  ReceiptRefundIcon,
   TruckIcon,
   WalletIcon,
   XMarkIcon,
@@ -20,6 +21,7 @@ import {
   eliminarMovimientoCaja,
   forzarCerrarCaja,
   getCajaActual,
+  getCajaConsignacionBySession,
   getCajaSesiones,
   reenviarCorreoCierreCaja,
 } from "../services/cajaService";
@@ -38,6 +40,14 @@ const time = (value: string | null) =>
     ? new Date(value).toLocaleTimeString("es-CL", {
         hour: "2-digit",
         minute: "2-digit",
+      })
+    : "-";
+
+const dateTime = (value: string | null) =>
+  value
+    ? new Date(value).toLocaleString("es-CL", {
+        dateStyle: "medium",
+        timeStyle: "short",
       })
     : "-";
 
@@ -73,6 +83,13 @@ interface CajaToast {
   readonly title: string;
   readonly description: string;
   readonly tone: CajaToastTone;
+}
+
+interface SelectedConsignmentProvider {
+  readonly sessionId: number;
+  readonly providerId: number | null;
+  readonly providerName: string;
+  readonly total: number;
 }
 
 const buildCloseToast = (session: CajaSession): CajaToast => {
@@ -123,6 +140,8 @@ export default function CajaPage() {
   const [movementPasswordOpen, setMovementPasswordOpen] = useState(false);
   const [movementToEdit, setMovementToEdit] = useState<CajaMovimiento | null>(null);
   const [movementToDelete, setMovementToDelete] = useState<CajaMovimiento | null>(null);
+  const [selectedSession, setSelectedSession] = useState<CajaSession | null>(null);
+  const [selectedConsignmentProvider, setSelectedConsignmentProvider] = useState<SelectedConsignmentProvider | null>(null);
   const [editMovementPasswordOpen, setEditMovementPasswordOpen] = useState(false);
   const [forceCloseAmount, setForceCloseAmount] = useState("");
   const [forceClosePasswordOpen, setForceClosePasswordOpen] = useState(false);
@@ -144,6 +163,14 @@ export default function CajaPage() {
     queryKey: ["caja-sesiones", currentUser?.id, currentUser?.rol],
     queryFn: () => getCajaSesiones(),
   });
+  const consignmentDetail = useQuery({
+    queryKey: ["caja-sesion-consignacion", selectedConsignmentProvider?.sessionId],
+    queryFn: () => getCajaConsignacionBySession(selectedConsignmentProvider!.sessionId),
+    enabled: selectedConsignmentProvider !== null,
+  });
+  const selectedProviderSales = consignmentDetail.data?.find(
+    (provider) => provider.proveedor_id === selectedConsignmentProvider?.providerId,
+  );
 
   const invalidateCaja = async () => {
     await Promise.all([
@@ -486,6 +513,7 @@ export default function CajaPage() {
               icon: WalletIcon,
               title: `Caja #${session.id}`,
               description: session.usuario_nombre,
+              onClick: () => setSelectedSession(session),
               meta: [
                 `Inicio ${time(session.abierta_en)}`,
                 session.cerrada_en ? `Cierre ${time(session.cerrada_en)}` : "Cierre en curso",
@@ -512,6 +540,226 @@ export default function CajaPage() {
           />
         </div>
       </div>
+
+      {selectedSession && (
+        <div
+          className="flow-modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setSelectedSession(null);
+              setSelectedConsignmentProvider(null);
+            }
+          }}
+        >
+          <div className="cash-close-modal" role="dialog" aria-modal="true" aria-labelledby="cash-session-title">
+            <div className="cash-close-head">
+              <div>
+                <p>Detalle de sesión</p>
+                <h2 id="cash-session-title">Caja #{selectedSession.id}</h2>
+              </div>
+              <div className="cash-close-head-actions">
+                <span className="cash-close-status">
+                  <ClockIcon className="h-5 w-5" />
+                  {sessionDuration(selectedSession.abierta_en, selectedSession.cerrada_en)}
+                </span>
+                <span className={`cash-session-state ${selectedSession.abierta ? "open" : "closed"}`}>
+                  {selectedSession.abierta ? "Abierta" : "Cerrada"}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedSession(null);
+                    setSelectedConsignmentProvider(null);
+                  }}
+                  className="cash-close-x"
+                  aria-label="Cerrar detalle de sesión"
+                  title="Cerrar"
+                >
+                  <XMarkIcon className="h-6 w-6" />
+                </button>
+              </div>
+            </div>
+
+            <div className="cash-close-grid">
+              <section className="cash-close-card highlight">
+                <div className="cash-close-card-title">
+                  <BanknotesIcon className="h-6 w-6" />
+                  <span>Resumen de caja</span>
+                </div>
+                <strong>{money(selectedSession.monto_esperado ?? selectedSession.resumen.monto_esperado_cierre)}</strong>
+                <div className="cash-close-lines">
+                  <span><b>Fondo inicial</b>{money(selectedSession.monto_apertura)}</span>
+                  <span><b>Contado al cierre</b>{selectedSession.monto_cierre === null ? "-" : money(selectedSession.monto_cierre)}</span>
+                  <span className={(selectedSession.diferencia_cierre ?? 0) < 0 ? "cash-session-negative" : "cash-session-positive"}>
+                    <b>Diferencia</b>
+                    {selectedSession.diferencia_cierre === null ? "-" : money(selectedSession.diferencia_cierre)}
+                  </span>
+                  <span><b>Ingresos</b>{money(selectedSession.resumen.ingresos)}</span>
+                  <span><b>Egresos</b>-{money(selectedSession.resumen.egresos)}</span>
+                </div>
+              </section>
+
+              <section className="cash-close-card">
+                <div className="cash-close-card-title">
+                  <CreditCardIcon className="h-6 w-6" />
+                  <span>Ventas y pagos</span>
+                </div>
+                <strong>{money(selectedSession.resumen.total_ventas)}</strong>
+                <div className="cash-close-lines">
+                  <span><b>Cantidad de ventas</b>{selectedSession.resumen.cantidad_ventas}</span>
+                  <span><b>Subtotal</b>{money(selectedSession.resumen.subtotal)}</span>
+                  <span><b>Descuentos</b>-{money(selectedSession.resumen.descuento)}</span>
+                </div>
+                <div className="cash-close-split compact">
+                  <span><small>Efectivo</small>{money(selectedSession.resumen.efectivo)}</span>
+                  <span><small>Débito / tarjeta</small>{money(selectedSession.resumen.tarjeta)}</span>
+                  <span><small>Transferencia</small>{money(selectedSession.resumen.transferencia)}</span>
+                  <span><small>Mixto</small>{money(selectedSession.resumen.mixto)}</span>
+                </div>
+              </section>
+
+              <section className="cash-close-card">
+                <div className="cash-close-card-title">
+                  <TruckIcon className="h-6 w-6" />
+                  <span>Sesión y consignación</span>
+                </div>
+                <div className="cash-close-lines">
+                  <span><b>Responsable</b>{selectedSession.usuario_nombre}</span>
+                  <span><b>Apertura</b>{dateTime(selectedSession.abierta_en)}</span>
+                  <span><b>Cierre</b>{selectedSession.cerrada_en ? dateTime(selectedSession.cerrada_en) : "En curso"}</span>
+                  <span><b>Ventas propias</b>{money(selectedSession.resumen.ventas_propias)}</span>
+                  <span><b>Consignación</b>{money(selectedSession.resumen.ventas_consignacion)}</span>
+                </div>
+                <div className="cash-close-provider-list">
+                  {selectedSession.resumen.consignacion_proveedores.length > 0 ? (
+                    selectedSession.resumen.consignacion_proveedores.map((provider) => (
+                      <button
+                        key={provider.proveedor_id ?? provider.proveedor_nombre}
+                        type="button"
+                        className="cash-provider-detail-button"
+                        onClick={() => setSelectedConsignmentProvider({
+                          sessionId: selectedSession.id,
+                          providerId: provider.proveedor_id,
+                          providerName: provider.proveedor_nombre,
+                          total: provider.total,
+                        })}
+                      >
+                        <span>{provider.proveedor_nombre}</span>
+                        <strong>{money(provider.total)}</strong>
+                      </button>
+                    ))
+                  ) : (
+                    <p>Sin ventas de consignación.</p>
+                  )}
+                </div>
+              </section>
+
+              <section className="cash-close-card cash-session-movements">
+                <div className="cash-close-card-title">
+                  <ReceiptRefundIcon className="h-6 w-6" />
+                  <span>Movimientos registrados</span>
+                </div>
+                {selectedSession.movimientos.length > 0 ? (
+                  <div className="cash-close-lines">
+                    {selectedSession.movimientos.map((movement) => (
+                      <span key={movement.id}>
+                        <b>
+                          {movement.tipo === "INGRESO" ? "Ingreso" : "Egreso"} · {categoriaLabel(movement.categoria)}
+                          <small>{movement.descripcion ?? "Sin descripción"} · {dateTime(movement.creado_en)}</small>
+                        </b>
+                        <strong className={movement.tipo === "INGRESO" ? "cash-session-positive" : "cash-session-negative"}>
+                          {movement.tipo === "INGRESO" ? "+" : "-"}{money(movement.monto)}
+                        </strong>
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="cash-close-provider-list">
+                    <p>Sin movimientos registrados en esta sesión.</p>
+                  </div>
+                )}
+              </section>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedConsignmentProvider && (
+        <div
+          className="flow-modal-backdrop cash-provider-detail-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setSelectedConsignmentProvider(null);
+          }}
+        >
+          <div className="cash-close-modal cash-provider-detail-modal" role="dialog" aria-modal="true" aria-labelledby="provider-sales-title">
+            <div className="cash-close-head">
+              <div>
+                <p>Ventas en consignación</p>
+                <h2 id="provider-sales-title">{selectedConsignmentProvider.providerName}</h2>
+              </div>
+              <div className="cash-close-head-actions">
+                <span className="cash-close-status">Caja #{selectedConsignmentProvider.sessionId}</span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedConsignmentProvider(null)}
+                  className="cash-close-x"
+                  aria-label="Cerrar detalle del proveedor"
+                  title="Cerrar"
+                >
+                  <XMarkIcon className="h-6 w-6" />
+                </button>
+              </div>
+            </div>
+
+            {consignmentDetail.isLoading ? (
+              <p className="p-8 text-center text-sm font-semibold text-[#8b8e98]">Cargando ventas del proveedor...</p>
+            ) : consignmentDetail.isError ? (
+              <p className="p-8 text-center text-sm font-semibold text-red-600">No se pudo cargar el detalle del proveedor.</p>
+            ) : (
+              <div className="cash-close-grid purchase-detail-grid">
+                <section className="cash-close-card highlight">
+                  <div className="cash-close-card-title">
+                    <TruckIcon className="h-6 w-6" />
+                    <span>Total vendido</span>
+                  </div>
+                  <strong>{money(selectedProviderSales?.total ?? selectedConsignmentProvider.total)}</strong>
+                  <div className="cash-close-lines">
+                    <span><b>Proveedor</b>{selectedConsignmentProvider.providerName}</span>
+                    <span><b>Productos diferentes</b>{selectedProviderSales?.items.length ?? 0}</span>
+                  </div>
+                </section>
+
+                <section className="cash-close-card cash-detail-items purchase-detail-items">
+                  <div className="cash-close-card-title">
+                    <ReceiptRefundIcon className="h-6 w-6" />
+                    <span>Productos vendidos</span>
+                  </div>
+                  {selectedProviderSales && selectedProviderSales.items.length > 0 ? (
+                    <div className="cash-close-lines">
+                      {selectedProviderSales.items.map((item) => (
+                        <span key={`${item.producto_id}-${item.precio_unitario}`}>
+                          <b>
+                            {item.producto_nombre}
+                            <small>
+                              {item.cantidad.toLocaleString("es-CL", { maximumFractionDigits: 3 })} {item.producto_unidad_venta === "PESO" ? "kg" : "un."}
+                              {" · "}Precio {money(item.precio_unitario)} · Descuento {money(item.descuento)}
+                            </small>
+                          </b>
+                          <strong>{money(item.total_final)}</strong>
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="cash-close-provider-list">
+                      <p>No se encontraron productos para este proveedor.</p>
+                    </div>
+                  )}
+                </section>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {movementModalOpen && actual?.abierta && (
         <div
