@@ -9,9 +9,13 @@ import type { CajaRepository } from './caja.repository.js';
 import type {
   AbrirCajaBody,
   CajaCierreCorreoResumen,
+  CajaCierreVenta,
+  CajaCierreVentaRow,
   CajaConsignacionProveedorVenta,
   CajaConsignacionProveedorVentaRow,
   CajaConsignacionProveedorVentas,
+  CajaConsignacionProveedorStock,
+  CajaConsignacionProveedorStockRow,
   CajaResumenFinanciero,
   CajaMovimiento,
   CajaMovimientoRow,
@@ -28,6 +32,7 @@ import type {
   EliminarMovimientoCajaBody,
   ForzarCerrarCajaBody,
   PaginatedResult,
+  ReenviarCorreoCierreBody,
 } from './caja.types.js';
 
 export class CajaService {
@@ -367,18 +372,29 @@ export class CajaService {
     id: number,
   ): Promise<CajaConsignacionProveedorVentas[]> {
     await this.findById(user, id);
-    const rows = await this.repository.findConsignacionVentasBySessionId(id);
-    return this.groupConsignmentSalesByProvider(rows);
+    const [rows, stockRows] = await Promise.all([
+      this.repository.findConsignacionVentasBySessionId(id),
+      this.repository.findConsignacionStockBySessionId(id),
+    ]);
+    return this.groupConsignmentSalesByProvider(rows, stockRows);
   }
 
-  async reenviarCorreoCierre(user: CajaUserContext, id: number): Promise<CajaSessionDetalle> {
+  async reenviarCorreoCierre(
+    user: CajaUserContext,
+    id: number,
+    data: ReenviarCorreoCierreBody,
+  ): Promise<CajaSessionDetalle> {
     const session = await this.findById(user, id);
 
     if (session.abierta || !session.cerrada_en) {
       throw new BadRequestError('Solo se pueden reenviar correos de cajas cerradas');
     }
 
-    const notificacionCorreos = await this.sendCashCloseEmailSafely(session);
+    const notificacionCorreos = await this.sendCashCloseEmailSafely(session, {
+      enviarSistema: data.destino !== 'COLABORADORES',
+      enviarColaboradores: data.destino === 'COLABORADORES',
+      incluirDetalle: data.destino === 'PROPIO_DETALLE',
+    });
     return { ...session, notificacion_correos: notificacionCorreos };
   }
 
@@ -430,6 +446,8 @@ export class CajaService {
       tarjeta: Number(row.tarjeta),
       transferencia: Number(row.transferencia),
       mixto: Number(row.mixto),
+      cantidad_ventas_sin_desglose: Number(row.cantidad_ventas_sin_desglose),
+      monto_ventas_sin_desglose: Number(row.monto_ventas_sin_desglose),
       ventas_propias: Number(row.ventas_propias),
       ventas_consignacion: Number(row.ventas_consignacion),
       consignacion_proveedores: this.parseConsignacionProveedores(row.consignacion_proveedores),
@@ -485,7 +503,18 @@ export class CajaService {
     return Math.round((value + Number.EPSILON) * factor) / factor;
   }
 
-  private async sendCashCloseEmailSafely(session: CajaSessionDetalle): Promise<CajaCierreCorreoResumen> {
+  private async sendCashCloseEmailSafely(
+    session: CajaSessionDetalle,
+    options: {
+      readonly enviarSistema: boolean;
+      readonly enviarColaboradores: boolean;
+      readonly incluirDetalle: boolean;
+    } = {
+      enviarSistema: true,
+      enviarColaboradores: true,
+      incluirDetalle: false,
+    },
+  ): Promise<CajaCierreCorreoResumen> {
     const summary: CajaCierreCorreoResumen = {
       sistema_enviado: false,
       proveedores_enviados: 0,
@@ -497,16 +526,38 @@ export class CajaService {
       return summary;
     }
 
-    try {
-      summary.sistema_enviado = await this.mailService.sendCashCloseEmail(session);
-    } catch (error) {
-      this.logger?.error({ error, caja_session_id: session.id }, 'Error sending cash close email');
+    if (options.enviarSistema) {
+      try {
+        const [ventaRows, movimientoRows] = await Promise.all([
+          this.repository.findVentasCierreBySessionId(session.id),
+          this.repository.findMovimientosBySessionId(session.id),
+        ]);
+        const sessionWithMovements = {
+          ...session,
+          movimientos: movimientoRows.map((row) => this.mapMovimiento(row)),
+        };
+        summary.sistema_enviado = await this.mailService.sendCashCloseEmail(
+          sessionWithMovements,
+          ventaRows.map((row) => this.mapCierreVenta(row)),
+          options.incluirDetalle,
+        );
+      } catch (error) {
+        this.logger?.error({ error, caja_session_id: session.id }, 'Error sending cash close email');
+      }
+    }
+
+    if (!options.enviarColaboradores) {
+      return summary;
     }
 
     let consignmentRows: CajaConsignacionProveedorVentaRow[] = [];
+    let consignmentStockRows: CajaConsignacionProveedorStockRow[] = [];
 
     try {
-      consignmentRows = await this.repository.findConsignacionVentasBySessionId(session.id);
+      [consignmentRows, consignmentStockRows] = await Promise.all([
+        this.repository.findConsignacionVentasBySessionId(session.id),
+        this.repository.findConsignacionStockBySessionId(session.id),
+      ]);
     } catch (error) {
       this.logger?.error(
         { error, caja_session_id: session.id },
@@ -515,7 +566,7 @@ export class CajaService {
       return summary;
     }
 
-    for (const providerSales of this.groupConsignmentSalesByProvider(consignmentRows)) {
+    for (const providerSales of this.groupConsignmentSalesByProvider(consignmentRows, consignmentStockRows)) {
       const email = providerSales.proveedor_email?.trim();
 
       if (!email || !this.mailService.isValidEmail(email)) {
@@ -558,7 +609,22 @@ export class CajaService {
 
   private groupConsignmentSalesByProvider(
     rows: CajaConsignacionProveedorVentaRow[],
+    stockRows: CajaConsignacionProveedorStockRow[] = [],
   ): CajaConsignacionProveedorVentas[] {
+    const stockByProvider = new Map<number, CajaConsignacionProveedorStock[]>();
+
+    for (const row of stockRows) {
+      const current = stockByProvider.get(row.proveedor_id) ?? [];
+      current.push({
+        producto_id: row.producto_id,
+        producto_nombre: row.producto_nombre,
+        producto_unidad_venta: row.producto_unidad_venta,
+        stock_actual: Number(row.stock_actual),
+        activo: row.activo,
+      });
+      stockByProvider.set(row.proveedor_id, current);
+    }
+
     const byProvider = new Map<string, {
       proveedor_id: number | null;
       proveedor_nombre: string;
@@ -579,6 +645,7 @@ export class CajaService {
         producto_id: row.producto_id,
         producto_nombre: row.producto_nombre,
         producto_unidad_venta: row.producto_unidad_venta,
+        stock_actual: Number(row.stock_actual),
         precio_unitario: Number(row.precio_unitario),
         cantidad: Number(row.cantidad),
         subtotal: Number(row.subtotal),
@@ -591,10 +658,33 @@ export class CajaService {
 
     return Array.from(byProvider.values()).map((provider) => ({
       ...provider,
+      inventario: provider.proveedor_id === null ? [] : (stockByProvider.get(provider.proveedor_id) ?? []),
       total: this.round(
         provider.items.reduce((sum, item) => sum + item.total_final, 0),
         2,
       ),
     }));
+  }
+
+  private mapCierreVenta(row: CajaCierreVentaRow): CajaCierreVenta {
+    return {
+      id: row.id,
+      creado_en: row.creado_en.toISOString(),
+      estado: row.estado,
+      modalidad: row.modalidad,
+      metodo_pago: row.metodo_pago,
+      subtotal: Number(row.subtotal),
+      descuento: Number(row.descuento),
+      redondeo: Number(row.redondeo),
+      total: Number(row.total),
+      monto_recibido: row.monto_recibido === null ? null : Number(row.monto_recibido),
+      vuelto: row.vuelto === null ? null : Number(row.vuelto),
+      pagos_desglosados: row.pagos_desglosados,
+      efectivo: Number(row.efectivo),
+      tarjeta: Number(row.tarjeta),
+      transferencia: Number(row.transferencia),
+      ventas_propias: Number(row.ventas_propias),
+      ventas_consignacion: Number(row.ventas_consignacion),
+    };
   }
 }

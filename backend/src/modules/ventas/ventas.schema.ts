@@ -36,6 +36,7 @@ const ventaResponseSchema = {
     'total',
     'monto_recibido',
     'vuelto',
+    'pagos_desglosados',
     'modalidad',
     'estado',
     'anulada_en',
@@ -56,6 +57,7 @@ const ventaResponseSchema = {
     total: { type: 'number' },
     monto_recibido: { type: ['number', 'null'] },
     vuelto: { type: ['number', 'null'] },
+    pagos_desglosados: { type: 'boolean' },
     modalidad: { type: 'string', enum: ['NORMAL', 'PRECIO_COSTO', 'RETIRO_DUENO'] },
     estado: { type: 'string', enum: ['COMPLETADA', 'ANULADA'] },
     anulada_en: { type: ['string', 'null'] },
@@ -125,23 +127,49 @@ const movimientoVentaResponseSchema = {
   },
 } as const;
 
+const pagoVentaResponseSchema = {
+  type: 'object',
+  required: ['id', 'venta_id', 'metodo_pago', 'monto', 'creado_en'],
+  properties: {
+    id: { type: 'number' },
+    venta_id: { type: 'number' },
+    metodo_pago: { type: 'string', enum: ['EFECTIVO', 'TARJETA', 'TRANSFERENCIA'] },
+    monto: { type: 'number' },
+    creado_en: { type: 'string' },
+  },
+} as const;
+
 const ventaDetalleResponseSchema = {
   ...ventaResponseSchema,
-  required: [...ventaResponseSchema.required, 'detalles', 'movimientos'],
+  required: [...ventaResponseSchema.required, 'detalles', 'movimientos', 'pagos'],
   properties: {
     ...ventaResponseSchema.properties,
     detalles: { type: 'array', items: detalleVentaResponseSchema },
     movimientos: { type: 'array', items: movimientoVentaResponseSchema },
+    pagos: { type: 'array', items: pagoVentaResponseSchema },
   },
 } as const;
 
 export const createVentaSchema = {
   body: {
     type: 'object',
-    required: ['metodo_pago', 'items'],
+    required: ['pagos', 'items'],
     additionalProperties: false,
     properties: {
-      metodo_pago: { type: 'string', enum: ['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'MIXTO'] },
+      pagos: {
+        type: 'array',
+        minItems: 1,
+        maxItems: 3,
+        items: {
+          type: 'object',
+          required: ['metodo_pago', 'monto'],
+          additionalProperties: false,
+          properties: {
+            metodo_pago: { type: 'string', enum: ['EFECTIVO', 'TARJETA', 'TRANSFERENCIA'] },
+            monto: { type: 'number', minimum: 0 },
+          },
+        },
+      },
       descuento: { type: 'number', minimum: 0, default: 0 },
       modalidad: { type: 'string', enum: ['NORMAL', 'PRECIO_COSTO', 'RETIRO_DUENO'], default: 'NORMAL' },
       master_password: { type: 'string', minLength: 1, maxLength: 200 },

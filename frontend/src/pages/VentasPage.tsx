@@ -197,6 +197,21 @@ export default function VentasPage() {
                     <span><small>Recibido</small>{ventaDetalle.data.monto_recibido === null ? "-" : money(ventaDetalle.data.monto_recibido)}</span>
                     <span><small>Vuelto</small>{ventaDetalle.data.vuelto === null ? "-" : money(ventaDetalle.data.vuelto)}</span>
                   </div>
+                  <div className="cash-close-lines">
+                    {ventaDetalle.data.pagos_desglosados ? (
+                      ventaDetalle.data.pagos.map((pago) => (
+                        <span key={pago.id}>
+                          <b>{pago.metodo_pago === "TARJETA" ? "Débito / tarjeta" : pago.metodo_pago}</b>
+                          {money(pago.monto)}
+                        </span>
+                      ))
+                    ) : (
+                      <span>
+                        <b>Desglose</b>
+                        No disponible (venta histórica)
+                      </span>
+                    )}
+                  </div>
                 </section>
 
                 <section className="cash-close-card">

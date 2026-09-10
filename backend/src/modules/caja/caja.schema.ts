@@ -31,6 +31,8 @@ const resumenSchema = {
     'tarjeta',
     'transferencia',
     'mixto',
+    'cantidad_ventas_sin_desglose',
+    'monto_ventas_sin_desglose',
     'ventas_propias',
     'ventas_consignacion',
     'consignacion_proveedores',
@@ -48,6 +50,8 @@ const resumenSchema = {
     tarjeta: { type: 'number' },
     transferencia: { type: 'number' },
     mixto: { type: 'number' },
+    cantidad_ventas_sin_desglose: { type: 'number' },
+    monto_ventas_sin_desglose: { type: 'number' },
     ventas_propias: { type: 'number' },
     ventas_consignacion: { type: 'number' },
     consignacion_proveedores: {
@@ -150,7 +154,7 @@ const cajaSessionDetalleSchema = {
 
 const cajaConsignacionProveedorVentasSchema = {
   type: 'object',
-  required: ['proveedor_id', 'proveedor_nombre', 'total', 'items'],
+  required: ['proveedor_id', 'proveedor_nombre', 'total', 'items', 'inventario'],
   properties: {
     proveedor_id: { type: ['number', 'null'] },
     proveedor_nombre: { type: 'string' },
@@ -163,6 +167,7 @@ const cajaConsignacionProveedorVentasSchema = {
           'producto_id',
           'producto_nombre',
           'producto_unidad_venta',
+          'stock_actual',
           'precio_unitario',
           'cantidad',
           'subtotal',
@@ -173,11 +178,32 @@ const cajaConsignacionProveedorVentasSchema = {
           producto_id: { type: 'number' },
           producto_nombre: { type: 'string' },
           producto_unidad_venta: { type: 'string', enum: ['UNIDAD', 'PESO'] },
+          stock_actual: { type: 'number' },
           precio_unitario: { type: 'number' },
           cantidad: { type: 'number' },
           subtotal: { type: 'number' },
           descuento: { type: 'number' },
           total_final: { type: 'number' },
+        },
+      },
+    },
+    inventario: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: [
+          'producto_id',
+          'producto_nombre',
+          'producto_unidad_venta',
+          'stock_actual',
+          'activo',
+        ],
+        properties: {
+          producto_id: { type: 'number' },
+          producto_nombre: { type: 'string' },
+          producto_unidad_venta: { type: 'string', enum: ['UNIDAD', 'PESO'] },
+          stock_actual: { type: 'number' },
+          activo: { type: 'boolean' },
         },
       },
     },
@@ -417,6 +443,14 @@ export const getCajaSessionConsignacionSchema = {
 
 export const reenviarCorreoCierreCajaSchema = {
   params: idParamsSchema,
+  body: {
+    type: 'object',
+    required: ['destino'],
+    additionalProperties: false,
+    properties: {
+      destino: { type: 'string', enum: ['COLABORADORES', 'PROPIO', 'PROPIO_DETALLE'] },
+    },
+  },
   response: {
     200: {
       type: 'object',

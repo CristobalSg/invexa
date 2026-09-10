@@ -26,20 +26,34 @@ export class ReportesRepository {
   async ventasResumen(query: DateRangeQuery): Promise<VentasResumenRow> {
     const result = await this.pool.query<VentasResumenRow>(
       `
-        SELECT
-          COUNT(*)::text AS cantidad_ventas,
-          COALESCE(SUM(subtotal), 0)::text AS subtotal,
-          COALESCE(SUM(descuento), 0)::text AS descuento,
-          COALESCE(SUM(total), 0)::text AS total,
-          COALESCE(AVG(total), 0)::text AS ticket_promedio,
-          COALESCE(SUM(total) FILTER (WHERE metodo_pago = 'EFECTIVO'), 0)::text AS efectivo,
-          COALESCE(SUM(total) FILTER (WHERE metodo_pago = 'TARJETA'), 0)::text AS tarjeta,
-          COALESCE(SUM(total) FILTER (WHERE metodo_pago = 'TRANSFERENCIA'), 0)::text AS transferencia,
-          COALESCE(SUM(total) FILTER (WHERE metodo_pago = 'MIXTO'), 0)::text AS mixto
-        FROM ventas
-        WHERE estado = 'COMPLETADA'
-          AND ($1::date IS NULL OR ${localDate('creado_en')} >= $1)
-          AND ($2::date IS NULL OR ${localDate('creado_en')} <= $2)
+        WITH ventas_filtradas AS (
+          SELECT *
+          FROM ventas
+          WHERE estado = 'COMPLETADA'
+            AND ($1::date IS NULL OR ${localDate('creado_en')} >= $1)
+            AND ($2::date IS NULL OR ${localDate('creado_en')} <= $2)
+        ),
+        pagos_resumen AS (
+          SELECT
+            COALESCE(SUM(pv.monto) FILTER (WHERE pv.metodo_pago = 'EFECTIVO'), 0)::text AS efectivo,
+            COALESCE(SUM(pv.monto) FILTER (WHERE pv.metodo_pago = 'TARJETA'), 0)::text AS tarjeta,
+            COALESCE(SUM(pv.monto) FILTER (WHERE pv.metodo_pago = 'TRANSFERENCIA'), 0)::text AS transferencia
+          FROM pagos_venta pv
+          INNER JOIN ventas_filtradas vf ON vf.id = pv.venta_id
+        ),
+        ventas_resumen AS (
+          SELECT
+            COUNT(*)::text AS cantidad_ventas,
+            COALESCE(SUM(subtotal), 0)::text AS subtotal,
+            COALESCE(SUM(descuento), 0)::text AS descuento,
+            COALESCE(SUM(total), 0)::text AS total,
+            COALESCE(AVG(total), 0)::text AS ticket_promedio,
+            COALESCE(SUM(total) FILTER (WHERE metodo_pago = 'MIXTO'), 0)::text AS mixto
+          FROM ventas_filtradas
+        )
+        SELECT vr.*, pr.efectivo, pr.tarjeta, pr.transferencia
+        FROM ventas_resumen vr
+        CROSS JOIN pagos_resumen pr
       `,
       [query.fecha_desde ?? null, query.fecha_hasta ?? null],
     );
@@ -77,11 +91,20 @@ export class ReportesRepository {
             v.sesion_caja_id,
             COUNT(v.id)::text AS cantidad_ventas,
             COALESCE(SUM(v.total), 0)::text AS total_vendido,
-            COALESCE(SUM(v.total) FILTER (WHERE v.metodo_pago = 'EFECTIVO'), 0)::text AS efectivo,
-            COALESCE(SUM(v.total) FILTER (WHERE v.metodo_pago = 'TARJETA'), 0)::text AS tarjeta,
-            COALESCE(SUM(v.total) FILTER (WHERE v.metodo_pago = 'TRANSFERENCIA'), 0)::text AS transferencia,
             COALESCE(SUM(v.total) FILTER (WHERE v.metodo_pago = 'MIXTO'), 0)::text AS mixto
           FROM ventas v
+          WHERE v.estado = 'COMPLETADA'
+            AND v.sesion_caja_id IS NOT NULL
+          GROUP BY v.sesion_caja_id
+        ),
+        pagos_por_sesion AS (
+          SELECT
+            v.sesion_caja_id,
+            COALESCE(SUM(pv.monto) FILTER (WHERE pv.metodo_pago = 'EFECTIVO'), 0)::text AS efectivo,
+            COALESCE(SUM(pv.monto) FILTER (WHERE pv.metodo_pago = 'TARJETA'), 0)::text AS tarjeta,
+            COALESCE(SUM(pv.monto) FILTER (WHERE pv.metodo_pago = 'TRANSFERENCIA'), 0)::text AS transferencia
+          FROM pagos_venta pv
+          INNER JOIN ventas v ON v.id = pv.venta_id
           WHERE v.estado = 'COMPLETADA'
             AND v.sesion_caja_id IS NOT NULL
           GROUP BY v.sesion_caja_id
@@ -107,9 +130,9 @@ export class ReportesRepository {
           sc.diferencia_cierre,
           COALESCE(vps.cantidad_ventas, '0') AS cantidad_ventas,
           COALESCE(vps.total_vendido, '0') AS total_vendido,
-          COALESCE(vps.efectivo, '0') AS efectivo,
-          COALESCE(vps.tarjeta, '0') AS tarjeta,
-          COALESCE(vps.transferencia, '0') AS transferencia,
+          COALESCE(pps.efectivo, '0') AS efectivo,
+          COALESCE(pps.tarjeta, '0') AS tarjeta,
+          COALESCE(pps.transferencia, '0') AS transferencia,
           COALESCE(vps.mixto, '0') AS mixto,
           COALESCE(mps.ingresos, '0') AS ingresos,
           COALESCE(mps.egresos, '0') AS egresos
@@ -117,6 +140,7 @@ export class ReportesRepository {
         INNER JOIN usuarios u ON u.id = sc.usuario_id
         LEFT JOIN dispositivos_pos dp ON dp.id = sc.dispositivo_id
         LEFT JOIN ventas_por_sesion vps ON vps.sesion_caja_id = sc.id
+        LEFT JOIN pagos_por_sesion pps ON pps.sesion_caja_id = sc.id
         LEFT JOIN movimientos_por_sesion mps ON mps.sesion_caja_id = sc.id
         WHERE sc.abierta = FALSE
           AND sc.cerrada_en IS NOT NULL
@@ -257,10 +281,11 @@ export class ReportesRepository {
         WHERE p.activo = TRUE
           AND p.modo_inventario <> 'SIN_INVENTARIO'
           AND p.stock <= $1
+          AND ($2::integer IS NULL OR p.categoria_id = $2)
         ORDER BY p.stock ASC, p.nombre ASC
-        LIMIT $2 OFFSET $3
+        LIMIT $3 OFFSET $4
       `,
-      [query.umbral, query.limit, offset],
+      [query.umbral, query.categoria_id ?? null, query.limit, offset],
     );
 
     return result.rows;

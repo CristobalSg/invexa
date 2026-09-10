@@ -5,6 +5,7 @@ import type {
   MetodoPago,
   MovimientoVentaRow,
   OfertaActivaRow,
+  PagoVentaRow,
   PaginationQuery,
   SesionCajaAbiertaRow,
   VentaListRow,
@@ -35,6 +36,7 @@ export class VentasRepository {
           v.total,
           v.monto_recibido,
           v.vuelto,
+          v.pagos_desglosados,
           v.modalidad,
           v.estado,
           v.anulada_en,
@@ -82,6 +84,7 @@ export class VentasRepository {
           v.total,
           v.monto_recibido,
           v.vuelto,
+          v.pagos_desglosados,
           v.modalidad,
           v.estado,
           v.anulada_en,
@@ -252,9 +255,10 @@ export class VentasRepository {
           total,
           monto_recibido,
           vuelto,
+          pagos_desglosados,
           modalidad
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::modalidad_venta)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, TRUE, $11::modalidad_venta)
         RETURNING
           id,
           usuario_id,
@@ -268,6 +272,7 @@ export class VentasRepository {
           total,
           monto_recibido,
           vuelto,
+          pagos_desglosados,
           modalidad,
           estado,
           anulada_en,
@@ -291,6 +296,37 @@ export class VentasRepository {
     );
 
     return result.rows[0] as VentaRow;
+  }
+
+  async createPago(
+    client: PoolClient,
+    data: {
+      readonly ventaId: number;
+      readonly metodoPago: string;
+      readonly monto: number;
+    },
+  ): Promise<void> {
+    await client.query(
+      `
+        INSERT INTO pagos_venta (venta_id, metodo_pago, monto)
+        VALUES ($1, $2::metodo_pago, $3::numeric)
+      `,
+      [data.ventaId, data.metodoPago, data.monto],
+    );
+  }
+
+  async findPagosByVentaId(ventaId: number): Promise<PagoVentaRow[]> {
+    const result = await this.pool.query<PagoVentaRow>(
+      `
+        SELECT id, venta_id, metodo_pago, monto, creado_en
+        FROM pagos_venta
+        WHERE venta_id = $1
+        ORDER BY id ASC
+      `,
+      [ventaId],
+    );
+
+    return result.rows;
   }
 
   async createDetalle(
@@ -415,6 +451,7 @@ export class VentasRepository {
           v.total,
           v.monto_recibido,
           v.vuelto,
+          v.pagos_desglosados,
           v.modalidad,
           v.estado,
           v.anulada_en,
@@ -465,6 +502,23 @@ export class VentasRepository {
     return result.rows;
   }
 
+  async findPagosByVentaIdWithClient(
+    client: PoolClient,
+    ventaId: number,
+  ): Promise<PagoVentaRow[]> {
+    const result = await client.query<PagoVentaRow>(
+      `
+        SELECT id, venta_id, metodo_pago, monto, creado_en
+        FROM pagos_venta
+        WHERE venta_id = $1
+        ORDER BY id ASC
+      `,
+      [ventaId],
+    );
+
+    return result.rows;
+  }
+
   async findMovimientosByVentaIdWithClient(
     client: PoolClient,
     ventaId: number,
@@ -506,6 +560,7 @@ export class VentasRepository {
           v.total,
           v.monto_recibido,
           v.vuelto,
+          v.pagos_desglosados,
           v.modalidad,
           v.estado,
           v.anulada_en,

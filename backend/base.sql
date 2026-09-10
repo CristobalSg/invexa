@@ -277,6 +277,8 @@ CREATE TABLE ventas (
   monto_recibido NUMERIC(10,2),
   vuelto NUMERIC(10,2),
 
+  pagos_desglosados BOOLEAN NOT NULL DEFAULT TRUE,
+
   modalidad modalidad_venta NOT NULL DEFAULT 'NORMAL',
 
   estado estado_venta NOT NULL DEFAULT 'COMPLETADA',
@@ -295,6 +297,76 @@ CREATE TABLE ventas (
   CONSTRAINT fk_venta_anulada_por
     FOREIGN KEY (anulada_por) REFERENCES usuarios(id)
 );
+
+CREATE TABLE pagos_venta (
+  id SERIAL PRIMARY KEY,
+  venta_id INT NOT NULL,
+  metodo_pago metodo_pago NOT NULL,
+  monto NUMERIC(10,2) NOT NULL,
+  creado_en TIMESTAMP NOT NULL DEFAULT NOW(),
+
+  CONSTRAINT fk_pago_venta
+    FOREIGN KEY (venta_id) REFERENCES ventas(id) ON DELETE CASCADE,
+
+  CONSTRAINT chk_pago_venta_metodo_real
+    CHECK (metodo_pago <> 'MIXTO'),
+
+  CONSTRAINT chk_pago_venta_monto_no_negativo
+    CHECK (monto >= 0),
+
+  CONSTRAINT uq_pago_venta_metodo
+    UNIQUE (venta_id, metodo_pago)
+);
+
+CREATE OR REPLACE FUNCTION validar_total_pagos_venta()
+RETURNS TRIGGER AS $$
+DECLARE
+  venta_objetivo_id INT;
+  venta_total NUMERIC(10,2);
+  venta_tiene_desglose BOOLEAN;
+  pagos_total NUMERIC(10,2);
+BEGIN
+  IF TG_TABLE_NAME = 'ventas' THEN
+    venta_objetivo_id := COALESCE(NEW.id, OLD.id);
+  ELSE
+    venta_objetivo_id := COALESCE(NEW.venta_id, OLD.venta_id);
+  END IF;
+
+  SELECT total, pagos_desglosados
+  INTO venta_total, venta_tiene_desglose
+  FROM ventas
+  WHERE id = venta_objetivo_id;
+
+  IF NOT FOUND OR venta_tiene_desglose = FALSE THEN
+    RETURN NULL;
+  END IF;
+
+  SELECT COALESCE(SUM(monto), 0)
+  INTO pagos_total
+  FROM pagos_venta
+  WHERE venta_id = venta_objetivo_id;
+
+  IF pagos_total <> venta_total THEN
+    RAISE EXCEPTION
+      'Pagos inconsistentes para venta %: total venta %, total pagos %',
+      venta_objetivo_id,
+      venta_total,
+      pagos_total;
+  END IF;
+
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE CONSTRAINT TRIGGER trg_validar_total_pagos_venta
+AFTER INSERT OR UPDATE OR DELETE ON pagos_venta
+DEFERRABLE INITIALLY DEFERRED
+FOR EACH ROW EXECUTE FUNCTION validar_total_pagos_venta();
+
+CREATE CONSTRAINT TRIGGER trg_validar_total_venta_pagos
+AFTER INSERT OR UPDATE OF total, pagos_desglosados ON ventas
+DEFERRABLE INITIALLY DEFERRED
+FOR EACH ROW EXECUTE FUNCTION validar_total_pagos_venta();
 
 CREATE TABLE detalle_ventas (
   id SERIAL PRIMARY KEY,
@@ -396,6 +468,12 @@ CREATE INDEX idx_ventas_sesion_caja
 
 CREATE INDEX idx_ventas_metodo_pago
   ON ventas(metodo_pago);
+
+CREATE INDEX idx_pagos_venta_venta
+  ON pagos_venta(venta_id);
+
+CREATE INDEX idx_pagos_venta_metodo
+  ON pagos_venta(metodo_pago);
 
 CREATE INDEX idx_detalle_ventas_producto
   ON detalle_ventas(producto_id);

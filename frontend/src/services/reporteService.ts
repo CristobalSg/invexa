@@ -38,7 +38,7 @@ export async function getReporteInventario(params: PageRange = {}) {
   return data;
 }
 
-export async function getBajoStock(params: PageRange & { umbral?: number } = {}) {
+export async function getBajoStock(params: PageRange & { umbral?: number; categoria_id?: number } = {}) {
   const { data } = await api.get<PaginatedResult<InventarioItem>>("/reportes/bajo-stock", { params: { page: 1, limit: 20, umbral: 5, ...params } });
   return data;
 }

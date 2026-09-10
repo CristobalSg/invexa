@@ -3219,11 +3219,54 @@ html.hide-cursor *::after {
   font-weight: 700;
 }
 
+.reports-low-stock-summary .category-name {
+  color: #7c2d12;
+  font-size: 17px;
+}
+
+.reports-low-stock-filter {
+  position: relative;
+  z-index: 2;
+  width: min(420px, 100%);
+  margin-top: 20px;
+}
+
+.reports-low-stock-prompt {
+  display: grid;
+  min-height: 240px;
+  place-items: center;
+  align-content: center;
+  gap: 10px;
+  margin-top: 18px;
+  border: 1px dashed #d8d1ff;
+  border-radius: 22px;
+  background: #faf9ff;
+  padding: 24px;
+  color: #7652ed;
+  text-align: center;
+}
+
+.reports-low-stock-prompt strong {
+  color: #25262c;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.reports-low-stock-prompt span {
+  color: #8b8e98;
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .reports-low-stock-categories {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
   margin-top: 18px;
+}
+
+.reports-low-stock-categories.single {
+  grid-template-columns: 1fr;
 }
 
 .reports-low-stock-category {
@@ -3801,6 +3844,78 @@ html.hide-cursor *::after {
   border-color: #d8d1ff;
   background: #faf9ff;
   color: #7652ed;
+}
+
+.cash-email-modal {
+  width: min(560px, calc(100vw - 28px));
+}
+
+.cash-email-copy {
+  margin: 0 0 18px;
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.cash-email-options {
+  display: grid;
+  gap: 12px;
+}
+
+.cash-email-option {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  background: #fff;
+  padding: 16px;
+  color: #4f46e5;
+  text-align: left;
+  transition: .16s ease;
+}
+
+.cash-email-option:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: #c4b5fd;
+  background: #faf9ff;
+}
+
+.cash-email-option.detailed {
+  border-color: #c4b5fd;
+  background: #faf9ff;
+}
+
+.cash-email-option span,
+.cash-email-option strong,
+.cash-email-option small {
+  display: block;
+}
+
+.cash-email-option strong {
+  color: #25262b;
+  font-size: 15px;
+}
+
+.cash-email-option small {
+  margin-top: 3px;
+  color: #737680;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.cash-email-option:disabled {
+  cursor: wait;
+  opacity: .58;
+}
+
+.cash-email-sending {
+  margin: 14px 0 0;
+  color: #7652ed;
+  font-size: 14px;
+  font-weight: 800;
+  text-align: center;
 }
 
 .cash-close-count {

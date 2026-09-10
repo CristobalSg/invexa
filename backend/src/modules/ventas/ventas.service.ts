@@ -11,6 +11,8 @@ import type {
   DetalleVentaRow,
   MovimientoVenta,
   MovimientoVentaRow,
+  PagoVenta,
+  PagoVentaRow,
   PaginatedResult,
   PaginationQuery,
   Venta,
@@ -28,7 +30,15 @@ export class VentasService {
 
   async create(usuarioId: number, data: CreateVentaBody, deviceId?: string): Promise<VentaDetalle> {
     this.validateUniqueProducts(data);
+    this.validateUniquePaymentMethods(data);
     const modalidad = data.modalidad ?? 'NORMAL';
+    const primerPago = data.pagos[0];
+
+    if (!primerPago) {
+      throw new BadRequestError('La venta debe incluir al menos un pago');
+    }
+
+    const metodoPago = data.pagos.length > 1 ? 'MIXTO' : primerPago.metodo_pago;
 
     if (modalidad !== 'NORMAL') {
       await assertValidOwnerPassword(this.pool, data.master_password);
@@ -126,16 +136,16 @@ export class VentasService {
       }
 
       const totalSinRedondeo = this.round(subtotalVenta - descuento, 2);
-      const redondeo = data.metodo_pago === 'EFECTIVO' && modalidad !== 'RETIRO_DUENO'
+      const redondeo = metodoPago === 'EFECTIVO' && modalidad !== 'RETIRO_DUENO'
         ? this.round(this.roundToNearestTen(totalSinRedondeo) - totalSinRedondeo, 2)
         : 0;
       const total = this.round(totalSinRedondeo + redondeo, 2);
-      const montoRecibido = data.metodo_pago === 'EFECTIVO' && modalidad !== 'RETIRO_DUENO'
+      const montoRecibido = metodoPago === 'EFECTIVO' && modalidad !== 'RETIRO_DUENO'
         ? data.monto_recibido
         : undefined;
       const vuelto = montoRecibido === undefined ? null : this.round(montoRecibido - total, 2);
 
-      if (data.metodo_pago === 'EFECTIVO' && modalidad !== 'RETIRO_DUENO') {
+      if (metodoPago === 'EFECTIVO' && modalidad !== 'RETIRO_DUENO') {
         if (montoRecibido === undefined) {
           throw new BadRequestError('Debes ingresar el monto recibido en efectivo');
         }
@@ -145,10 +155,12 @@ export class VentasService {
         }
       }
 
+      this.validatePaymentTotal(data, total, modalidad);
+
       const venta = await this.repository.createVenta(client, {
         usuarioId,
         sesionCajaId: sesionCaja.id,
-        metodoPago: data.metodo_pago,
+        metodoPago,
         subtotal: subtotalVenta,
         descuento,
         totalSinRedondeo,
@@ -158,6 +170,14 @@ export class VentasService {
         vuelto,
         modalidad,
       });
+
+      for (const pago of data.pagos) {
+        await this.repository.createPago(client, {
+          ventaId: venta.id,
+          metodoPago: pago.metodo_pago,
+          monto: this.round(pago.monto, 2),
+        });
+      }
 
       for (const item of preparedItems) {
         await this.repository.createDetalle(client, {
@@ -203,8 +223,9 @@ export class VentasService {
         client,
         venta.id,
       );
+      const pagos = await this.repository.findPagosByVentaIdWithClient(client, venta.id);
 
-      return this.mapVentaDetalle(ventaCompleta, detalles, movimientos);
+      return this.mapVentaDetalle(ventaCompleta, detalles, movimientos, pagos);
     });
   }
 
@@ -234,8 +255,9 @@ export class VentasService {
 
     const detalles = await this.repository.findDetallesByVentaId(id);
     const movimientos = await this.repository.findMovimientosByVentaId(id);
+    const pagos = await this.repository.findPagosByVentaId(id);
 
-    return this.mapVentaDetalle(venta, detalles, movimientos);
+    return this.mapVentaDetalle(venta, detalles, movimientos, pagos);
   }
 
   async anular(ventaId: number, usuarioId: number, data: AnularVentaBody): Promise<VentaDetalle> {
@@ -305,8 +327,9 @@ export class VentasService {
         client,
         venta.id,
       );
+      const pagos = await this.repository.findPagosByVentaIdWithClient(client, venta.id);
 
-      return this.mapVentaDetalle(ventaAnulada, detallesActualizados, movimientos);
+      return this.mapVentaDetalle(ventaAnulada, detallesActualizados, movimientos, pagos);
     });
   }
 
@@ -319,6 +342,39 @@ export class VentasService {
       }
 
       productIds.add(item.producto_id);
+    }
+  }
+
+  private validateUniquePaymentMethods(data: CreateVentaBody): void {
+    const methods = new Set<string>();
+
+    for (const pago of data.pagos) {
+      if (methods.has(pago.metodo_pago)) {
+        throw new BadRequestError('No se puede repetir el mismo metodo de pago');
+      }
+
+      methods.add(pago.metodo_pago);
+    }
+  }
+
+  private validatePaymentTotal(data: CreateVentaBody, total: number, modalidad: string): void {
+    const totalPagos = this.round(
+      data.pagos.reduce((sum, pago) => sum + this.round(pago.monto, 2), 0),
+      2,
+    );
+
+    if (totalPagos !== total) {
+      throw new BadRequestError(
+        `La suma de los pagos (${totalPagos}) debe coincidir con el total de la venta (${total})`,
+      );
+    }
+
+    if (modalidad === 'RETIRO_DUENO' && data.pagos.length !== 1) {
+      throw new BadRequestError('El retiro de dueno debe registrar un unico pago de referencia');
+    }
+
+    if (modalidad !== 'RETIRO_DUENO' && data.pagos.some((pago) => pago.monto <= 0)) {
+      throw new BadRequestError('Cada medio de pago debe tener un monto mayor que cero');
     }
   }
 
@@ -336,6 +392,7 @@ export class VentasService {
       total: Number(row.total),
       monto_recibido: row.monto_recibido === null ? null : Number(row.monto_recibido),
       vuelto: row.vuelto === null ? null : Number(row.vuelto),
+      pagos_desglosados: row.pagos_desglosados,
       modalidad: row.modalidad,
       estado: row.estado,
       anulada_en: row.anulada_en?.toISOString() ?? null,
@@ -349,11 +406,13 @@ export class VentasService {
     venta: VentaRow,
     detalles: DetalleVentaRow[],
     movimientos: MovimientoVentaRow[],
+    pagos: PagoVentaRow[],
   ): VentaDetalle {
     return {
       ...this.mapVenta(venta),
       detalles: detalles.map((detalle) => this.mapDetalle(detalle)),
       movimientos: movimientos.map((movimiento) => this.mapMovimiento(movimiento)),
+      pagos: pagos.map((pago) => this.mapPago(pago)),
     };
   }
 
@@ -385,6 +444,16 @@ export class VentasService {
       stock_anterior: row.stock_anterior === null ? null : Number(row.stock_anterior),
       stock_nuevo: row.stock_nuevo === null ? null : Number(row.stock_nuevo),
       venta_id: row.venta_id,
+      creado_en: row.creado_en.toISOString(),
+    };
+  }
+
+  private mapPago(row: PagoVentaRow): PagoVenta {
+    return {
+      id: row.id,
+      venta_id: row.venta_id,
+      metodo_pago: row.metodo_pago,
+      monto: Number(row.monto),
       creado_en: row.creado_en.toISOString(),
     };
   }

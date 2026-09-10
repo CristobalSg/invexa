@@ -28,8 +28,10 @@ export async function forzarCerrarCaja(efectivo_contado: number, master_password
   return data;
 }
 
-export async function reenviarCorreoCierreCaja(id: number) {
-  const { data } = await api.post<CajaSession>(`/caja/sesiones/${id}/reenviar-correo`);
+export type DestinoCorreoCierre = "COLABORADORES" | "PROPIO" | "PROPIO_DETALLE";
+
+export async function reenviarCorreoCierreCaja(id: number, destino: DestinoCorreoCierre) {
+  const { data } = await api.post<CajaSession>(`/caja/sesiones/${id}/reenviar-correo`, { destino });
   return data;
 }
 

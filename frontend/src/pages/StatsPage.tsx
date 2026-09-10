@@ -25,10 +25,12 @@ import {
   getVentasMensual,
   getVentasResumen,
 } from "../services/reporteService";
+import { getCategorias } from "../services/catalogService";
 import ListPanel from "../components/ListPanel";
 import ModuleCard from "../components/ModuleCard";
 import { Button, inputClassName } from "../components/FormControls";
-import type { CierreCajaDiario, InventarioItem, ProductoTop } from "../types/api";
+import TouchSelectField from "../components/TouchSelectField";
+import type { CierreCajaDiario, ProductoTop } from "../types/api";
 
 const money = (value: number) => `$${value.toLocaleString()}`;
 const number = (value: number) => value.toLocaleString("es-CL", { maximumFractionDigits: 2 });
@@ -36,6 +38,7 @@ const number = (value: number) => value.toLocaleString("es-CL", { maximumFractio
 export default function StatsPage() {
   const [selectedDate, setSelectedDate] = useState(() => format(new Date(), "yyyy-MM-dd"));
   const [stockByCategoryOpen, setStockByCategoryOpen] = useState(false);
+  const [lowStockCategoryId, setLowStockCategoryId] = useState("");
 
   const resumen = useQuery({ queryKey: ["reportes", "resumen", selectedDate], queryFn: () => getVentasResumen({ fecha_desde: selectedDate, fecha_hasta: selectedDate }) });
   const cierreDiario = useQuery({ queryKey: ["reportes", "cierre-caja-diario", selectedDate], queryFn: () => getCierreCajaDiario({ fecha_desde: selectedDate }) });
@@ -46,10 +49,11 @@ export default function StatsPage() {
   });
   const inventario = useQuery({ queryKey: ["reportes", "inventario"], queryFn: () => getReporteInventario() });
   const bajoStock = useQuery({ queryKey: ["reportes", "bajo-stock"], queryFn: () => getBajoStock() });
+  const categorias = useQuery({ queryKey: ["categorias"], queryFn: () => getCategorias() });
   const bajoStockByCategory = useQuery({
-    queryKey: ["reportes", "bajo-stock", "por-categoria"],
-    queryFn: () => getBajoStock({ limit: 100 }),
-    enabled: stockByCategoryOpen,
+    queryKey: ["reportes", "bajo-stock", "por-categoria", lowStockCategoryId],
+    queryFn: () => getBajoStock({ limit: 100, categoria_id: Number(lowStockCategoryId) }),
+    enabled: stockByCategoryOpen && lowStockCategoryId !== "",
   });
   const consignacion = useQuery({ queryKey: ["reportes", "consignacion"], queryFn: () => getConsignacion() });
   const topUnitItems = top.data?.por_unidades ?? [];
@@ -63,14 +67,10 @@ export default function StatsPage() {
   const paymentTotal =
     (resumen.data?.efectivo ?? 0) +
     (resumen.data?.tarjeta ?? 0) +
-    (resumen.data?.transferencia ?? 0) +
-    (resumen.data?.mixto ?? 0);
-  const lowStockCategories = Object.entries(
-    (bajoStockByCategory.data?.items ?? []).reduce<Record<string, InventarioItem[]>>((categories, item) => {
-      (categories[item.categoria_nombre] ??= []).push(item);
-      return categories;
-    }, {}),
-  ).sort(([firstCategory], [secondCategory]) => firstCategory.localeCompare(secondCategory, "es"));
+    (resumen.data?.transferencia ?? 0);
+  const selectedLowStockCategory = categorias.data?.items.find(
+    (category) => String(category.id) === lowStockCategoryId,
+  );
 
   return (
     <div className="admin-page space-y-6">
@@ -107,7 +107,7 @@ export default function StatsPage() {
             <PaymentStat label="Efectivo" value={resumen.data?.efectivo ?? 0} total={paymentTotal} />
             <PaymentStat label="Tarjeta" value={resumen.data?.tarjeta ?? 0} total={paymentTotal} />
             <PaymentStat label="Transferencia" value={resumen.data?.transferencia ?? 0} total={paymentTotal} />
-            <PaymentStat label="Mixto" value={resumen.data?.mixto ?? 0} total={paymentTotal} />
+            <PaymentStat label="Ventas mixtas (referencia)" value={resumen.data?.mixto ?? 0} total={resumen.data?.total ?? 0} />
           </div>
         </ModuleCard>
 
@@ -176,7 +176,7 @@ export default function StatsPage() {
                       <td>{new Date(session.cerrada_en).toLocaleTimeString()}</td>
                       <td>{session.cantidad_ventas}</td>
                       <td>{money(session.efectivo)}</td>
-                      <td>{money(session.tarjeta + session.transferencia + session.mixto)}</td>
+                      <td>{money(session.tarjeta + session.transferencia)}</td>
                       <td className="font-semibold">{money(session.total_vendido)}</td>
                       <td className={session.diferencia_cierre === 0 ? "text-gray-700" : "font-semibold text-amber-700"}>
                         {money(session.diferencia_cierre ?? 0)}
@@ -266,7 +266,13 @@ export default function StatsPage() {
           title="Bajo stock"
           icon={ExclamationTriangleIcon}
           action={(
-            <Button variant="secondary" onClick={() => setStockByCategoryOpen(true)}>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setLowStockCategoryId("");
+                setStockByCategoryOpen(true);
+              }}
+            >
               Ver por categoría
             </Button>
           )}
@@ -320,35 +326,55 @@ export default function StatsPage() {
               </button>
             </div>
 
-            <div className="reports-low-stock-summary">
-              <span>
-                <small>Categorías afectadas</small>
-                {lowStockCategories.length}
-              </span>
-              <span>
-                <small>Productos con stock bajo</small>
-                {bajoStockByCategory.data?.pagination.total ?? 0}
-              </span>
-              <p>Se consideran productos activos con 5 unidades o menos.</p>
+            <div className="reports-low-stock-filter">
+              <TouchSelectField
+                label="Selecciona una categoría"
+                value={lowStockCategoryId}
+                options={(categorias.data?.items ?? []).map((category) => ({
+                  value: String(category.id),
+                  label: category.nombre,
+                }))}
+                onChange={setLowStockCategoryId}
+                placeholder="Elegir categoría"
+                modalTitle="Categorías"
+                emptyText="No hay categorías disponibles."
+              />
             </div>
 
-            {bajoStockByCategory.isLoading ? (
+            {lowStockCategoryId === "" ? (
+              <div className="reports-low-stock-prompt">
+                <ArchiveBoxIcon className="h-9 w-9" />
+                <strong>Elige una categoría para consultar su stock bajo</strong>
+                <span>No se mostrarán productos de otras categorías.</span>
+              </div>
+            ) : bajoStockByCategory.isLoading ? (
               <p className="reports-empty">Cargando stock por categoría...</p>
-            ) : lowStockCategories.length > 0 ? (
-              <div className="reports-low-stock-categories">
-                {lowStockCategories.map(([categoryName, products]) => (
-                  <section key={categoryName} className="reports-low-stock-category">
+            ) : (bajoStockByCategory.data?.items.length ?? 0) > 0 ? (
+              <>
+                <div className="reports-low-stock-summary">
+                  <span className="category-name">
+                    <small>Categoría seleccionada</small>
+                    {selectedLowStockCategory?.nombre ?? "Categoría"}
+                  </span>
+                  <span>
+                    <small>Productos con stock bajo</small>
+                    {bajoStockByCategory.data?.pagination.total ?? 0}
+                  </span>
+                  <p>Se consideran productos activos con 5 unidades o menos.</p>
+                </div>
+                <div className="reports-low-stock-categories single">
+                  <section className="reports-low-stock-category">
                     <header>
                       <div>
                         <span className="report-metric-icon">
                           <ArchiveBoxIcon className="h-5 w-5" />
                         </span>
-                        <h3>{categoryName}</h3>
+                        <h3>{selectedLowStockCategory?.nombre ?? "Categoría"}</h3>
                       </div>
-                      <strong>{products.length}</strong>
+                      <strong>{bajoStockByCategory.data?.pagination.total ?? 0}</strong>
                     </header>
                     <div>
-                      {products.map((product) => (
+                      {(bajoStockByCategory.data?.items ?? []).map((product) => (
                         <article key={product.producto_id}>
                           <span>
                             <b>{product.producto_nombre}</b>
@@ -359,10 +385,10 @@ export default function StatsPage() {
                       ))}
                     </div>
                   </section>
-                ))}
-              </div>
+                </div>
+              </>
             ) : (
-              <p className="reports-empty">No hay productos con stock bajo.</p>
+              <p className="reports-empty">Esta categoría no tiene productos con stock bajo.</p>
             )}
 
             {(bajoStockByCategory.data?.pagination.total ?? 0) > (bajoStockByCategory.data?.items.length ?? 0) && (

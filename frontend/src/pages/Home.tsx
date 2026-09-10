@@ -18,7 +18,7 @@ import StatsPanel from "../components/StatsPanel";
 import ProductTile from "../components/ProductTile";
 import { Button, FormActions, FormField, inputClassName } from "../components/FormControls";
 import AdminPasswordModal from "../components/AdminPasswordModal";
-import type { MetodoPago, ModalidadVenta, Oferta, Producto } from "../types/api";
+import type { MetodoPago, MetodoPagoReal, ModalidadVenta, Oferta, Producto } from "../types/api";
 import { createVenta } from "../services/transactionService";
 import { getCajaActual } from "../services/cajaService";
 import { getAllProducts, getProductByBarcode, getProducts } from "../services/productService";
@@ -578,7 +578,17 @@ export default function Home() {
 
     try {
       await createVenta({
-        metodo_pago: metodoPago,
+        pagos: modalidadVenta === "RETIRO_DUENO"
+          ? [{ metodo_pago: "EFECTIVO", monto: 0 }]
+          : metodoPago === "MIXTO"
+            ? mixedMethods.map((method) => ({
+                metodo_pago: method,
+                monto: roundCurrency(toAmount(mixedAmounts[method])),
+              }))
+            : [{
+                metodo_pago: metodoPago as MetodoPagoReal,
+                monto: totalCobrar,
+              }],
         modalidad: modalidadVenta,
         master_password: modalidadVenta === "NORMAL" ? undefined : adminPassword,
         monto_recibido: metodoPago === "EFECTIVO" && modalidadVenta !== "RETIRO_DUENO" ? cashReceivedAmount : undefined,

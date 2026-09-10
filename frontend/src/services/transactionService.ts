@@ -1,5 +1,5 @@
 import api from "../lib/axios";
-import type { EstadoVenta, MetodoPago, ModalidadVenta, PaginatedResult, Venta, VentaDetalle } from "../types/api";
+import type { EstadoVenta, MetodoPago, MetodoPagoReal, ModalidadVenta, PaginatedResult, Venta, VentaDetalle } from "../types/api";
 
 const ENDPOINT = "/ventas";
 
@@ -21,7 +21,7 @@ export async function getVentas(params: {
 }
 
 export async function createVenta(input: {
-  metodo_pago: MetodoPago;
+  pagos: { metodo_pago: MetodoPagoReal; monto: number }[];
   descuento?: number;
   modalidad?: ModalidadVenta;
   master_password?: string;

@@ -25,6 +25,7 @@ import {
   getCajaSesiones,
   reenviarCorreoCierreCaja,
 } from "../services/cajaService";
+import type { DestinoCorreoCierre } from "../services/cajaService";
 import type { CajaMovimiento, CajaSession, CategoriaMovimientoCaja, TipoMovimientoCaja } from "../types/api";
 import ListPanel from "../components/ListPanel";
 import ModuleCard from "../components/ModuleCard";
@@ -141,6 +142,7 @@ export default function CajaPage() {
   const [movementToEdit, setMovementToEdit] = useState<CajaMovimiento | null>(null);
   const [movementToDelete, setMovementToDelete] = useState<CajaMovimiento | null>(null);
   const [selectedSession, setSelectedSession] = useState<CajaSession | null>(null);
+  const [emailSession, setEmailSession] = useState<CajaSession | null>(null);
   const [selectedConsignmentProvider, setSelectedConsignmentProvider] = useState<SelectedConsignmentProvider | null>(null);
   const [editMovementPasswordOpen, setEditMovementPasswordOpen] = useState(false);
   const [forceCloseAmount, setForceCloseAmount] = useState("");
@@ -276,22 +278,46 @@ export default function CajaPage() {
   });
 
   const reenviarCorreoCierre = useMutation({
-    mutationFn: (sessionId: number) => reenviarCorreoCierreCaja(sessionId),
-    onSuccess: (session) => {
+    mutationFn: ({ sessionId, destino }: { sessionId: number; destino: DestinoCorreoCierre }) =>
+      reenviarCorreoCierreCaja(sessionId, destino),
+    onSuccess: (session, variables) => {
       setMessage("");
+      setEmailSession(null);
+      const mail = session.notificacion_correos;
+      const collaboratorsText = mail
+        ? `Enviados ${mail.proveedores_enviados}, omitidos ${mail.proveedores_omitidos}, fallidos ${mail.proveedores_fallidos}.`
+        : "No se recibió el estado de los envíos.";
+      const isCollaborators = variables.destino === "COLABORADORES";
+      const collaboratorsOk = Boolean(mail && mail.proveedores_fallidos === 0 && mail.proveedores_omitidos === 0);
+      const systemOk = Boolean(mail?.sistema_enviado);
       setToast({
-        ...buildCloseToast(session),
-        title: "Correo reenviado",
+        title: isCollaborators
+          ? (collaboratorsOk ? "Correos de colaboradores procesados" : "Envío incompleto")
+          : (systemOk ? "Correo propio enviado" : "No se pudo enviar el correo propio"),
+        description: isCollaborators
+          ? (mail && mail.proveedores_enviados === 0 && collaboratorsOk
+            ? "No había colaboradores con ventas para notificar."
+            : collaboratorsText)
+          : systemOk
+            ? (variables.destino === "PROPIO_DETALLE"
+              ? "Se envió el cierre propio con el detalle completo de transacciones."
+              : "Se envió el resumen propio del cierre sin el detalle de transacciones.")
+            : "El cierre no fue enviado. Revisa la configuración de correo e inténtalo nuevamente.",
+        tone: isCollaborators ? (collaboratorsOk ? "success" : "warning") : (systemOk ? "success" : "error"),
       });
     },
-    onError: (error) => setMessage(error instanceof Error ? error.message : "No se pudo reenviar el correo"),
+    onError: (error) => {
+      const description = error instanceof Error ? error.message : "No se pudo enviar el correo";
+      setMessage(description);
+      setToast({ title: "No se pudo enviar el correo", description, tone: "error" });
+    },
   });
 
   const diferenciaCierre =
     actual && efectivoContado !== ""
       ? Number(efectivoContado) - actual.resumen.monto_esperado_cierre
       : 0;
-  const reenviandoSesionId = reenviarCorreoCierre.isPending ? reenviarCorreoCierre.variables : null;
+  const reenviandoSesionId = reenviarCorreoCierre.isPending ? reenviarCorreoCierre.variables?.sessionId : null;
   const hasCashSales = Boolean(actual && actual.resumen.efectivo > 0);
   const hasDebitSales = Boolean(actual && actual.resumen.tarjeta > 0);
   const hasConsignationSales = Boolean(actual && actual.resumen.ventas_consignacion > 0);
@@ -528,18 +554,92 @@ export default function CajaPage() {
               action: !session.abierta ? (
                 <button
                   type="button"
-                  onClick={() => reenviarCorreoCierre.mutate(session.id)}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setEmailSession(session);
+                  }}
                   disabled={reenviandoSesionId === session.id}
                   className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-semibold text-[#7652ed] hover:bg-[#faf9ff] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <EnvelopeIcon className="h-4 w-4" />
-                  {reenviandoSesionId === session.id ? "Enviando..." : "Reenviar correo"}
+                  {reenviandoSesionId === session.id ? "Enviando..." : "Enviar correo"}
                 </button>
               ) : undefined,
             }))}
           />
         </div>
       </div>
+
+      {emailSession && (
+        <div
+          className="flow-modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !reenviarCorreoCierre.isPending) {
+              setEmailSession(null);
+            }
+          }}
+        >
+          <div className="flow-modal cash-email-modal" role="dialog" aria-modal="true" aria-labelledby="cash-email-title">
+            <div className="cash-movement-modal-head">
+              <div>
+                <p>Envío manual</p>
+                <h2 id="cash-email-title">Correo de caja #{emailSession.id}</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEmailSession(null)}
+                disabled={reenviarCorreoCierre.isPending}
+                className="cash-close-x"
+                aria-label="Cerrar opciones de correo"
+                title="Cerrar"
+              >
+                <XMarkIcon className="h-6 w-6" />
+              </button>
+            </div>
+
+            <p className="cash-email-copy">Selecciona quién recibirá el correo y cuánto detalle incluir.</p>
+            <div className="cash-email-options">
+              <button
+                type="button"
+                className="cash-email-option"
+                disabled={reenviarCorreoCierre.isPending}
+                onClick={() => reenviarCorreoCierre.mutate({ sessionId: emailSession.id, destino: "COLABORADORES" })}
+              >
+                <TruckIcon className="h-6 w-6" />
+                <span>
+                  <strong>Enviar a colaboradores</strong>
+                  <small>Envía a cada colaborador sus ventas y el stock actual de sus productos.</small>
+                </span>
+              </button>
+              <button
+                type="button"
+                className="cash-email-option"
+                disabled={reenviarCorreoCierre.isPending}
+                onClick={() => reenviarCorreoCierre.mutate({ sessionId: emailSession.id, destino: "PROPIO" })}
+              >
+                <EnvelopeIcon className="h-6 w-6" />
+                <span>
+                  <strong>Enviar resumen propio</strong>
+                  <small>Envía la cuadratura y los desgloses principales, sin la lista de transacciones.</small>
+                </span>
+              </button>
+              <button
+                type="button"
+                className="cash-email-option detailed"
+                disabled={reenviarCorreoCierre.isPending}
+                onClick={() => reenviarCorreoCierre.mutate({ sessionId: emailSession.id, destino: "PROPIO_DETALLE" })}
+              >
+                <ReceiptRefundIcon className="h-6 w-6" />
+                <span>
+                  <strong>Enviar detalle completo propio</strong>
+                  <small>Incluye todas las transacciones del turno para una revisión puntual.</small>
+                </span>
+              </button>
+            </div>
+            {reenviarCorreoCierre.isPending && <p className="cash-email-sending">Enviando correo…</p>}
+          </div>
+        </div>
+      )}
 
       {selectedSession && (
         <div
@@ -614,8 +714,13 @@ export default function CajaPage() {
                   <span><small>Efectivo</small>{money(selectedSession.resumen.efectivo)}</span>
                   <span><small>Débito / tarjeta</small>{money(selectedSession.resumen.tarjeta)}</span>
                   <span><small>Transferencia</small>{money(selectedSession.resumen.transferencia)}</span>
-                  <span><small>Mixto</small>{money(selectedSession.resumen.mixto)}</span>
+                  <span><small>Ventas mixtas (referencia)</small>{money(selectedSession.resumen.mixto)}</span>
                 </div>
+                {selectedSession.resumen.cantidad_ventas_sin_desglose > 0 && (
+                  <p className="admin-message">
+                    {selectedSession.resumen.cantidad_ventas_sin_desglose} venta(s) histórica(s), por {money(selectedSession.resumen.monto_ventas_sin_desglose)}, no tienen desglose de pago.
+                  </p>
+                )}
               </section>
 
               <section className="cash-close-card">
@@ -901,10 +1006,15 @@ export default function CajaPage() {
                     {money(actual.resumen.transferencia)}
                   </span>
                   <span>
-                    <small>Mixto</small>
+                    <small>Ventas mixtas (referencia)</small>
                     {money(actual.resumen.mixto)}
                   </span>
                 </div>
+                {actual.resumen.cantidad_ventas_sin_desglose > 0 && (
+                  <p className="admin-message">
+                    Atención: {actual.resumen.cantidad_ventas_sin_desglose} venta(s), por {money(actual.resumen.monto_ventas_sin_desglose)}, no tienen desglose histórico. Ese monto no puede asignarse automáticamente a efectivo o pagos electrónicos.
+                  </p>
+                )}
               </section>
 
               <section className="cash-close-card">

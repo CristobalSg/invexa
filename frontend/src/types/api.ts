@@ -3,6 +3,7 @@ export type TipoPropiedadProducto = "PROPIO" | "CONSIGNACION";
 export type UnidadVentaProducto = "UNIDAD" | "PESO";
 export type ModoInventarioProducto = "SIN_INVENTARIO" | "FLEXIBLE" | "ESTRICTO";
 export type MetodoPago = "EFECTIVO" | "TARJETA" | "TRANSFERENCIA" | "MIXTO";
+export type MetodoPagoReal = Exclude<MetodoPago, "MIXTO">;
 export type EstadoVenta = "COMPLETADA" | "ANULADA";
 export type ModalidadVenta = "NORMAL" | "PRECIO_COSTO" | "RETIRO_DUENO";
 export type TipoMovimientoCaja = "INGRESO" | "EGRESO";
@@ -129,6 +130,8 @@ export interface CajaResumen {
   tarjeta: number;
   transferencia: number;
   mixto: number;
+  cantidad_ventas_sin_desglose: number;
+  monto_ventas_sin_desglose: number;
   ventas_propias: number;
   ventas_consignacion: number;
   consignacion_proveedores: Array<{
@@ -180,6 +183,7 @@ export interface CajaConsignacionProductoVenta {
   producto_id: number;
   producto_nombre: string;
   producto_unidad_venta: UnidadVentaProducto;
+  stock_actual: number;
   precio_unitario: number;
   cantidad: number;
   subtotal: number;
@@ -192,6 +196,13 @@ export interface CajaConsignacionProveedorVentas {
   proveedor_nombre: string;
   total: number;
   items: CajaConsignacionProductoVenta[];
+  inventario: Array<{
+    producto_id: number;
+    producto_nombre: string;
+    producto_unidad_venta: UnidadVentaProducto;
+    stock_actual: number;
+    activo: boolean;
+  }>;
 }
 
 export interface CierreCajaDiarioItem {
@@ -242,6 +253,7 @@ export interface Venta {
   total: number;
   monto_recibido: number | null;
   vuelto: number | null;
+  pagos_desglosados: boolean;
   modalidad: ModalidadVenta;
   estado: EstadoVenta;
   anulada_en: string | null;
@@ -267,8 +279,29 @@ export interface DetalleVenta {
   proveedor_nombre: string | null;
 }
 
+export interface MovimientoVenta {
+  id: number;
+  producto_id: number;
+  tipo: "VENTA" | "ANULACION";
+  cantidad: number;
+  stock_anterior: number | null;
+  stock_nuevo: number | null;
+  venta_id: number;
+  creado_en: string;
+}
+
+export interface PagoVenta {
+  id: number;
+  venta_id: number;
+  metodo_pago: MetodoPagoReal;
+  monto: number;
+  creado_en: string;
+}
+
 export interface VentaDetalle extends Venta {
   detalles: DetalleVenta[];
+  movimientos: MovimientoVenta[];
+  pagos: PagoVenta[];
 }
 
 export interface Compra {

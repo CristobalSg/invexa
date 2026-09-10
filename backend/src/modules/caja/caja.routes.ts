@@ -30,6 +30,7 @@ import type {
   EditarMovimientoCajaBody,
   EliminarMovimientoCajaBody,
   ForzarCerrarCajaBody,
+  ReenviarCorreoCierreBody,
 } from './caja.types.js';
 
 export const cajaRoutes: FastifyPluginAsync = async (fastify) => {
@@ -190,7 +191,7 @@ export const cajaRoutes: FastifyPluginAsync = async (fastify) => {
     },
   );
 
-  fastify.post<{ Params: CajaSessionParams }>(
+  fastify.post<{ Params: CajaSessionParams; Body: ReenviarCorreoCierreBody }>(
     '/sesiones/:id/reenviar-correo',
     { preHandler: cajaAccess, schema: reenviarCorreoCierreCajaSchema },
     async (request, reply) => {
@@ -200,6 +201,7 @@ export const cajaRoutes: FastifyPluginAsync = async (fastify) => {
           rol: request.user.rol,
         },
         request.params.id,
+        request.body,
       );
 
       return ok(reply, session);

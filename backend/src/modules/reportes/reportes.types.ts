@@ -10,6 +10,7 @@ export interface PaginationQuery extends DateRangeQuery {
 
 export interface BajoStockQuery extends PaginationQuery {
   readonly umbral?: number;
+  readonly categoria_id?: number;
 }
 
 export interface ProductoParams {

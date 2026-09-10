@@ -149,6 +149,7 @@ export const bajoStockSchema = {
     properties: {
       ...paginationQuerySchema.properties,
       umbral: { type: 'number', minimum: 0, default: 5 },
+      categoria_id: { type: 'integer', minimum: 1 },
     },
   },
 } as const;

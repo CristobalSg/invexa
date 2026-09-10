@@ -27,6 +27,8 @@ export interface CajaResumenRow {
   readonly tarjeta: string;
   readonly transferencia: string;
   readonly mixto: string;
+  readonly cantidad_ventas_sin_desglose: string;
+  readonly monto_ventas_sin_desglose: string;
   readonly ventas_propias: string;
   readonly ventas_consignacion: string;
   readonly consignacion_proveedores: string | null;
@@ -57,6 +59,8 @@ export interface CajaResumenFinanciero {
   readonly tarjeta: number;
   readonly transferencia: number;
   readonly mixto: number;
+  readonly cantidad_ventas_sin_desglose: number;
+  readonly monto_ventas_sin_desglose: number;
   readonly ventas_propias: number;
   readonly ventas_consignacion: number;
   readonly consignacion_proveedores: CajaResumenConsignacionProveedor[];
@@ -95,6 +99,12 @@ export interface CerrarCajaBody {
 
 export interface ForzarCerrarCajaBody extends CerrarCajaBody {
   readonly master_password: string;
+}
+
+export type DestinoCorreoCierre = 'COLABORADORES' | 'PROPIO' | 'PROPIO_DETALLE';
+
+export interface ReenviarCorreoCierreBody {
+  readonly destino: DestinoCorreoCierre;
 }
 
 export interface CajaSessionParams {
@@ -153,6 +163,7 @@ export interface CajaConsignacionProveedorVentaRow {
   readonly producto_id: number;
   readonly producto_nombre: string;
   readonly producto_unidad_venta: 'UNIDAD' | 'PESO';
+  readonly stock_actual: string;
   readonly precio_unitario: string;
   readonly cantidad: string;
   readonly subtotal: string;
@@ -164,6 +175,7 @@ export interface CajaConsignacionProveedorVenta {
   readonly producto_id: number;
   readonly producto_nombre: string;
   readonly producto_unidad_venta: 'UNIDAD' | 'PESO';
+  readonly stock_actual: number;
   readonly precio_unitario: number;
   readonly cantidad: number;
   readonly subtotal: number;
@@ -177,6 +189,64 @@ export interface CajaConsignacionProveedorVentas {
   readonly proveedor_email: string | null;
   readonly total: number;
   readonly items: CajaConsignacionProveedorVenta[];
+  readonly inventario: CajaConsignacionProveedorStock[];
+}
+
+export interface CajaConsignacionProveedorStockRow {
+  readonly proveedor_id: number;
+  readonly producto_id: number;
+  readonly producto_nombre: string;
+  readonly producto_unidad_venta: 'UNIDAD' | 'PESO';
+  readonly stock_actual: string;
+  readonly activo: boolean;
+}
+
+export interface CajaConsignacionProveedorStock {
+  readonly producto_id: number;
+  readonly producto_nombre: string;
+  readonly producto_unidad_venta: 'UNIDAD' | 'PESO';
+  readonly stock_actual: number;
+  readonly activo: boolean;
+}
+
+export interface CajaCierreVentaRow {
+  readonly id: number;
+  readonly creado_en: Date;
+  readonly estado: 'COMPLETADA' | 'ANULADA';
+  readonly modalidad: 'NORMAL' | 'PRECIO_COSTO' | 'RETIRO_DUENO';
+  readonly metodo_pago: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'MIXTO';
+  readonly subtotal: string;
+  readonly descuento: string;
+  readonly redondeo: string;
+  readonly total: string;
+  readonly monto_recibido: string | null;
+  readonly vuelto: string | null;
+  readonly pagos_desglosados: boolean;
+  readonly efectivo: string;
+  readonly tarjeta: string;
+  readonly transferencia: string;
+  readonly ventas_propias: string;
+  readonly ventas_consignacion: string;
+}
+
+export interface CajaCierreVenta {
+  readonly id: number;
+  readonly creado_en: string;
+  readonly estado: 'COMPLETADA' | 'ANULADA';
+  readonly modalidad: 'NORMAL' | 'PRECIO_COSTO' | 'RETIRO_DUENO';
+  readonly metodo_pago: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'MIXTO';
+  readonly subtotal: number;
+  readonly descuento: number;
+  readonly redondeo: number;
+  readonly total: number;
+  readonly monto_recibido: number | null;
+  readonly vuelto: number | null;
+  readonly pagos_desglosados: boolean;
+  readonly efectivo: number;
+  readonly tarjeta: number;
+  readonly transferencia: number;
+  readonly ventas_propias: number;
+  readonly ventas_consignacion: number;
 }
 
 export interface CajaMovimiento {

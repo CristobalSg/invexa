@@ -1,4 +1,5 @@
 export type MetodoPago = 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'MIXTO';
+export type MetodoPagoReal = Exclude<MetodoPago, 'MIXTO'>;
 export type EstadoVenta = 'COMPLETADA' | 'ANULADA';
 export type TipoPropiedadProducto = 'PROPIO' | 'CONSIGNACION';
 export type ModalidadVenta = 'NORMAL' | 'PRECIO_COSTO' | 'RETIRO_DUENO';
@@ -40,6 +41,7 @@ export interface VentaRow {
   readonly total: string;
   readonly monto_recibido: string | null;
   readonly vuelto: string | null;
+  readonly pagos_desglosados: boolean;
   readonly modalidad: ModalidadVenta;
   readonly estado: EstadoVenta;
   readonly anulada_en: Date | null;
@@ -80,6 +82,14 @@ export interface MovimientoVentaRow {
   readonly creado_en: Date;
 }
 
+export interface PagoVentaRow {
+  readonly id: number;
+  readonly venta_id: number;
+  readonly metodo_pago: MetodoPagoReal;
+  readonly monto: string;
+  readonly creado_en: Date;
+}
+
 export interface Venta {
   readonly id: number;
   readonly usuario_id: number;
@@ -93,6 +103,7 @@ export interface Venta {
   readonly total: number;
   readonly monto_recibido: number | null;
   readonly vuelto: number | null;
+  readonly pagos_desglosados: boolean;
   readonly modalidad: ModalidadVenta;
   readonly estado: EstadoVenta;
   readonly anulada_en: string | null;
@@ -129,9 +140,18 @@ export interface MovimientoVenta {
   readonly creado_en: string;
 }
 
+export interface PagoVenta {
+  readonly id: number;
+  readonly venta_id: number;
+  readonly metodo_pago: MetodoPagoReal;
+  readonly monto: number;
+  readonly creado_en: string;
+}
+
 export interface VentaDetalle extends Venta {
   readonly detalles: DetalleVenta[];
   readonly movimientos: MovimientoVenta[];
+  readonly pagos: PagoVenta[];
 }
 
 export interface CreateVentaItemBody {
@@ -140,7 +160,10 @@ export interface CreateVentaItemBody {
 }
 
 export interface CreateVentaBody {
-  readonly metodo_pago: MetodoPago;
+  readonly pagos: Array<{
+    readonly metodo_pago: MetodoPagoReal;
+    readonly monto: number;
+  }>;
   readonly descuento?: number;
   readonly modalidad?: ModalidadVenta;
   readonly master_password?: string;

@@ -1,6 +1,8 @@
 import type { Pool, PoolClient } from 'pg';
 
 import type {
+  CajaCierreVentaRow,
+  CajaConsignacionProveedorStockRow,
   CajaConsignacionProveedorVentaRow,
   CajaResumenRow,
   CajaMovimientoRow,
@@ -310,11 +312,20 @@ export class CajaRepository {
             COALESCE(SUM(v.subtotal), 0)::text AS subtotal,
             COALESCE(SUM(v.descuento), 0)::text AS descuento,
             COALESCE(SUM(v.total), 0)::text AS total_ventas,
-            COALESCE(SUM(v.total) FILTER (WHERE v.metodo_pago = 'EFECTIVO'), 0)::text AS efectivo,
-            COALESCE(SUM(v.total) FILTER (WHERE v.metodo_pago = 'TARJETA'), 0)::text AS tarjeta,
-            COALESCE(SUM(v.total) FILTER (WHERE v.metodo_pago = 'TRANSFERENCIA'), 0)::text AS transferencia,
-            COALESCE(SUM(v.total) FILTER (WHERE v.metodo_pago = 'MIXTO'), 0)::text AS mixto
+            COALESCE(SUM(v.total) FILTER (WHERE v.metodo_pago = 'MIXTO'), 0)::text AS mixto,
+            COUNT(v.id) FILTER (WHERE v.pagos_desglosados = FALSE)::text AS cantidad_ventas_sin_desglose,
+            COALESCE(SUM(v.total) FILTER (WHERE v.pagos_desglosados = FALSE), 0)::text AS monto_ventas_sin_desglose
           FROM ventas v
+          WHERE v.sesion_caja_id = $1
+            AND v.estado = 'COMPLETADA'
+        ),
+        pagos_resumen AS (
+          SELECT
+            COALESCE(SUM(pv.monto) FILTER (WHERE pv.metodo_pago = 'EFECTIVO'), 0)::text AS efectivo,
+            COALESCE(SUM(pv.monto) FILTER (WHERE pv.metodo_pago = 'TARJETA'), 0)::text AS tarjeta,
+            COALESCE(SUM(pv.monto) FILTER (WHERE pv.metodo_pago = 'TRANSFERENCIA'), 0)::text AS transferencia
+          FROM pagos_venta pv
+          INNER JOIN ventas v ON v.id = pv.venta_id
           WHERE v.sesion_caja_id = $1
             AND v.estado = 'COMPLETADA'
         ),
@@ -362,6 +373,7 @@ export class CajaRepository {
         )
         SELECT *
         FROM ventas_resumen
+        CROSS JOIN pagos_resumen
         CROSS JOIN movimientos_resumen
         CROSS JOIN detalle_resumen
         CROSS JOIN consignacion_proveedores
@@ -381,11 +393,20 @@ export class CajaRepository {
             COALESCE(SUM(v.subtotal), 0)::text AS subtotal,
             COALESCE(SUM(v.descuento), 0)::text AS descuento,
             COALESCE(SUM(v.total), 0)::text AS total_ventas,
-            COALESCE(SUM(v.total) FILTER (WHERE v.metodo_pago = 'EFECTIVO'), 0)::text AS efectivo,
-            COALESCE(SUM(v.total) FILTER (WHERE v.metodo_pago = 'TARJETA'), 0)::text AS tarjeta,
-            COALESCE(SUM(v.total) FILTER (WHERE v.metodo_pago = 'TRANSFERENCIA'), 0)::text AS transferencia,
-            COALESCE(SUM(v.total) FILTER (WHERE v.metodo_pago = 'MIXTO'), 0)::text AS mixto
+            COALESCE(SUM(v.total) FILTER (WHERE v.metodo_pago = 'MIXTO'), 0)::text AS mixto,
+            COUNT(v.id) FILTER (WHERE v.pagos_desglosados = FALSE)::text AS cantidad_ventas_sin_desglose,
+            COALESCE(SUM(v.total) FILTER (WHERE v.pagos_desglosados = FALSE), 0)::text AS monto_ventas_sin_desglose
           FROM ventas v
+          WHERE v.sesion_caja_id = $1
+            AND v.estado = 'COMPLETADA'
+        ),
+        pagos_resumen AS (
+          SELECT
+            COALESCE(SUM(pv.monto) FILTER (WHERE pv.metodo_pago = 'EFECTIVO'), 0)::text AS efectivo,
+            COALESCE(SUM(pv.monto) FILTER (WHERE pv.metodo_pago = 'TARJETA'), 0)::text AS tarjeta,
+            COALESCE(SUM(pv.monto) FILTER (WHERE pv.metodo_pago = 'TRANSFERENCIA'), 0)::text AS transferencia
+          FROM pagos_venta pv
+          INNER JOIN ventas v ON v.id = pv.venta_id
           WHERE v.sesion_caja_id = $1
             AND v.estado = 'COMPLETADA'
         ),
@@ -433,6 +454,7 @@ export class CajaRepository {
         )
         SELECT *
         FROM ventas_resumen
+        CROSS JOIN pagos_resumen
         CROSS JOIN movimientos_resumen
         CROSS JOIN detalle_resumen
         CROSS JOIN consignacion_proveedores
@@ -454,6 +476,7 @@ export class CajaRepository {
           dv.producto_id,
           p.nombre AS producto_nombre,
           p.unidad_venta AS producto_unidad_venta,
+          p.stock::text AS stock_actual,
           dv.precio_unitario,
           SUM(dv.cantidad)::text AS cantidad,
           SUM(dv.subtotal)::text AS subtotal,
@@ -473,8 +496,85 @@ export class CajaRepository {
           dv.producto_id,
           p.nombre,
           p.unidad_venta,
+          p.stock,
           dv.precio_unitario
         ORDER BY proveedor_nombre ASC, producto_nombre ASC, dv.precio_unitario ASC
+      `,
+      [sessionId],
+    );
+
+    return result.rows;
+  }
+
+  async findVentasCierreBySessionId(sessionId: number): Promise<CajaCierreVentaRow[]> {
+    const result = await this.pool.query<CajaCierreVentaRow>(
+      `
+        SELECT
+          v.id,
+          v.creado_en,
+          v.estado,
+          v.modalidad,
+          v.metodo_pago,
+          v.subtotal,
+          v.descuento,
+          v.redondeo,
+          v.total,
+          v.monto_recibido,
+          v.vuelto,
+          v.pagos_desglosados,
+          COALESCE(pagos.efectivo, 0)::text AS efectivo,
+          COALESCE(pagos.tarjeta, 0)::text AS tarjeta,
+          COALESCE(pagos.transferencia, 0)::text AS transferencia,
+          COALESCE(detalle.ventas_propias, 0)::text AS ventas_propias,
+          COALESCE(detalle.ventas_consignacion, 0)::text AS ventas_consignacion
+        FROM ventas v
+        LEFT JOIN LATERAL (
+          SELECT
+            SUM(pv.monto) FILTER (WHERE pv.metodo_pago = 'EFECTIVO') AS efectivo,
+            SUM(pv.monto) FILTER (WHERE pv.metodo_pago = 'TARJETA') AS tarjeta,
+            SUM(pv.monto) FILTER (WHERE pv.metodo_pago = 'TRANSFERENCIA') AS transferencia
+          FROM pagos_venta pv
+          WHERE pv.venta_id = v.id
+        ) pagos ON TRUE
+        LEFT JOIN LATERAL (
+          SELECT
+            SUM(dv.total_final) FILTER (WHERE dv.tipo_propiedad = 'PROPIO') AS ventas_propias,
+            SUM(dv.total_final) FILTER (WHERE dv.tipo_propiedad = 'CONSIGNACION') AS ventas_consignacion
+          FROM detalle_ventas dv
+          WHERE dv.venta_id = v.id
+        ) detalle ON TRUE
+        WHERE v.sesion_caja_id = $1
+        ORDER BY v.creado_en ASC, v.id ASC
+      `,
+      [sessionId],
+    );
+
+    return result.rows;
+  }
+
+  async findConsignacionStockBySessionId(sessionId: number): Promise<CajaConsignacionProveedorStockRow[]> {
+    const result = await this.pool.query<CajaConsignacionProveedorStockRow>(
+      `
+        WITH proveedores_del_cierre AS (
+          SELECT DISTINCT dv.proveedor_id
+          FROM detalle_ventas dv
+          INNER JOIN ventas v ON v.id = dv.venta_id
+          WHERE v.sesion_caja_id = $1
+            AND v.estado = 'COMPLETADA'
+            AND dv.tipo_propiedad = 'CONSIGNACION'
+            AND dv.proveedor_id IS NOT NULL
+        )
+        SELECT
+          p.proveedor_id,
+          p.id AS producto_id,
+          p.nombre AS producto_nombre,
+          p.unidad_venta AS producto_unidad_venta,
+          p.stock::text AS stock_actual,
+          p.activo
+        FROM productos p
+        INNER JOIN proveedores_del_cierre pc ON pc.proveedor_id = p.proveedor_id
+        WHERE p.tipo_propiedad = 'CONSIGNACION'
+        ORDER BY p.proveedor_id ASC, p.activo DESC, p.nombre ASC
       `,
       [sessionId],
     );
