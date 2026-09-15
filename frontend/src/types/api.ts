@@ -182,6 +182,7 @@ export interface CajaSession {
 export interface CajaConsignacionProductoVenta {
   producto_id: number;
   producto_nombre: string;
+  producto_codigo_barras: string | null;
   producto_unidad_venta: UnidadVentaProducto;
   stock_actual: number;
   precio_unitario: number;
@@ -199,6 +200,7 @@ export interface CajaConsignacionProveedorVentas {
   inventario: Array<{
     producto_id: number;
     producto_nombre: string;
+    producto_codigo_barras: string | null;
     producto_unidad_venta: UnidadVentaProducto;
     stock_actual: number;
     activo: boolean;

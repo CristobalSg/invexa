@@ -101,7 +101,11 @@ export interface ForzarCerrarCajaBody extends CerrarCajaBody {
   readonly master_password: string;
 }
 
-export type DestinoCorreoCierre = 'COLABORADORES' | 'PROPIO' | 'PROPIO_DETALLE';
+export type DestinoCorreoCierre =
+  | 'COLABORADORES'
+  | 'COLABORADORES_CSV'
+  | 'PROPIO'
+  | 'PROPIO_DETALLE';
 
 export interface ReenviarCorreoCierreBody {
   readonly destino: DestinoCorreoCierre;
@@ -162,6 +166,7 @@ export interface CajaConsignacionProveedorVentaRow {
   readonly proveedor_email: string | null;
   readonly producto_id: number;
   readonly producto_nombre: string;
+  readonly producto_codigo_barras: string | null;
   readonly producto_unidad_venta: 'UNIDAD' | 'PESO';
   readonly stock_actual: string;
   readonly precio_unitario: string;
@@ -174,6 +179,7 @@ export interface CajaConsignacionProveedorVentaRow {
 export interface CajaConsignacionProveedorVenta {
   readonly producto_id: number;
   readonly producto_nombre: string;
+  readonly producto_codigo_barras: string | null;
   readonly producto_unidad_venta: 'UNIDAD' | 'PESO';
   readonly stock_actual: number;
   readonly precio_unitario: number;
@@ -196,6 +202,7 @@ export interface CajaConsignacionProveedorStockRow {
   readonly proveedor_id: number;
   readonly producto_id: number;
   readonly producto_nombre: string;
+  readonly producto_codigo_barras: string | null;
   readonly producto_unidad_venta: 'UNIDAD' | 'PESO';
   readonly stock_actual: string;
   readonly activo: boolean;
@@ -204,6 +211,7 @@ export interface CajaConsignacionProveedorStockRow {
 export interface CajaConsignacionProveedorStock {
   readonly producto_id: number;
   readonly producto_nombre: string;
+  readonly producto_codigo_barras: string | null;
   readonly producto_unidad_venta: 'UNIDAD' | 'PESO';
   readonly stock_actual: number;
   readonly activo: boolean;

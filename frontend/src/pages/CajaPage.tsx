@@ -7,6 +7,7 @@ import {
   CheckCircleIcon,
   ClockIcon,
   CreditCardIcon,
+  DocumentTextIcon,
   EnvelopeIcon,
   ReceiptRefundIcon,
   TruckIcon,
@@ -287,17 +288,20 @@ export default function CajaPage() {
       const collaboratorsText = mail
         ? `Enviados ${mail.proveedores_enviados}, omitidos ${mail.proveedores_omitidos}, fallidos ${mail.proveedores_fallidos}.`
         : "No se recibió el estado de los envíos.";
-      const isCollaborators = variables.destino === "COLABORADORES";
+      const isCollaborators = variables.destino === "COLABORADORES" || variables.destino === "COLABORADORES_CSV";
+      const isCsvOnly = variables.destino === "COLABORADORES_CSV";
       const collaboratorsOk = Boolean(mail && mail.proveedores_fallidos === 0 && mail.proveedores_omitidos === 0);
       const systemOk = Boolean(mail?.sistema_enviado);
       setToast({
         title: isCollaborators
-          ? (collaboratorsOk ? "Correos de colaboradores procesados" : "Envío incompleto")
+          ? (collaboratorsOk ? (isCsvOnly ? "CSV enviados a colaboradores" : "Correos de colaboradores procesados") : "Envío incompleto")
           : (systemOk ? "Correo propio enviado" : "No se pudo enviar el correo propio"),
         description: isCollaborators
           ? (mail && mail.proveedores_enviados === 0 && collaboratorsOk
             ? "No había colaboradores con ventas para notificar."
-            : collaboratorsText)
+            : isCsvOnly
+              ? `Se enviaron los archivos CSV. ${collaboratorsText}`
+              : collaboratorsText)
           : systemOk
             ? (variables.destino === "PROPIO_DETALLE"
               ? "Se envió el cierre propio con el detalle completo de transacciones."
@@ -609,6 +613,18 @@ export default function CajaPage() {
                 <span>
                   <strong>Enviar a colaboradores</strong>
                   <small>Envía a cada colaborador sus ventas y el stock actual de sus productos.</small>
+                </span>
+              </button>
+              <button
+                type="button"
+                className="cash-email-option"
+                disabled={reenviarCorreoCierre.isPending}
+                onClick={() => reenviarCorreoCierre.mutate({ sessionId: emailSession.id, destino: "COLABORADORES_CSV" })}
+              >
+                <DocumentTextIcon className="h-6 w-6" />
+                <span>
+                  <strong>Enviar solo CSV a colaboradores</strong>
+                  <small>Envía a cada colaborador los archivos de ventas y stock activo de esta caja.</small>
                 </span>
               </button>
               <button

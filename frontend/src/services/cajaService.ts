@@ -28,7 +28,7 @@ export async function forzarCerrarCaja(efectivo_contado: number, master_password
   return data;
 }
 
-export type DestinoCorreoCierre = "COLABORADORES" | "PROPIO" | "PROPIO_DETALLE";
+export type DestinoCorreoCierre = "COLABORADORES" | "COLABORADORES_CSV" | "PROPIO" | "PROPIO_DETALLE";
 
 export async function reenviarCorreoCierreCaja(id: number, destino: DestinoCorreoCierre) {
   const { data } = await api.post<CajaSession>(`/caja/sesiones/${id}/reenviar-correo`, { destino });

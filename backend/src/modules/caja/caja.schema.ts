@@ -94,7 +94,7 @@ const movimientoCajaSchema = {
     tipo: { type: 'string', enum: ['INGRESO', 'EGRESO'] },
     categoria: {
       type: 'string',
-      enum: ['PAGO_PROVEEDOR', 'COMPRA_MENOR', 'RETIRO_PROPIETARIO', 'DEPOSITO', 'REPOSICION', 'OTRO'],
+        enum: ['PAGO_PROVEEDOR', 'COMPRA_MENOR', 'RETIRO_PROPIETARIO', 'DEPOSITO', 'REPOSICION', 'OTRO'],
     },
     monto: { type: 'number' },
     descripcion: { type: ['string', 'null'] },
@@ -166,6 +166,7 @@ const cajaConsignacionProveedorVentasSchema = {
         required: [
           'producto_id',
           'producto_nombre',
+          'producto_codigo_barras',
           'producto_unidad_venta',
           'stock_actual',
           'precio_unitario',
@@ -177,6 +178,7 @@ const cajaConsignacionProveedorVentasSchema = {
         properties: {
           producto_id: { type: 'number' },
           producto_nombre: { type: 'string' },
+          producto_codigo_barras: { type: ['string', 'null'] },
           producto_unidad_venta: { type: 'string', enum: ['UNIDAD', 'PESO'] },
           stock_actual: { type: 'number' },
           precio_unitario: { type: 'number' },
@@ -194,6 +196,7 @@ const cajaConsignacionProveedorVentasSchema = {
         required: [
           'producto_id',
           'producto_nombre',
+          'producto_codigo_barras',
           'producto_unidad_venta',
           'stock_actual',
           'activo',
@@ -201,6 +204,7 @@ const cajaConsignacionProveedorVentasSchema = {
         properties: {
           producto_id: { type: 'number' },
           producto_nombre: { type: 'string' },
+          producto_codigo_barras: { type: ['string', 'null'] },
           producto_unidad_venta: { type: 'string', enum: ['UNIDAD', 'PESO'] },
           stock_actual: { type: 'number' },
           activo: { type: 'boolean' },
@@ -316,7 +320,7 @@ export const editarMovimientoCajaSchema = {
       tipo: { type: 'string', enum: ['INGRESO', 'EGRESO'] },
       categoria: {
         type: 'string',
-        enum: ['PAGO_PROVEEDOR', 'COMPRA_MENOR', 'RETIRO_PROPIETARIO', 'DEPOSITO', 'REPOSICION', 'OTRO'],
+      enum: ['PAGO_PROVEEDOR', 'COMPRA_MENOR', 'RETIRO_PROPIETARIO', 'DEPOSITO', 'REPOSICION', 'OTRO'],
       },
       monto: { type: 'number', exclusiveMinimum: 0 },
       descripcion: { type: ['string', 'null'], maxLength: 500 },
@@ -448,7 +452,10 @@ export const reenviarCorreoCierreCajaSchema = {
     required: ['destino'],
     additionalProperties: false,
     properties: {
-      destino: { type: 'string', enum: ['COLABORADORES', 'PROPIO', 'PROPIO_DETALLE'] },
+      destino: {
+        type: 'string',
+        enum: ['COLABORADORES', 'COLABORADORES_CSV', 'PROPIO', 'PROPIO_DETALLE'],
+      },
     },
   },
   response: {

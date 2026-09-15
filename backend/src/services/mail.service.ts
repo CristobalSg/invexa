@@ -19,6 +19,13 @@ interface SendHtmlMailInput {
   readonly subject: string;
   readonly html: string;
   readonly to?: string;
+  readonly attachments?: ReadonlyArray<MailAttachment>;
+}
+
+interface MailAttachment {
+  readonly filename: string;
+  readonly content: string;
+  readonly contentType: string;
 }
 
 interface MailCredentials {
@@ -79,6 +86,7 @@ export class MailService {
       to: input.to ?? credentials.to,
       subject: input.subject,
       html: input.html,
+      ...(input.attachments ? { attachments: input.attachments } : {}),
     });
 
     return true;
@@ -104,6 +112,35 @@ export class MailService {
       to,
       subject: `Ventas en consignación - Cierre de caja #${session.id}`,
       html: this.buildConsignmentProviderHtml(session, providerSales),
+      attachments: this.buildConsignmentProviderAttachments(session, providerSales),
+    });
+  }
+
+  async sendConsignmentProviderCsvEmail(
+    to: string,
+    session: CajaSessionDetalle,
+    providerSales: CajaConsignacionProveedorVentas,
+  ): Promise<boolean> {
+    const closedAt = session.cerrada_en ?? new Date().toISOString();
+
+    return this.sendHtml({
+      to,
+      subject: `Archivos CSV de consignación - Cierre de caja #${session.id}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; color: #1f2937; line-height: 1.45;">
+          <h1 style="margin: 0 0 8px; font-size: 24px;">Archivos CSV de consignación</h1>
+          <p style="margin: 0 0 8px; color: #6b7280;">
+            Cierre de caja #${session.id} · ${escapeHtml(this.formatDate(closedAt))}
+          </p>
+          <p style="margin: 0 0 18px; color: #6b7280;">
+            Proveedor: <strong>${escapeHtml(providerSales.proveedor_nombre)}</strong>
+          </p>
+          <p style="margin: 0;">
+            Se adjuntan los CSV con las cantidades vendidas y el stock activo actual por código de barras.
+          </p>
+        </div>
+      `,
+      attachments: this.buildConsignmentProviderAttachments(session, providerSales),
     });
   }
 
@@ -355,10 +392,73 @@ export class MailService {
         }
 
         <p style="margin: 0; color: #6b7280; font-size: 13px;">
-          Este correo incluye solamente productos en consignación asociados a este proveedor. El stock mostrado es el disponible al momento de emitir este correo.
+          Este correo incluye solamente productos en consignación asociados a este proveedor. El stock mostrado es el disponible al momento de emitir este correo. Se adjuntan archivos CSV con las cantidades vendidas y el stock actual por código de barras.
         </p>
       </div>
     `;
+  }
+
+  private buildConsignmentProviderAttachments(
+    session: CajaSessionDetalle,
+    providerSales: CajaConsignacionProveedorVentas,
+  ): MailAttachment[] {
+    const soldByProduct = new Map<number, { barcode: string | null; quantity: number }>();
+
+    for (const item of providerSales.items) {
+      const current = soldByProduct.get(item.producto_id);
+      soldByProduct.set(item.producto_id, {
+        barcode: item.producto_codigo_barras,
+        quantity: (current?.quantity ?? 0) + item.cantidad,
+      });
+    }
+
+    const soldCsv = this.buildCsv(
+      ['codigo_barra', 'cantidad_vendida'],
+      Array.from(soldByProduct.values()).map((item) => [
+        item.barcode ?? '',
+        this.formatCsvNumber(item.quantity),
+      ]),
+    );
+    const stockCsv = this.buildCsv(
+      ['codigo_barra', 'cantidad_stock'],
+      providerSales.inventario.map((item) => [
+        item.producto_codigo_barras ?? '',
+        this.formatCsvNumber(item.stock_actual),
+      ]),
+    );
+
+    return [
+      {
+        filename: `ventas_cierre_${session.id}.csv`,
+        content: soldCsv,
+        contentType: 'text/csv; charset=utf-8',
+      },
+      {
+        filename: `stock_cierre_${session.id}.csv`,
+        content: stockCsv,
+        contentType: 'text/csv; charset=utf-8',
+      },
+    ];
+  }
+
+  private buildCsv(headers: string[], rows: string[][]): string {
+    const lines = [headers, ...rows].map((row) =>
+      row.map((value) => this.escapeCsv(value)).join(','),
+    );
+    return `\uFEFF${lines.join('\r\n')}\r\n`;
+  }
+
+  private escapeCsv(value: string): string {
+    return `"${value.replaceAll('"', '""')}"`;
+  }
+
+  private formatCsvNumber(value: number): string {
+    if (Number.isInteger(value)) {
+      return String(value);
+    }
+
+    const factor = 1_000;
+    return String(Math.round((value + Number.EPSILON) * factor) / factor);
   }
 
   private formatMoney(value: number): string {

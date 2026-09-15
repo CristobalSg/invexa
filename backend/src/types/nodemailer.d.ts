@@ -4,6 +4,11 @@ declare module 'nodemailer' {
     readonly to: string;
     readonly subject: string;
     readonly html: string;
+    readonly attachments?: ReadonlyArray<{
+      readonly filename: string;
+      readonly content: string;
+      readonly contentType: string;
+    }>;
   }
 
   interface Transporter {

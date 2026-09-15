@@ -475,6 +475,7 @@ export class CajaRepository {
           pr.telefono AS proveedor_email,
           dv.producto_id,
           p.nombre AS producto_nombre,
+          p.codigo_barras AS producto_codigo_barras,
           p.unidad_venta AS producto_unidad_venta,
           p.stock::text AS stock_actual,
           dv.precio_unitario,
@@ -495,6 +496,7 @@ export class CajaRepository {
           pr.telefono,
           dv.producto_id,
           p.nombre,
+          p.codigo_barras,
           p.unidad_venta,
           p.stock,
           dv.precio_unitario
@@ -568,12 +570,14 @@ export class CajaRepository {
           p.proveedor_id,
           p.id AS producto_id,
           p.nombre AS producto_nombre,
+          p.codigo_barras AS producto_codigo_barras,
           p.unidad_venta AS producto_unidad_venta,
           p.stock::text AS stock_actual,
           p.activo
         FROM productos p
         INNER JOIN proveedores_del_cierre pc ON pc.proveedor_id = p.proveedor_id
         WHERE p.tipo_propiedad = 'CONSIGNACION'
+          AND p.activo = TRUE
         ORDER BY p.proveedor_id ASC, p.activo DESC, p.nombre ASC
       `,
       [sessionId],

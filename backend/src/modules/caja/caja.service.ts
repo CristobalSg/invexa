@@ -391,9 +391,11 @@ export class CajaService {
     }
 
     const notificacionCorreos = await this.sendCashCloseEmailSafely(session, {
-      enviarSistema: data.destino !== 'COLABORADORES',
-      enviarColaboradores: data.destino === 'COLABORADORES',
+      enviarSistema: data.destino === 'PROPIO' || data.destino === 'PROPIO_DETALLE',
+      enviarColaboradores:
+        data.destino === 'COLABORADORES' || data.destino === 'COLABORADORES_CSV',
       incluirDetalle: data.destino === 'PROPIO_DETALLE',
+      soloCsvColaboradores: data.destino === 'COLABORADORES_CSV',
     });
     return { ...session, notificacion_correos: notificacionCorreos };
   }
@@ -509,6 +511,7 @@ export class CajaService {
       readonly enviarSistema: boolean;
       readonly enviarColaboradores: boolean;
       readonly incluirDetalle: boolean;
+      readonly soloCsvColaboradores?: boolean;
     } = {
       enviarSistema: true,
       enviarColaboradores: true,
@@ -584,7 +587,9 @@ export class CajaService {
       }
 
       try {
-        const sent = await this.mailService.sendConsignmentProviderCashCloseEmail(email, session, providerSales);
+        const sent = options.soloCsvColaboradores
+          ? await this.mailService.sendConsignmentProviderCsvEmail(email, session, providerSales)
+          : await this.mailService.sendConsignmentProviderCashCloseEmail(email, session, providerSales);
         if (sent) {
           summary.proveedores_enviados += 1;
         } else {
@@ -618,6 +623,7 @@ export class CajaService {
       current.push({
         producto_id: row.producto_id,
         producto_nombre: row.producto_nombre,
+        producto_codigo_barras: row.producto_codigo_barras,
         producto_unidad_venta: row.producto_unidad_venta,
         stock_actual: Number(row.stock_actual),
         activo: row.activo,
@@ -644,6 +650,7 @@ export class CajaService {
       current.items.push({
         producto_id: row.producto_id,
         producto_nombre: row.producto_nombre,
+        producto_codigo_barras: row.producto_codigo_barras,
         producto_unidad_venta: row.producto_unidad_venta,
         stock_actual: Number(row.stock_actual),
         precio_unitario: Number(row.precio_unitario),
