@@ -12,25 +12,8 @@ interface ProductTileProps {
   onToggleFeatured?: () => void;
 }
 
-const productImageModules = import.meta.glob("../assets/images/products/**/*.{png,jpg,jpeg,webp,avif}", {
-  eager: true,
-  query: "?url",
-  import: "default",
-}) as Record<string, string>;
-
 const normalizeText = (value: string) =>
   value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-
-const slugifyAssetName = (value: string) =>
-  normalizeText(value)
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-
-const productImagesBySlug = Object.entries(productImageModules).reduce<Record<string, string>>((acc, [path, src]) => {
-  const filename = path.split("/").pop()?.replace(/\.[^.]+$/, "").replace(/^\d+[_-]+/, "") ?? "";
-  acc[slugifyAssetName(filename)] = src;
-  return acc;
-}, {});
 
 const isWeighableProduct = (product: Producto) =>
   product.unidad_venta === "PESO";
@@ -54,7 +37,6 @@ export default function ProductTile({
   onClick,
   onToggleFeatured,
 }: ProductTileProps) {
-  const productImage = productImagesBySlug[slugifyAssetName(product.nombre)];
   const isCompact = density === "compact";
   const isQuickCompact = isCompact && compactVariant === "quick";
   const isOutOfStock = product.stock <= 0;
@@ -67,7 +49,7 @@ export default function ProductTile({
         onClick={onClick}
       >
         <span className="inventory-product-card-visual">
-          {productImage ? <img src={productImage} alt="" /> : productVisual(product)}
+          {productVisual(product)}
         </span>
         <span className="inventory-product-card-main">
           <span className="inventory-product-card-name">{product.nombre}</span>
@@ -85,7 +67,7 @@ export default function ProductTile({
   const content = (
     <>
       <div className="pos-product-visual">
-        {productImage ? <img src={productImage} alt="" /> : productVisual(product)}
+        {productVisual(product)}
       </div>
       {isOutOfStock && <span className="pos-product-stock-badge">Sin stock</span>}
       {onToggleFeatured && (

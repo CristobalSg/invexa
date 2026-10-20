@@ -5,6 +5,7 @@ import type {
   PaginationQuery,
   ProductoListRow,
   ProductoRow,
+  ProductBarcodeSeed,
   ResetProduceProductInput,
   ResetProduceProductsResult,
   UpdateProductoBody,
@@ -206,7 +207,10 @@ export class ProductosRepository {
     return result.rows[0] ?? null;
   }
 
-  async create(data: CreateProductoBody, client: Pool | PoolClient = this.pool): Promise<ProductoRow> {
+  async create(
+    data: CreateProductoBody,
+    client: Pool | PoolClient = this.pool,
+  ): Promise<ProductoRow> {
     const result = await client.query<ProductoRow>(
       `
         INSERT INTO productos (
@@ -252,10 +256,17 @@ export class ProductosRepository {
       ],
     );
 
-    return (await this.findByIdWithClient(client, (result.rows[0] as { readonly id: number }).id)) as ProductoRow;
+    return (await this.findByIdWithClient(
+      client,
+      (result.rows[0] as { readonly id: number }).id,
+    )) as ProductoRow;
   }
 
-  async update(id: number, data: UpdateProductoBody, client: Pool | PoolClient = this.pool): Promise<ProductoRow | null> {
+  async update(
+    id: number,
+    data: UpdateProductoBody,
+    client: Pool | PoolClient = this.pool,
+  ): Promise<ProductoRow | null> {
     const result = await client.query<{ readonly id: number }>(
       `
         UPDATE productos
@@ -308,6 +319,32 @@ export class ProductosRepository {
     }
 
     return this.findByIdWithClient(client, result.rows[0].id);
+  }
+
+  async findWithoutBarcodeForUpdate(client: PoolClient): Promise<ProductBarcodeSeed[]> {
+    const result = await client.query<ProductBarcodeSeed>(
+      `
+        SELECT id, categoria_id
+        FROM productos
+        WHERE codigo_barras IS NULL OR BTRIM(codigo_barras) = ''
+        ORDER BY id ASC
+        FOR UPDATE
+      `,
+    );
+
+    return result.rows;
+  }
+
+  async setGeneratedBarcode(client: PoolClient, id: number, codigoBarras: string): Promise<void> {
+    await client.query(
+      `
+        UPDATE productos
+        SET codigo_barras = $2, actualizado_en = NOW()
+        WHERE id = $1
+          AND (codigo_barras IS NULL OR BTRIM(codigo_barras) = '')
+      `,
+      [id, codigoBarras],
+    );
   }
 
   async findByIdWithClient(client: Pool | PoolClient, id: number): Promise<ProductoRow | null> {

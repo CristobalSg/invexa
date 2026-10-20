@@ -1,13 +1,20 @@
 import { useEffect, useRef } from "react";
+import { StarIcon as StarIconOutline } from "@heroicons/react/24/outline";
+import { StarIcon as StarIconSolid } from "@heroicons/react/24/solid";
 import type { Producto } from "../types/api";
 
 interface Props {
   searchTerm: string;
   products: Producto[];
+  totalProducts: number;
   selectedIndex: number;
   keyboardActive: boolean;
+  favoriteProductIds: number[];
+  cartShortcut: string;
+  checkoutShortcut: string;
   isLoading?: boolean;
   onProductClick: (product: Producto, index: number) => void;
+  onToggleFavorite: (productId: number) => void;
 }
 
 const isWeighableProduct = (product: Producto) => product.unidad_venta === "PESO";
@@ -15,12 +22,18 @@ const isWeighableProduct = (product: Producto) => product.unidad_venta === "PESO
 export default function SideList({
   searchTerm,
   products,
+  totalProducts,
   selectedIndex,
   keyboardActive,
+  favoriteProductIds,
+  cartShortcut,
+  checkoutShortcut,
   isLoading = false,
   onProductClick,
+  onToggleFavorite,
 }: Props) {
-  const selectedRef = useRef<HTMLButtonElement>(null);
+  const selectedRef = useRef<HTMLDivElement>(null);
+  const favoriteIds = new Set(favoriteProductIds);
 
   useEffect(() => {
     if (!keyboardActive) return;
@@ -35,7 +48,7 @@ export default function SideList({
           <h2 className="pos-subtitle">Productos</h2>
         </div>
         <div className="pos-keyboard-help" aria-label="Atajos de teclado">
-          <kbd>↑</kbd><kbd>↓</kbd> navegar <kbd>Enter</kbd> agregar <kbd>\</kbd> carrito <kbd>]</kbd> finalizar
+          <kbd>↑</kbd><kbd>↓</kbd> navegar <kbd>Enter</kbd> agregar <kbd>{cartShortcut}</kbd> carrito <kbd>{checkoutShortcut}</kbd> finalizar
         </div>
       </div>
 
@@ -45,7 +58,7 @@ export default function SideList({
             ? <>Resultados para <strong>“{searchTerm}”</strong></>
             : "Todos los productos activos"}
         </span>
-        <strong>{products.length} {products.length === 1 ? "producto" : "productos"}</strong>
+        <strong>Mostrando {products.length} de {totalProducts}</strong>
       </div>
 
       {isLoading ? (
@@ -60,29 +73,39 @@ export default function SideList({
           {products.map((product, index) => {
             const selected = keyboardActive && index === selectedIndex;
             const weight = isWeighableProduct(product);
+            const isFavorite = favoriteIds.has(product.id);
 
             return (
-              <button
+              <div
                 key={product.id}
                 ref={selected ? selectedRef : undefined}
-                type="button"
                 role="option"
                 aria-selected={selected}
                 className={`pos-keyboard-product-row ${selected ? "selected" : ""} ${product.stock <= 0 ? "out-of-stock" : ""}`}
-                onClick={() => onProductClick(product, index)}
               >
-                <span className="pos-product-row-index">{index + 1}</span>
-                <span className="pos-product-row-main">
-                  <strong>{product.nombre}</strong>
-                  <small>{product.codigo_barras ?? "Sin código"} · {product.categoria_nombre}</small>
-                </span>
-                <span className="pos-product-row-stock">
-                  {product.stock <= 0 ? "Sin stock" : `${product.stock} ${weight ? "kg" : "un."}`}
-                </span>
-                <span className="pos-product-row-price">
-                  ${product.precio_venta.toLocaleString()}{weight ? "/kg" : ""}
-                </span>
-              </button>
+                <button type="button" className="pos-keyboard-product-select" onClick={() => onProductClick(product, index)}>
+                  <span className="pos-product-row-index">{index + 1}</span>
+                  <span className="pos-product-row-main">
+                    <strong>{product.nombre}</strong>
+                    <small>{product.codigo_barras ?? "Sin código"} · {product.categoria_nombre}</small>
+                  </span>
+                  <span className="pos-product-row-stock">
+                    {product.stock <= 0 ? "Sin stock" : `${product.stock} ${weight ? "kg" : "un."}`}
+                  </span>
+                  <span className="pos-product-row-price">
+                    ${product.precio_venta.toLocaleString()}{weight ? "/kg" : ""}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className={`pos-product-row-favorite ${isFavorite ? "active" : ""}`}
+                  onClick={() => onToggleFavorite(product.id)}
+                  aria-label={isFavorite ? `Quitar ${product.nombre} de favoritos` : `Agregar ${product.nombre} a favoritos`}
+                  title={isFavorite ? "Quitar de favoritos" : "Agregar a favoritos"}
+                >
+                  {isFavorite ? <StarIconSolid /> : <StarIconOutline />}
+                </button>
+              </div>
             );
           })}
         </div>

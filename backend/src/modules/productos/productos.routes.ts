@@ -7,6 +7,8 @@ import { ProductosRepository } from './productos.repository.js';
 import {
   createProductoSchema,
   deactivateProductoSchema,
+  generateMissingBarcodesSchema,
+  generateProductoBarcodeSchema,
   getProductoByCodigoSchema,
   getProductoSchema,
   listProductosSchema,
@@ -17,6 +19,8 @@ import { ProductosService } from './productos.service.js';
 import type {
   CreateProductoBody,
   DeactivateProductoBody,
+  GenerateMissingBarcodesBody,
+  GenerateProductoBarcodeBody,
   PaginationQuery,
   ProductoCodigoParams,
   ProductoParams,
@@ -76,11 +80,25 @@ export const productosRoutes: FastifyPluginAsync = async (fastify) => {
     },
   );
 
+  fastify.patch<{ Body: GenerateMissingBarcodesBody }>(
+    '/generar-codigos-faltantes',
+    { preHandler: createProducts, schema: generateMissingBarcodesSchema },
+    async (request, reply) => {
+      const result = await service.generateMissingBarcodes(request.body);
+      return ok(reply, result);
+    },
+  );
+
   fastify.patch<{ Params: ProductoParams; Body: UpdateProductoBody }>(
     '/:id',
     { preHandler: createProducts, schema: updateProductoSchema },
     async (request, reply) => {
-      const producto = await service.update(request.params.id, request.body, request.user.id, request.user.rol);
+      const producto = await service.update(
+        request.params.id,
+        request.body,
+        request.user.id,
+        request.user.rol,
+      );
       return ok(reply, producto);
     },
   );
@@ -89,7 +107,25 @@ export const productosRoutes: FastifyPluginAsync = async (fastify) => {
     '/:id/desactivar',
     { preHandler: createProducts, schema: deactivateProductoSchema },
     async (request, reply) => {
-      const producto = await service.deactivate(request.params.id, request.body ?? {}, request.user.rol);
+      const producto = await service.deactivate(
+        request.params.id,
+        request.body ?? {},
+        request.user.rol,
+      );
+      return ok(reply, producto);
+    },
+  );
+
+  fastify.patch<{ Params: ProductoParams; Body: GenerateProductoBarcodeBody }>(
+    '/:id/generar-codigo',
+    { preHandler: createProducts, schema: generateProductoBarcodeSchema },
+    async (request, reply) => {
+      const producto = await service.generateBarcode(
+        request.params.id,
+        request.body ?? {},
+        request.user.id,
+        request.user.rol,
+      );
       return ok(reply, producto);
     },
   );

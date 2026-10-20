@@ -1,27 +1,38 @@
+import { lazy, Suspense } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { BrowserRouter, Navigate, Routes, Route, useLocation } from "react-router-dom";
 
 import Layout from "./components/Layout";
-import LoginPage from "./pages/auth/Login";
-import ProfilesPage from "./pages/auth/ProfilesPage";
-import SetupAdminPage from "./pages/auth/SetupAdminPage";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import { getDeviceToken, getSetupStatus } from "./services/authService";
 
-import Home from "./pages/Home";
-import ProductsPage from "./pages/ProductsPage";
-import StatsPage from "./pages/StatsPage";
-import CajaPage from "./pages/CajaPage";
-import VentasPage from "./pages/VentasPage";
-import ComprasPage from "./pages/ComprasPage";
-import CatalogosPage from "./pages/CatalogosPage";
-import OfertasPage from "./pages/OfertasPage";
-import UsuariosPage from "./pages/UsuariosPage";
+const LoginPage = lazy(() => import("./pages/auth/Login"));
+const ProfilesPage = lazy(() => import("./pages/auth/ProfilesPage"));
+const SetupAdminPage = lazy(() => import("./pages/auth/SetupAdminPage"));
+const Home = lazy(() => import("./pages/Home"));
+const ProductsPage = lazy(() => import("./pages/ProductsPage"));
+const StatsPage = lazy(() => import("./pages/StatsPage"));
+const CajaPage = lazy(() => import("./pages/CajaPage"));
+const VentasPage = lazy(() => import("./pages/VentasPage"));
+const ComprasPage = lazy(() => import("./pages/ComprasPage"));
+const CatalogosPage = lazy(() => import("./pages/CatalogosPage"));
+const OfertasPage = lazy(() => import("./pages/OfertasPage"));
+const UsuariosPage = lazy(() => import("./pages/UsuariosPage"));
+
+const pageFallback = (
+  <div className="setup-screen">
+    <div className="setup-form max-w-md">
+      <p className="text-sm font-bold text-[#5f626b]">Cargando pantalla...</p>
+    </div>
+  </div>
+);
 
 export default function AppRouter() {
   return (
     <BrowserRouter>
-      <SetupAwareRoutes />
+      <Suspense fallback={pageFallback}>
+        <SetupAwareRoutes />
+      </Suspense>
     </BrowserRouter>
   );
 }

@@ -137,7 +137,11 @@ export const createProductoSchema = {
       categoria_id: { type: 'integer', minimum: 1 },
       tipo_propiedad: { type: 'string', enum: ['PROPIO', 'CONSIGNACION'], default: 'PROPIO' },
       unidad_venta: { type: 'string', enum: ['UNIDAD', 'PESO'], default: 'UNIDAD' },
-      modo_inventario: { type: 'string', enum: ['SIN_INVENTARIO', 'FLEXIBLE', 'ESTRICTO'], default: 'FLEXIBLE' },
+      modo_inventario: {
+        type: 'string',
+        enum: ['SIN_INVENTARIO', 'FLEXIBLE', 'ESTRICTO'],
+        default: 'FLEXIBLE',
+      },
       proveedor_id: { type: ['integer', 'null'], minimum: 1 },
       costo_actual: { type: ['number', 'null'], minimum: 0 },
       precio_venta: { type: 'number', exclusiveMinimum: 0 },
@@ -188,6 +192,47 @@ export const deactivateProductoSchema = {
   },
   response: {
     200: successProductoResponseSchema,
+  },
+} as const;
+
+export const generateProductoBarcodeSchema = {
+  params: idParamsSchema,
+  body: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      master_password: { type: 'string', minLength: 1, maxLength: 200 },
+    },
+  },
+  response: {
+    200: successProductoResponseSchema,
+  },
+} as const;
+
+export const generateMissingBarcodesSchema = {
+  body: {
+    type: 'object',
+    required: ['master_password'],
+    additionalProperties: false,
+    properties: {
+      master_password: { type: 'string', minLength: 1, maxLength: 200 },
+    },
+  },
+  response: {
+    200: {
+      type: 'object',
+      required: ['success', 'data'],
+      properties: {
+        success: { type: 'boolean' },
+        data: {
+          type: 'object',
+          required: ['generados'],
+          properties: {
+            generados: { type: 'number' },
+          },
+        },
+      },
+    },
   },
 } as const;
 

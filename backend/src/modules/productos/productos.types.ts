@@ -109,6 +109,23 @@ export interface DeactivateProductoBody {
   readonly master_password?: string;
 }
 
+export interface GenerateProductoBarcodeBody {
+  readonly master_password?: string;
+}
+
+export interface GenerateMissingBarcodesBody {
+  readonly master_password: string;
+}
+
+export interface GenerateMissingBarcodesResult {
+  readonly generados: number;
+}
+
+export interface ProductBarcodeSeed {
+  readonly id: number;
+  readonly categoria_id: number;
+}
+
 export interface ResetProduceProductInput {
   readonly nombre: string;
   readonly tipo: 'FRUTA' | 'VERDURA';

@@ -7,6 +7,8 @@ import { withTransaction } from '../../utils/transactions.js';
 import type { ProductosRepository } from './productos.repository.js';
 import type {
   CreateProductoBody,
+  GenerateMissingBarcodesBody,
+  GenerateMissingBarcodesResult,
   PaginatedResult,
   PaginationQuery,
   Producto,
@@ -92,7 +94,12 @@ export class ProductosService {
     });
   }
 
-  async update(id: number, data: UpdateProductoBody, usuarioId: number, userRole: UserRole): Promise<Producto> {
+  async update(
+    id: number,
+    data: UpdateProductoBody,
+    usuarioId: number,
+    userRole: UserRole,
+  ): Promise<Producto> {
     if (userRole !== 'OWNER') {
       await assertValidOwnerPassword(this.pool, data.master_password ?? '');
     }
@@ -141,7 +148,11 @@ export class ProductosService {
     });
   }
 
-  async deactivate(id: number, data: { readonly master_password?: string }, userRole: UserRole): Promise<Producto> {
+  async deactivate(
+    id: number,
+    data: { readonly master_password?: string },
+    userRole: UserRole,
+  ): Promise<Producto> {
     if (userRole !== 'OWNER') {
       await assertValidOwnerPassword(this.pool, data.master_password ?? '');
     }
@@ -153,6 +164,54 @@ export class ProductosService {
     }
 
     return this.mapProducto(producto);
+  }
+
+  async generateBarcode(
+    id: number,
+    data: { readonly master_password?: string },
+    usuarioId: number,
+    userRole: UserRole,
+  ): Promise<Producto> {
+    const current = await this.repository.findById(id);
+
+    if (!current) {
+      throw new NotFoundError('Producto no encontrado');
+    }
+
+    if (current.codigo_barras) {
+      throw new BadRequestError('El producto ya tiene codigo de barras');
+    }
+
+    const codigoBarras = this.buildInternalEan13(current.categoria_id, current.id);
+    return this.update(
+      id,
+      {
+        codigo_barras: codigoBarras,
+        ...(data.master_password ? { master_password: data.master_password } : {}),
+      },
+      usuarioId,
+      userRole,
+    );
+  }
+
+  async generateMissingBarcodes(
+    data: GenerateMissingBarcodesBody,
+  ): Promise<GenerateMissingBarcodesResult> {
+    await assertValidOwnerPassword(this.pool, data.master_password);
+
+    return withTransaction(this.pool, async (client) => {
+      const products = await this.repository.findWithoutBarcodeForUpdate(client);
+      const generatedBarcodes = products.map((product) => ({
+        id: product.id,
+        codigoBarras: this.buildInternalEan13(product.categoria_id, product.id),
+      }));
+
+      for (const product of generatedBarcodes) {
+        await this.repository.setGeneratedBarcode(client, product.id, product.codigoBarras);
+      }
+
+      return { generados: generatedBarcodes.length };
+    });
   }
 
   async resetProduceProducts(data: ResetProduceProductsBody): Promise<ResetProduceProductsResult> {
@@ -209,6 +268,20 @@ export class ProductosService {
     if (duplicate) {
       throw new ConflictError('El codigo de barras ya existe');
     }
+  }
+
+  private buildInternalEan13(categoriaId: number, productoId: number): string {
+    if (categoriaId > 999 || productoId > 9_999_999) {
+      throw new BadRequestError('No se pudo generar un codigo interno para este producto');
+    }
+
+    const payload = `20${String(categoriaId).padStart(3, '0')}${String(productoId).padStart(7, '0')}`;
+    const weightedSum = [...payload].reduce(
+      (sum, digit, index) => sum + Number(digit) * (index % 2 === 0 ? 1 : 3),
+      0,
+    );
+    const checkDigit = (10 - (weightedSum % 10)) % 10;
+    return `${payload}${checkDigit}`;
   }
 
   private mapProducto(row: ProductoRow | ProductoListRow): Producto {

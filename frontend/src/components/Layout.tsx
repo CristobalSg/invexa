@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Menu, MenuButton, MenuItem, MenuItems } from "@headlessui/react";
 import { useState } from "react";
 import {
+  ArrowPathIcon,
   ArrowLeftOnRectangleIcon,
   BookOpenIcon,
   ChartBarIcon,
@@ -10,6 +11,7 @@ import {
   CubeIcon,
   ChevronRightIcon,
   Cog6ToothIcon,
+  CommandLineIcon,
   CursorArrowRaysIcon,
   MoonIcon,
   ShoppingBagIcon,
@@ -27,6 +29,13 @@ import {
   setStoredTheme,
   type ThemeMode,
 } from "../services/themeService";
+import {
+  DEFAULT_POS_SHORTCUTS,
+  getStoredPosShortcuts,
+  isAllowedPosShortcut,
+  setStoredPosShortcuts,
+  type PosShortcuts,
+} from "../services/posPreferencesService";
 
 const sidebarLinkClass = () => ({ isActive }: { isActive: boolean }) =>
   `flowly-nav-item ${isActive ? "active" : ""}`;
@@ -36,6 +45,8 @@ export default function Layout() {
   const [isOpen, setIsOpen] = useState(true);
   const [theme, setTheme] = useState<ThemeMode>(() => getStoredTheme());
   const [showCursor, setShowCursor] = useState(() => getStoredShowCursor());
+  const [posShortcuts, setPosShortcuts] = useState<PosShortcuts>(() => getStoredPosShortcuts());
+  const [shortcutError, setShortcutError] = useState("");
   const user = getStoredUser();
   const isOwner = user?.rol === "OWNER";
   const iconClass = "h-5 w-5 shrink-0";
@@ -55,6 +66,29 @@ export default function Layout() {
     const nextShowCursor = !showCursor;
     setShowCursor(nextShowCursor);
     setStoredShowCursor(nextShowCursor);
+  };
+
+  const handleShortcutChange = (field: keyof PosShortcuts, value: string) => {
+    if (!isAllowedPosShortcut(value)) {
+      setShortcutError("Usa un símbolo o una tecla entre F1 y F12.");
+      return;
+    }
+
+    const next = { ...posShortcuts, [field]: value };
+    if (next.cart === next.checkout) {
+      setShortcutError("Cada acción debe usar una tecla distinta.");
+      return;
+    }
+
+    setShortcutError("");
+    setPosShortcuts(next);
+    setStoredPosShortcuts(next);
+  };
+
+  const handleResetShortcuts = () => {
+    setShortcutError("");
+    setPosShortcuts(DEFAULT_POS_SHORTCUTS);
+    setStoredPosShortcuts(DEFAULT_POS_SHORTCUTS);
   };
 
   const links = [
@@ -195,6 +229,45 @@ export default function Layout() {
                     </button>
                   )}
                 </MenuItem>
+                <div className="flowly-settings-shortcuts" onKeyDown={(event) => event.stopPropagation()}>
+                  <div className="flowly-settings-shortcuts-title">
+                    <span className="flowly-settings-option-icon"><CommandLineIcon /></span>
+                    <span>
+                      <strong>Atajos del POS</strong>
+                      <small>Haz clic y escribe una tecla</small>
+                    </span>
+                  </div>
+                  <label>
+                    <span>Carrito</span>
+                    <input
+                      aria-label="Tecla para abrir el carrito"
+                      data-pos-shortcut-input="true"
+                      value={posShortcuts.cart}
+                      readOnly
+                      onKeyDown={(event) => {
+                        event.preventDefault();
+                        handleShortcutChange("cart", event.key);
+                      }}
+                    />
+                  </label>
+                  <label>
+                    <span>Finalizar venta</span>
+                    <input
+                      aria-label="Tecla para finalizar la venta"
+                      data-pos-shortcut-input="true"
+                      value={posShortcuts.checkout}
+                      readOnly
+                      onKeyDown={(event) => {
+                        event.preventDefault();
+                        handleShortcutChange("checkout", event.key);
+                      }}
+                    />
+                  </label>
+                  {shortcutError && <p>{shortcutError}</p>}
+                  <button type="button" onClick={handleResetShortcuts} className="flowly-settings-reset">
+                    <ArrowPathIcon /> Restablecer
+                  </button>
+                </div>
               </MenuItems>
             </Menu>
             <button

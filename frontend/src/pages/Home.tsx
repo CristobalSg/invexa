@@ -20,6 +20,13 @@ import { createVenta } from "../services/transactionService";
 import { getCajaActual } from "../services/cajaService";
 import { getAllProducts } from "../services/productService";
 import { getAllOfertasActivas } from "../services/catalogService";
+import {
+  getStoredFavoriteProductIds,
+  getStoredPosShortcuts,
+  POS_SHORTCUTS_CHANGED_EVENT,
+  setStoredFavoriteProductIds,
+  type PosShortcuts,
+} from "../services/posPreferencesService";
 
 type CartProduct = Producto & { quantity: number; cartItemId: string };
 type CartSession = { id: string; name: string; items: CartProduct[] };
@@ -27,7 +34,7 @@ type MixedPaymentMethod = "EFECTIVO" | "TARJETA" | "TRANSFERENCIA";
 type PaymentAmounts = Record<MixedPaymentMethod, string>;
 type KeyboardMode = "products" | "cart";
 type CheckoutOption = MetodoPago | "RETIRO_DUENO" | "PRECIO_COSTO";
-type PaymentStep = "options" | "details";
+type PaymentStep = "options" | "cost-payment" | "details";
 
 const isWeighableProduct = (product: Producto) =>
   product.unidad_venta === "PESO";
@@ -62,10 +69,22 @@ const checkoutOptions: Array<{
   { id: "TRANSFERENCIA", label: "Transferencia", hint: "Confirma la transferencia recibida", icon: ArrowsRightLeftIcon },
   { id: "MIXTO", label: "Pago mixto", hint: "Divide entre efectivo y débito", icon: WalletIcon },
   { id: "RETIRO_DUENO", label: "Retiro de dueño", hint: "Descuenta stock sin sumar a caja", icon: ArrowUpTrayIcon },
-  { id: "PRECIO_COSTO", label: "Vender a precio costo", hint: "Venta administrativa en efectivo", icon: CurrencyDollarIcon },
+  { id: "PRECIO_COSTO", label: "Vender a precio costo", hint: "Luego selecciona cómo recibes el pago", icon: CurrencyDollarIcon },
+];
+
+const costPaymentOptions: Array<{
+  id: MetodoPagoReal;
+  label: string;
+  hint: string;
+  icon: typeof BanknotesIcon;
+}> = [
+  { id: "EFECTIVO", label: "Efectivo", hint: "Aplica redondeo y calcula vuelto", icon: BanknotesIcon },
+  { id: "TARJETA", label: "Débito / tarjeta", hint: "Confirma el cobro del terminal", icon: CreditCardIcon },
+  { id: "TRANSFERENCIA", label: "Transferencia", hint: "Confirma la transferencia recibida", icon: ArrowsRightLeftIcon },
 ];
 
 const saleCartsStorageKey = "pos-sale-carts";
+const visibleProductLimit = 15;
 
 const toInputAmount = (value: number) => (value > 0 ? String(value) : "");
 const toAmount = (value: string) => Number(value) || 0;
@@ -149,6 +168,8 @@ export default function Home() {
   const [searchTerm, setSearchTerm] = useState("");
   const [barcodeClearSignal, setBarcodeClearSignal] = useState(0);
   const [selectedProductIndex, setSelectedProductIndex] = useState(0);
+  const [favoriteProductIds, setFavoriteProductIds] = useState<number[]>(getStoredFavoriteProductIds);
+  const [posShortcuts, setPosShortcuts] = useState<PosShortcuts>(getStoredPosShortcuts);
   const [keyboardMode, setKeyboardMode] = useState<KeyboardMode>("products");
   const [selectedCartIndex, setSelectedCartIndex] = useState(0);
   const [cartQuantityProduct, setCartQuantityProduct] = useState<CartProduct | null>(null);
@@ -162,6 +183,7 @@ export default function Home() {
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [paymentStep, setPaymentStep] = useState<PaymentStep>("options");
   const [selectedCheckoutOptionIndex, setSelectedCheckoutOptionIndex] = useState(0);
+  const [selectedCostPaymentIndex, setSelectedCostPaymentIndex] = useState(0);
   const [selectedCheckoutOption, setSelectedCheckoutOption] = useState<CheckoutOption>("EFECTIVO");
   const [paymentConfirmationArmed, setPaymentConfirmationArmed] = useState(false);
   const [isFinishingSale, setIsFinishingSale] = useState(false);
@@ -190,16 +212,29 @@ export default function Home() {
   });
   const normalizedSearchTerm = searchTerm.trim();
   const normalizedProductSearch = normalizeText(normalizedSearchTerm);
-  const visibleProducts = useMemo(() => {
+  const matchingProducts = useMemo(() => {
     const activeProducts = productos ?? [];
-    if (!normalizedProductSearch) return activeProducts;
+    const filteredProducts = normalizedProductSearch
+      ? activeProducts.filter((product) =>
+          normalizeText(product.nombre).includes(normalizedProductSearch) ||
+          normalizeText(product.categoria_nombre).includes(normalizedProductSearch) ||
+          (product.codigo_barras ?? "").includes(normalizedSearchTerm),
+        )
+      : activeProducts;
+    const favoriteIds = new Set(favoriteProductIds);
 
-    return activeProducts.filter((product) =>
-      normalizeText(product.nombre).includes(normalizedProductSearch) ||
-      normalizeText(product.categoria_nombre).includes(normalizedProductSearch) ||
-      (product.codigo_barras ?? "").includes(normalizedSearchTerm),
-    );
-  }, [normalizedProductSearch, normalizedSearchTerm, productos]);
+    return filteredProducts
+      .map((product, index) => ({ product, index }))
+      .sort((first, second) => {
+        const exactBarcodeDifference =
+          Number(second.product.codigo_barras === normalizedSearchTerm) -
+          Number(first.product.codigo_barras === normalizedSearchTerm);
+        const favoriteDifference = Number(favoriteIds.has(second.product.id)) - Number(favoriteIds.has(first.product.id));
+        return exactBarcodeDifference || favoriteDifference || first.index - second.index;
+      })
+      .map(({ product }) => product);
+  }, [favoriteProductIds, normalizedProductSearch, normalizedSearchTerm, productos]);
+  const visibleProducts = matchingProducts.slice(0, visibleProductLimit);
 
   const activeOffers = ofertasActivas ?? [];
   const activeOffersByProductId = new Map(activeOffers.map((offer) => [offer.producto_id, offer]));
@@ -234,11 +269,12 @@ export default function Home() {
     if (!paymentModalOpen || salePasswordOpen) return;
 
     const focusTimer = window.setTimeout(() => {
-      if (paymentStep === "options") {
+      if (paymentStep === "options" || paymentStep === "cost-payment") {
         paymentOptionsRef.current?.focus();
-      } else if (selectedCheckoutOption === "EFECTIVO" || selectedCheckoutOption === "PRECIO_COSTO") {
+      } else if (metodoPago === "EFECTIVO") {
         cashReceivedInputRef.current?.focus();
-      } else if (selectedCheckoutOption === "MIXTO") {
+        cashReceivedInputRef.current?.select();
+      } else if (metodoPago === "MIXTO") {
         mixedCashInputRef.current?.focus();
       } else {
         paymentDetailsRef.current?.focus();
@@ -246,7 +282,23 @@ export default function Home() {
     }, 0);
 
     return () => window.clearTimeout(focusTimer);
-  }, [paymentModalOpen, paymentStep, salePasswordOpen, selectedCheckoutOption]);
+  }, [metodoPago, paymentModalOpen, paymentStep, salePasswordOpen]);
+
+  useEffect(() => {
+    const handleShortcutsChanged = (event: Event) => {
+      setPosShortcuts((event as CustomEvent<PosShortcuts>).detail ?? getStoredPosShortcuts());
+    };
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === "pos_keyboard_shortcuts") setPosShortcuts(getStoredPosShortcuts());
+    };
+
+    window.addEventListener(POS_SHORTCUTS_CHANGED_EVENT, handleShortcutsChanged);
+    window.addEventListener("storage", handleStorage);
+    return () => {
+      window.removeEventListener(POS_SHORTCUTS_CHANGED_EVENT, handleShortcutsChanged);
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, []);
 
   useEffect(() => {
     setSelectedProductIndex(0);
@@ -259,6 +311,16 @@ export default function Home() {
   useEffect(() => {
     setSelectedProductIndex((current) => Math.min(current, Math.max(0, visibleProducts.length - 1)));
   }, [visibleProducts.length]);
+
+  const toggleFavoriteProduct = (productId: number) => {
+    setFavoriteProductIds((current) => {
+      const next = current.includes(productId)
+        ? current.filter((id) => id !== productId)
+        : [...current, productId];
+      setStoredFavoriteProductIds(next);
+      return next;
+    });
+  };
 
   const setCart = (updater: CartProduct[] | ((items: CartProduct[]) => CartProduct[])) => {
     setCarts((prev) =>
@@ -318,6 +380,13 @@ export default function Home() {
             ? mixedPaymentsAreValid
             : true;
   const selectedCheckoutOptionMeta = checkoutOptions.find((option) => option.id === selectedCheckoutOption) ?? checkoutOptions[0];
+  const paymentDialogTitle = paymentStep === "options"
+    ? "Selecciona una opción"
+    : paymentStep === "cost-payment"
+      ? "¿Cómo pagará la venta a costo?"
+      : modalidadVenta === "PRECIO_COSTO"
+        ? `Precio costo · ${paymentLabels[metodoPago as MixedPaymentMethod]}`
+        : selectedCheckoutOptionMeta.label;
 
   const handleOpenPayment = () => {
     if (cart.length === 0) {
@@ -328,15 +397,20 @@ export default function Home() {
       setCenterAlert("Abre una caja antes de registrar ventas.");
       return;
     }
-    const normalTotalFinal = total - descuentoOfertas;
+    const normalDiscount = cart.reduce((acc, product) => {
+      const offer = activeOffersByProductId.get(product.id);
+      return acc + calculateOfferLine(product, product.quantity ?? 0, offer).discount;
+    }, 0);
+    const normalTotalFinal = total - normalDiscount;
     setMetodoPago("EFECTIVO");
     setModalidadVenta("NORMAL");
     setSalePasswordOpen(false);
     setPaymentStep("options");
     setSelectedCheckoutOptionIndex(0);
+    setSelectedCostPaymentIndex(0);
     setSelectedCheckoutOption("EFECTIVO");
     setPaymentConfirmationArmed(false);
-    setCashReceived("");
+    setCashReceived(toInputAmount(roundToNearestTen(normalTotalFinal)));
     setMixedMethods(["EFECTIVO", "TARJETA"]);
     const cashPart = roundCurrency(Math.floor(normalTotalFinal / 2));
     setMixedAmounts({
@@ -359,11 +433,14 @@ export default function Home() {
     } else if (option === "PRECIO_COSTO") {
       setModalidadVenta("PRECIO_COSTO");
       setMetodoPago("EFECTIVO");
-      setCashReceived("");
+      setSelectedCostPaymentIndex(0);
+      setCashReceived(toInputAmount(roundToNearestTen(totalCosto)));
+      setPaymentStep("cost-payment");
+      return;
     } else {
       setModalidadVenta("NORMAL");
       setMetodoPago(option);
-      if (option === "EFECTIVO") setCashReceived("");
+      if (option === "EFECTIVO") setCashReceived(toInputAmount(roundToNearestTen(total - descuentoOfertas)));
       if (option === "MIXTO") {
         const normalTotal = total - descuentoOfertas;
         const cashPart = roundCurrency(Math.floor(normalTotal / 2));
@@ -377,6 +454,20 @@ export default function Home() {
     }
 
     setPaymentStep("details");
+  };
+
+  const handleCostPaymentSelect = (method: MetodoPagoReal) => {
+    setMetodoPago(method);
+    setPaymentConfirmationArmed(false);
+    setMessage("");
+    setCashReceived(method === "EFECTIVO" ? toInputAmount(roundToNearestTen(totalCosto)) : "");
+    setPaymentStep("details");
+  };
+
+  const returnToPreviousPaymentStep = () => {
+    setPaymentStep(modalidadVenta === "PRECIO_COSTO" ? "cost-payment" : "options");
+    setPaymentConfirmationArmed(false);
+    setMessage("");
   };
 
   const handleMixedAmountChange = (method: MixedPaymentMethod, value: string) => {
@@ -492,8 +583,10 @@ export default function Home() {
     if (event.key === "Escape") {
       event.preventDefault();
       if (paymentStep === "details") {
+        returnToPreviousPaymentStep();
+      } else if (paymentStep === "cost-payment") {
         setPaymentStep("options");
-        setPaymentConfirmationArmed(false);
+        setModalidadVenta("NORMAL");
         setMessage("");
       } else {
         setPaymentModalOpen(false);
@@ -516,6 +609,22 @@ export default function Home() {
         event.preventDefault();
         const option = checkoutOptions[selectedCheckoutOptionIndex];
         if (option) handleCheckoutOptionSelect(option.id);
+      }
+      return;
+    }
+
+    if (paymentStep === "cost-payment") {
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        const direction = event.key === "ArrowDown" ? 1 : -1;
+        setSelectedCostPaymentIndex((current) =>
+          (current + direction + costPaymentOptions.length) % costPaymentOptions.length,
+        );
+      }
+      if (event.key === "Enter") {
+        event.preventDefault();
+        const option = costPaymentOptions[selectedCostPaymentIndex];
+        if (option) handleCostPaymentSelect(option.id);
       }
       return;
     }
@@ -719,13 +828,16 @@ export default function Home() {
     if (isBarcodeFocusBlocked) return;
 
     const handleKeyboardNavigation = (event: KeyboardEvent) => {
-      if (event.key === "]") {
+      const eventTarget = event.target;
+      if (eventTarget instanceof HTMLInputElement && eventTarget.dataset.posShortcutInput === "true") return;
+
+      if (event.key === posShortcuts.checkout) {
         event.preventDefault();
         handleOpenPayment();
         return;
       }
 
-      if (event.key === "\\") {
+      if (event.key === posShortcuts.cart) {
         event.preventDefault();
         if (keyboardMode === "cart") leaveCartMode();
         else enterCartMode();
@@ -846,7 +958,7 @@ export default function Home() {
             }}
             onFocus={() => setKeyboardMode("products")}
             clearSignal={barcodeClearSignal}
-            showClearButton={false}
+            showClearButton
             size="large"
           />
         </div>
@@ -854,10 +966,15 @@ export default function Home() {
         <SideList
           searchTerm={searchTerm}
           products={visibleProducts}
+          totalProducts={matchingProducts.length}
           selectedIndex={selectedProductIndex}
           keyboardActive={keyboardMode === "products"}
+          favoriteProductIds={favoriteProductIds}
+          cartShortcut={posShortcuts.cart}
+          checkoutShortcut={posShortcuts.checkout}
           isLoading={isLoadingProducts}
           onProductClick={handleProductSelect}
+          onToggleFavorite={toggleFavoriteProduct}
         />
       </section>
 
@@ -868,7 +985,7 @@ export default function Home() {
             <h2 className="pos-subtitle">Carrito de compras</h2>
           </div>
           <div className="pos-cart-head-actions">
-            <span className={`pos-cart-mode-key ${keyboardMode === "cart" ? "active" : ""}`} title="Presiona \\ para entrar o salir del carrito">\</span>
+            <span className={`pos-cart-mode-key ${keyboardMode === "cart" ? "active" : ""}`} title={`Presiona ${posShortcuts.cart} para entrar o salir del carrito`}>{posShortcuts.cart}</span>
             <button
               type="button"
               onClick={() => {
@@ -884,7 +1001,7 @@ export default function Home() {
         {keyboardMode === "cart" && (
           <div className="pos-cart-keyboard-banner">
             <strong>Carrito activo</strong>
-            <span>↑ ↓ navegar · Enter editar cantidad · Supr/Retroceso disminuir · \ volver · ] finalizar</span>
+            <span>↑ ↓ navegar · Enter editar cantidad · Supr/Retroceso disminuir · {posShortcuts.cart} volver · {posShortcuts.checkout} finalizar</span>
           </div>
         )}
         <MainList
@@ -1081,7 +1198,7 @@ export default function Home() {
           }}
         >
           <div
-            ref={paymentStep === "options" ? paymentOptionsRef : paymentDetailsRef}
+            ref={paymentStep === "details" ? paymentDetailsRef : paymentOptionsRef}
             className="flow-modal payment-modal pos-keyboard-payment-modal"
             role="dialog"
             aria-modal="true"
@@ -1091,13 +1208,11 @@ export default function Home() {
             <div className="pos-section-row">
               <div>
                 <span className="pos-kicker">Finalizar venta</span>
-                <h2 className="flow-modal-title">
-                  {paymentStep === "options" ? "Selecciona una opción" : selectedCheckoutOptionMeta.label}
-                </h2>
+                <h2 className="flow-modal-title">{paymentDialogTitle}</h2>
               </div>
               <div className="pos-payment-total-pill">
                 <small>Total</small>
-                <strong>{formatMoney(paymentStep === "details" ? totalCobrar : total - descuentoOfertas)}</strong>
+                <strong>{formatMoney(paymentStep === "details" ? totalCobrar : paymentStep === "cost-payment" ? totalCosto : total - descuentoOfertas)}</strong>
               </div>
             </div>
 
@@ -1143,6 +1258,48 @@ export default function Home() {
                   Esc · Volver al POS
                 </button>
               </>
+            ) : paymentStep === "cost-payment" ? (
+              <>
+                <p className="pos-payment-instructions">Selecciona cómo recibes el pago. Usa ↑, ↓ y Enter.</p>
+                <div className="pos-payment-keyboard-list" role="listbox" aria-label="Forma de pago de venta a precio costo">
+                  {costPaymentOptions.map((option, index) => {
+                    const OptionIcon = option.icon;
+                    const selected = index === selectedCostPaymentIndex;
+
+                    return (
+                      <button
+                        key={option.id}
+                        type="button"
+                        role="option"
+                        aria-selected={selected}
+                        className={`pos-payment-keyboard-option ${selected ? "selected" : ""}`}
+                        onMouseEnter={() => setSelectedCostPaymentIndex(index)}
+                        onClick={() => {
+                          setSelectedCostPaymentIndex(index);
+                          handleCostPaymentSelect(option.id);
+                        }}
+                      >
+                        <span className="pos-payment-option-icon"><OptionIcon className="h-6 w-6" /></span>
+                        <span>
+                          <strong>{option.label}</strong>
+                          <small>{option.hint}</small>
+                        </span>
+                        <span className="pos-payment-option-enter">Enter</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <button
+                  type="button"
+                  className="pos-payment-cancel-link"
+                  onClick={() => {
+                    setPaymentStep("options");
+                    setModalidadVenta("NORMAL");
+                  }}
+                >
+                  Esc · Volver a las opciones
+                </button>
+              </>
             ) : (
               <>
                 <div className="pos-payment-detail-summary">
@@ -1158,7 +1315,7 @@ export default function Home() {
                   )}
                 </div>
 
-                {(selectedCheckoutOption === "EFECTIVO" || selectedCheckoutOption === "PRECIO_COSTO") && (
+                {metodoPago === "EFECTIVO" && modalidadVenta !== "RETIRO_DUENO" && (
                   <div className="pos-payment-cash-step">
                     <FormField label="Monto con que paga">
                       <input
@@ -1167,6 +1324,7 @@ export default function Home() {
                         inputMode="numeric"
                         min={0}
                         value={cashReceived}
+                        onFocus={(event) => event.currentTarget.select()}
                         onChange={(event) => {
                           setCashReceived(event.target.value);
                           setPaymentConfirmationArmed(false);
@@ -1183,19 +1341,19 @@ export default function Home() {
                   </div>
                 )}
 
-                {(selectedCheckoutOption === "TARJETA" || selectedCheckoutOption === "TRANSFERENCIA") && (
+                {(metodoPago === "TARJETA" || metodoPago === "TRANSFERENCIA") && (
                   <div className="pos-payment-simple-confirmation">
                     <span className="pos-payment-option-icon">
-                      {selectedCheckoutOption === "TARJETA"
+                      {metodoPago === "TARJETA"
                         ? <CreditCardIcon className="h-8 w-8" />
                         : <ArrowsRightLeftIcon className="h-8 w-8" />}
                     </span>
-                    <strong>{selectedCheckoutOption === "TARJETA" ? "Confirma el pago en el terminal" : "Confirma que recibiste la transferencia"}</strong>
+                    <strong>{metodoPago === "TARJETA" ? "Confirma el pago en el terminal" : "Confirma que recibiste la transferencia"}</strong>
                     <p>No necesitas ingresar ningún monto adicional.</p>
                   </div>
                 )}
 
-                {selectedCheckoutOption === "MIXTO" && (
+                {metodoPago === "MIXTO" && (
                   <div className="pos-payment-mixed-step">
                     <p>Divide el total entre efectivo y débito. Al cambiar uno, el otro se calcula automáticamente.</p>
                     <div className="grid grid-cols-2 gap-3">
@@ -1252,11 +1410,7 @@ export default function Home() {
                   <Button
                     variant="ghost"
                     disabled={isFinishingSale}
-                    onClick={() => {
-                      setPaymentStep("options");
-                      setPaymentConfirmationArmed(false);
-                      setMessage("");
-                    }}
+                    onClick={returnToPreviousPaymentStep}
                   >
                     Volver
                   </Button>

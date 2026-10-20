@@ -33,6 +33,10 @@ export interface ResetProduceProductsResult {
   creados: number;
 }
 
+export interface GenerateMissingBarcodesResult {
+  generados: number;
+}
+
 export async function getProducts(filters: ProductFilters = {}): Promise<PaginatedResult<Producto>> {
   const { data } = await api.get<PaginatedResult<Producto>>(ENDPOINT, { params: { limit: 100, ...filters } });
   return data;
@@ -82,6 +86,24 @@ export async function reactivateProduct(id: string | number, master_password?: s
   const { data } = await api.patch<Producto>(
     `${ENDPOINT}/${id}`,
     { activo: true, ...(master_password ? { master_password } : {}) },
+  );
+  return data;
+}
+
+export async function generateProductBarcode(id: string | number, master_password?: string): Promise<Producto> {
+  const { data } = await api.patch<Producto>(
+    `${ENDPOINT}/${id}/generar-codigo`,
+    master_password ? { master_password } : {},
+  );
+  return data;
+}
+
+export async function generateMissingProductBarcodes(
+  master_password: string,
+): Promise<GenerateMissingBarcodesResult> {
+  const { data } = await api.patch<GenerateMissingBarcodesResult>(
+    `${ENDPOINT}/generar-codigos-faltantes`,
+    { master_password },
   );
   return data;
 }

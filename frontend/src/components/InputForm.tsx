@@ -67,8 +67,8 @@ const InputForm = forwardRef<HTMLInputElement, Props>(({
             className={`absolute right-2 top-1/2 -translate-y-1/2 rounded-md text-gray-400 transition-colors hover:bg-gray-100 hover:text-red-600 dark:hover:bg-white/10 dark:hover:text-red-300 ${
               size === "large" ? "p-2" : "p-1.5"
             }`}
-            aria-label="Borrar código"
-            title="Borrar"
+            aria-label="Limpiar búsqueda"
+            title="Limpiar búsqueda"
           >
             <XMarkIcon className={size === "large" ? "h-6 w-6" : "h-4 w-4"} />
           </button>

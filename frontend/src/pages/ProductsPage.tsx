@@ -8,6 +8,7 @@ import {
   CloudArrowUpIcon,
   PencilIcon,
   PlusIcon,
+  QrCodeIcon,
   TrashIcon,
   XMarkIcon,
 } from "@heroicons/react/24/outline";
@@ -15,6 +16,8 @@ import {
   getProducts,
   getAllProducts,
   deleteProduct,
+  generateMissingProductBarcodes,
+  generateProductBarcode,
   getProduct,
   reactivateProduct,
 } from "../services/productService";
@@ -70,15 +73,17 @@ export default function ProductsPage() {
   const [auditDesde, setAuditDesde] = useState("");
   const [auditHasta, setAuditHasta] = useState("");
   const [productActionToAuthorize, setProductActionToAuthorize] = useState<{
-    type: "delete" | "reactivate";
+    type: "delete" | "reactivate" | "generate-barcode";
     product: Producto;
   } | null>(null);
   const [createdProductAlert, setCreatedProductAlert] = useState<Producto | null>(null);
   const [syncProductsOpen, setSyncProductsOpen] = useState(false);
   const [syncProductsError, setSyncProductsError] = useState("");
   const [syncProductsResult, setSyncProductsResult] = useState<ResultadoSincronizacionProductos | null>(null);
-  const [codigo, setCodigo] = useState("");
-  const [nombre, setNombre] = useState("");
+  const [bulkBarcodeOpen, setBulkBarcodeOpen] = useState(false);
+  const [bulkBarcodeError, setBulkBarcodeError] = useState("");
+  const [bulkBarcodeResult, setBulkBarcodeResult] = useState<number | null>(null);
+  const [search, setSearch] = useState("");
   const [categoriaId, setCategoriaId] = useState("");
   const [proveedorId, setProveedorId] = useState("");
   const [estado, setEstado] = useState<EstadoProductoFiltro>("ACTIVOS");
@@ -89,18 +94,16 @@ export default function ProductsPage() {
   const canManageProduct = canCreateProduct;
 
   const queryClient = useQueryClient();
-  const normalizedCodigo = codigo.trim();
-  const normalizedNombre = nombre.trim();
+  const normalizedSearch = search.trim();
   const estadoActivo = estado === "TODOS" ? undefined : estado === "ACTIVOS";
 
   const { data: products, isLoading, isFetching, error } = useQuery({
-    queryKey: ["products", { page, codigo: normalizedCodigo, nombre: normalizedNombre, categoriaId, proveedorId, estado }],
+    queryKey: ["products", { page, search: normalizedSearch, categoriaId, proveedorId, estado }],
     queryFn: () =>
       getProducts({
         page,
         limit: 100,
-        codigo: normalizedCodigo || undefined,
-        nombre: normalizedNombre || undefined,
+        search: normalizedSearch || undefined,
         categoria_id: categoriaId ? Number(categoriaId) : undefined,
         proveedor_id: proveedorId ? Number(proveedorId) : undefined,
         activo: estadoActivo,
@@ -130,7 +133,7 @@ export default function ProductsPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [categoriaId, codigo, estado, nombre, proveedorId]);
+  }, [categoriaId, estado, proveedorId, search]);
 
   useEffect(() => {
     if (!editProductQuery.data) return;
@@ -151,8 +154,7 @@ export default function ProductsPage() {
   const productosFiltrados = products?.items ?? [];
   const pagination = products?.pagination;
   const hasActiveFilters = [
-    normalizedCodigo,
-    normalizedNombre,
+    normalizedSearch,
     categoriaId,
     proveedorId,
     estado !== "ACTIVOS" ? estado : "",
@@ -174,6 +176,16 @@ export default function ProductsPage() {
     },
   });
 
+  const generateBarcodeMutation = useMutation({
+    mutationFn: ({ id, masterPassword }: { id: string; masterPassword?: string }) =>
+      generateProductBarcode(id, masterPassword),
+    onSuccess: (product) => {
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      setProductToView(product);
+      setProductActionToAuthorize(null);
+    },
+  });
+
   const syncProductsMutation = useMutation({
     mutationFn: async (masterPassword: string) => {
       await authorizeAdmin(masterPassword);
@@ -187,6 +199,21 @@ export default function ProductsPage() {
     },
     onError: (syncError) => {
       setSyncProductsError(syncError instanceof Error ? syncError.message : "No se pudieron subir los productos.");
+    },
+  });
+
+  const bulkBarcodeMutation = useMutation({
+    mutationFn: generateMissingProductBarcodes,
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      setBulkBarcodeResult(result.generados);
+      setBulkBarcodeError("");
+      setBulkBarcodeOpen(false);
+    },
+    onError: (bulkError) => {
+      setBulkBarcodeError(
+        bulkError instanceof Error ? bulkError.message : "No se pudieron generar los códigos de barras.",
+      );
     },
   });
 
@@ -218,6 +245,15 @@ export default function ProductsPage() {
     setProductToView(null);
   };
 
+  const handleGenerateBarcode = (product: Producto) => {
+    if (!isOwner) {
+      setProductActionToAuthorize({ type: "generate-barcode", product });
+      return;
+    }
+
+    generateBarcodeMutation.mutate({ id: product.id.toString() });
+  };
+
   const handleAuthorizedProductAction = (masterPassword: string) => {
     if (!productActionToAuthorize) return;
 
@@ -225,6 +261,11 @@ export default function ProductsPage() {
     if (productActionToAuthorize.type === "delete") {
       deleteMutation.mutate({ id, masterPassword });
       setProductToView(null);
+      return;
+    }
+
+    if (productActionToAuthorize.type === "generate-barcode") {
+      generateBarcodeMutation.mutate({ id, masterPassword });
       return;
     }
 
@@ -251,8 +292,7 @@ export default function ProductsPage() {
   };
 
   const clearFilters = () => {
-    setCodigo("");
-    setNombre("");
+    setSearch("");
     setCategoriaId("");
     setProveedorId("");
     setEstado("ACTIVOS");
@@ -266,34 +306,39 @@ export default function ProductsPage() {
           <p className="text-sm font-semibold text-gray-500">
             {pagination ? `${pagination.total} productos · Página ${pagination.page} de ${Math.max(1, pagination.totalPages)}` : "Cargando productos..."}
           </p>
-          <button
-            type="button"
-            className="mt-3 inline-flex items-center gap-2 rounded-[14px] border border-[#ddd6fe] bg-[#faf9ff] px-4 py-2.5 text-sm font-black text-[#7652ed] transition hover:-translate-y-0.5 hover:bg-[#f3f0ff]"
-            onClick={() => {
-              setSyncProductsError("");
-              setSyncProductsOpen(true);
-            }}
-          >
-            <CloudArrowUpIcon className="h-5 w-5" />
-            Subir productos a Supabase
-          </button>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="inline-flex items-center gap-2 rounded-[14px] border border-[#ddd6fe] bg-[#faf9ff] px-4 py-2.5 text-sm font-black text-[#7652ed] transition hover:-translate-y-0.5 hover:bg-[#f3f0ff]"
+              onClick={() => {
+                setSyncProductsError("");
+                setSyncProductsOpen(true);
+              }}
+            >
+              <CloudArrowUpIcon className="h-5 w-5" />
+              Subir productos a Supabase
+            </button>
+            <button
+              type="button"
+              className="inline-flex items-center gap-2 rounded-[14px] border border-[#ddd6fe] bg-[#7652ed] px-4 py-2.5 text-sm font-black text-white transition hover:-translate-y-0.5 hover:bg-[#6844db]"
+              onClick={() => {
+                setBulkBarcodeError("");
+                setBulkBarcodeOpen(true);
+              }}
+            >
+              <QrCodeIcon className="h-5 w-5" />
+              Generar códigos faltantes
+            </button>
+          </div>
         </div>
         <div className="inventory-filter-bar">
           <div className="inventory-filter-grid">
-            <FormField label="Código de barra">
+            <FormField label="Producto">
               <input
-                value={codigo}
-                onChange={(event) => setCodigo(event.target.value)}
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
                 className={inputClassName}
-                placeholder="Buscar por código"
-              />
-            </FormField>
-            <FormField label="Nombre">
-              <input
-                value={nombre}
-                onChange={(event) => setNombre(event.target.value)}
-                className={inputClassName}
-                placeholder="Buscar por nombre"
+                placeholder="Buscar por nombre o código"
               />
             </FormField>
             <TouchSelectField
@@ -349,6 +394,13 @@ export default function ProductsPage() {
           Sincronización terminada: {syncProductsResult.insertados} nuevos, {syncProductsResult.actualizados} actualizados, {syncProductsResult.sin_cambios} sin cambios y {syncProductsResult.omitidos} omitidos por no tener código de barras.
         </div>
       )}
+      {bulkBarcodeResult !== null && (
+        <div className="rounded-[18px] border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm font-semibold text-emerald-800" role="status">
+          {bulkBarcodeResult === 0
+            ? "Todos los productos ya tenían código de barras."
+            : `Se generaron ${bulkBarcodeResult} códigos de barras EAN-13.`}
+        </div>
+      )}
       {pagination && pagination.totalPages > 1 && (
         <div className="flex items-center gap-2">
           <button
@@ -393,9 +445,15 @@ export default function ProductsPage() {
 
       {productActionToAuthorize && (
         <AdminPasswordModal
-          title={productActionToAuthorize.type === "delete" ? "Eliminar producto" : "Reactivar producto"}
+          title={
+            productActionToAuthorize.type === "delete"
+              ? "Eliminar producto"
+              : productActionToAuthorize.type === "reactivate"
+                ? "Reactivar producto"
+                : "Crear código de barras"
+          }
           description="Confirma esta acción con la contraseña de administrador."
-          isPending={deleteMutation.isPending || reactivateMutation.isPending}
+          isPending={deleteMutation.isPending || reactivateMutation.isPending || generateBarcodeMutation.isPending}
           onClose={() => setProductActionToAuthorize(null)}
           onConfirm={handleAuthorizedProductAction}
         />
@@ -417,6 +475,27 @@ export default function ProductsPage() {
           {syncProductsError && (
             <p className="rounded-[14px] border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700" role="alert">
               {syncProductsError}
+            </p>
+          )}
+        </AdminPasswordModal>
+      )}
+
+      {bulkBarcodeOpen && (
+        <AdminPasswordModal
+          title="Generar códigos faltantes"
+          description="Generará un EAN-13 único para cada producto sin código. Los códigos existentes no se modificarán."
+          isPending={bulkBarcodeMutation.isPending}
+          onClose={() => {
+            if (!bulkBarcodeMutation.isPending) setBulkBarcodeOpen(false);
+          }}
+          onConfirm={(password) => bulkBarcodeMutation.mutate(password)}
+        >
+          <div className="rounded-[16px] border border-[#ececf0] bg-[#f7f7f9] p-4 text-sm text-[#5f626b]">
+            Cada código incluye la categoría, el ID del producto y su dígito verificador EAN-13.
+          </div>
+          {bulkBarcodeError && (
+            <p className="rounded-[14px] border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700" role="alert">
+              {bulkBarcodeError}
             </p>
           )}
         </AdminPasswordModal>
@@ -517,6 +596,17 @@ export default function ProductsPage() {
 
             {canManageProduct && (
               <div className="inventory-detail-actions">
+                {!productToView.codigo_barras && (
+                  <button
+                    type="button"
+                    className="inventory-detail-action barcode"
+                    onClick={() => handleGenerateBarcode(productToView)}
+                    disabled={generateBarcodeMutation.isPending}
+                  >
+                    <QrCodeIcon className="h-5 w-5" />
+                    {generateBarcodeMutation.isPending ? "Creando..." : "Crear código"}
+                  </button>
+                )}
                 <button type="button" className="inventory-detail-action edit" onClick={() => handleEdit(productToView)}>
                   <PencilIcon className="h-5 w-5" />
                   Editar

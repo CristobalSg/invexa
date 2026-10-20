@@ -1,10 +1,24 @@
 <!doctype html>
-<html lang="en">
+<html lang="es">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Invexa</title>
+    <script>
+      // Retira exclusivamente el service worker de desarrollo que versiones
+      // anteriores pudieron dejar registrado en Safari.
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function (registrations) {
+          registrations.forEach(function (registration) {
+            var worker = registration.active || registration.waiting || registration.installing;
+            if (worker && worker.scriptURL.indexOf("/dev-sw.js") !== -1) {
+              registration.unregister();
+            }
+          });
+        });
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -59,10 +59,6 @@ const money = (value: number) => `$${value.toLocaleString()}`;
 const toNumber = (value: string) => Number(value) || 0;
 const normalizeText = (value: string) =>
   value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-const slugifyAssetName = (value: string) =>
-  normalizeText(value)
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
 const isWeightProduct = (product: Producto) => product.unidad_venta === "PESO";
 const quantityStep = (product: Producto) => (isWeightProduct(product) ? 1 : 1);
 const quantityMin = (product: Producto) => (isWeightProduct(product) ? 1 : 1);
@@ -72,17 +68,16 @@ const quantityForBackend = (item: CompraItemForm) => {
 };
 const quantityLabel = (product: Producto) => (isWeightProduct(product) ? "Gramos" : "Unidades");
 const purchaseItemsStorageKey = "purchase-draft-items";
-const productImageModules = import.meta.glob("../assets/images/products/**/*.{png,jpg,jpeg,webp,avif}", {
-  eager: true,
-  query: "?url",
-  import: "default",
-}) as Record<string, string>;
-const productImagesBySlug = Object.entries(productImageModules).reduce<Record<string, string>>((acc, [path, src]) => {
-  const filename = path.split("/").pop()?.replace(/\.[^.]+$/, "").replace(/^\d+[_-]+/, "") ?? "";
-  acc[slugifyAssetName(filename)] = src;
-  return acc;
-}, {});
-const productFallbackVisual = (product: Producto) => product.nombre.trim().charAt(0).toUpperCase() || "P";
+const visiblePurchaseProductLimit = 15;
+const productFallbackVisual = (product: Producto) => {
+  const category = normalizeText(product.categoria_nombre);
+  if (category.includes("fruta")) return "🍊";
+  if (category.includes("verdura")) return "🥦";
+  if (category.includes("lact")) return "🥛";
+  if (category.includes("bebida")) return "🧃";
+  if (category.includes("carne")) return "🥩";
+  return product.categoria_nombre.trim().charAt(0).toUpperCase() || "P";
+};
 const createItemValidationMessage = (item: CompraItemForm) => {
   if (quantityForBackend(item) <= 0) {
     return `${item.producto.nombre}: ingresa una cantidad mayor a 0.`;
@@ -169,16 +164,22 @@ export default function ComprasPage() {
     enabled: mobilePurchasesOpen,
     refetchInterval: mobilePurchasesOpen ? 10_000 : false,
   });
-  const productosFiltrados = useMemo(() => {
+  const productosCoincidentes = useMemo(() => {
     const productItems = productos ?? [];
     if (!normalizedProductSearch) return productItems;
 
-    return productItems.filter((product) =>
-      normalizeText(product.nombre).includes(normalizedProductSearch) ||
-      normalizeText(product.categoria_nombre).includes(normalizedProductSearch) ||
-      (product.codigo_barras ?? "").includes(productSearch.trim()),
-    );
+    const rawSearch = productSearch.trim();
+    return productItems
+      .filter((product) =>
+        normalizeText(product.nombre).includes(normalizedProductSearch) ||
+        normalizeText(product.categoria_nombre).includes(normalizedProductSearch) ||
+        (product.codigo_barras ?? "").includes(rawSearch),
+      )
+      .sort((first, second) =>
+        Number(second.codigo_barras === rawSearch) - Number(first.codigo_barras === rawSearch),
+      );
   }, [normalizedProductSearch, productSearch, productos]);
+  const productosFiltrados = productosCoincidentes.slice(0, visiblePurchaseProductLimit);
   const isProductSearchFocusBlocked = Boolean(
     purchaseItemDraft || masterAction || expandedCompraId !== null || mobilePurchasesOpen,
   );
@@ -516,10 +517,6 @@ export default function ComprasPage() {
     toNumber(purchaseItemDraft.precio_final) > 0 &&
     toNumber(purchaseItemDraft.precio_final) < draftSuggestedSalePrice,
   );
-  const draftProductImage = purchaseItemDraft
-    ? productImagesBySlug[slugifyAssetName(purchaseItemDraft.producto.nombre)]
-    : undefined;
-
   const confirmMasterAction = async (masterPassword: string) => {
     if (!masterAction || !masterPassword) return;
 
@@ -643,12 +640,11 @@ export default function ComprasPage() {
 
         <div className="purchase-product-results-head" aria-live="polite">
           <span>{productSearch ? <>Resultados para <strong>“{productSearch}”</strong></> : "Todos los productos activos"}</span>
-          <strong>{isLoadingProducts ? "Cargando..." : `${productosFiltrados.length} productos`}</strong>
+          <strong>{isLoadingProducts ? "Cargando..." : `Mostrando ${productosFiltrados.length} de ${productosCoincidentes.length}`}</strong>
         </div>
 
         <div className="purchase-product-search-list" role="listbox" aria-label="Productos para agregar a la compra">
           {productosFiltrados.map((product, index) => {
-            const productImage = productImagesBySlug[slugifyAssetName(product.nombre)];
             const selected = index === selectedProductIndex;
 
             return (
@@ -663,7 +659,7 @@ export default function ComprasPage() {
                 className={`purchase-product-search-card ${selected ? "selected" : ""}`}
               >
                 <span className="purchase-product-search-image">
-                  {productImage ? <img src={productImage} alt="" /> : productFallbackVisual(product)}
+                  {productFallbackVisual(product)}
                 </span>
                 <span className="purchase-product-search-copy">
                   <strong className="purchase-product-search-name">{product.nombre}</strong>
@@ -708,13 +704,12 @@ export default function ComprasPage() {
                   <div className="purchase-items-list">
                     {items.map((item) => {
                       const subtotal = quantityForBackend(item) * toNumber(item.costo_unitario);
-                      const productImage = productImagesBySlug[slugifyAssetName(item.producto.nombre)];
 
                       return (
                         <article key={item.producto.id} className="purchase-item-row">
                           <div className="purchase-item-main">
                             <div className="purchase-item-avatar">
-                              {productImage ? <img src={productImage} alt="" /> : productFallbackVisual(item.producto)}
+                              {productFallbackVisual(item.producto)}
                             </div>
                             <div className="min-w-0">
                               <h4>{item.producto.nombre}</h4>
@@ -944,7 +939,7 @@ export default function ComprasPage() {
               <section className="cash-close-card highlight">
                 <div className="purchase-draft-product">
                   <span className="purchase-draft-image">
-                    {draftProductImage ? <img src={draftProductImage} alt="" /> : productFallbackVisual(purchaseItemDraft.producto)}
+                    {productFallbackVisual(purchaseItemDraft.producto)}
                   </span>
                   <div>
                     <p>{purchaseItemDraft.producto.codigo_barras ?? "Sin código"}</p>
