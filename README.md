@@ -25,6 +25,8 @@ Dentro de Docker:
 ```env
 DATABASE_URL=postgresql://postgres:postgres@postgres:5432/pos_db
 VITE_API_URL=http://localhost:3000
+VITE_SUPABASE_URL=https://tu-proyecto.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=tu-publishable-key
 CORS_ORIGIN=http://localhost:5173,http://127.0.0.1:5173
 ```
 
@@ -33,9 +35,16 @@ Fuera de Docker:
 ```env
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/pos_db
 VITE_API_URL=http://localhost:3000
+VITE_SUPABASE_URL=https://tu-proyecto.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=tu-publishable-key
 ```
 
 No subas `.env` real. El `Dockerfile` y `.dockerignore` excluyen `.env` y `node_modules`.
+
+Para habilitar el catálogo y las compras desde celular, ejecuta primero
+`supabase/setup_compras_movil.sql` en el SQL Editor de Supabase. En instalaciones
+locales existentes, aplica también `backend/migrations/20261017_compras_origen_externo.sql`
+en PostgreSQL para que los reintentos de aprobación no dupliquen compras.
 
 ## Comandos Docker
 

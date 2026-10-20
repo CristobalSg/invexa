@@ -1,4 +1,4 @@
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 
 import { BadRequestError, NotFoundError } from '../../utils/errors.js';
 import { assertValidOwnerPassword } from '../../utils/master-authorization.js';
@@ -29,7 +29,34 @@ export class ComprasService {
     this.validateUniqueProducts(data);
 
     return withTransaction(this.pool, async (client) => {
-      const compra = await this.repository.createCompra(client, usuarioId);
+      if (data.origen_externo) {
+        const compraExistente = await this.repository.findByOrigenExternoWithClient(
+          client,
+          data.origen_externo,
+        );
+
+        if (compraExistente) {
+          return this.loadCompraDetalle(client, compraExistente);
+        }
+      }
+
+      const compra = await this.repository.createCompra(client, usuarioId, data.origen_externo);
+
+      if (!compra && data.origen_externo) {
+        const compraExistente = await this.repository.findByOrigenExternoWithClient(
+          client,
+          data.origen_externo,
+        );
+
+        if (compraExistente) {
+          return this.loadCompraDetalle(client, compraExistente);
+        }
+      }
+
+      if (!compra) {
+        throw new BadRequestError('No se pudo registrar la compra');
+      }
+
       let totalCosto = 0;
 
       for (const item of data.items) {
@@ -145,7 +172,11 @@ export class ComprasService {
     return this.mapCompraDetalle(compra, detalles, movimientos);
   }
 
-  async anular(compraId: number, usuarioId: number, data: AnularCompraBody): Promise<CompraDetalle> {
+  async anular(
+    compraId: number,
+    usuarioId: number,
+    data: AnularCompraBody,
+  ): Promise<CompraDetalle> {
     await assertValidOwnerPassword(this.pool, data.master_password);
 
     return withTransaction(this.pool, async (client) => {
@@ -223,6 +254,15 @@ export class ComprasService {
 
       productIds.add(item.producto_id);
     }
+  }
+
+  private async loadCompraDetalle(client: PoolClient, compra: CompraRow): Promise<CompraDetalle> {
+    const detalles = await this.repository.findDetallesByCompraIdWithClient(client, compra.id);
+    const movimientos = await this.repository.findMovimientosByCompraIdWithClient(
+      client,
+      compra.id,
+    );
+    return this.mapCompraDetalle(compra, detalles, movimientos);
   }
 
   private mapCompra(row: CompraRow | CompraListRow): Compra {

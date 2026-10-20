@@ -222,6 +222,7 @@ CREATE TABLE movimientos_caja (
 CREATE TABLE compras (
   id SERIAL PRIMARY KEY,
   usuario_id INT NOT NULL,
+  origen_externo UUID UNIQUE,
 
   total_costo NUMERIC(10,2) NOT NULL DEFAULT 0,
 

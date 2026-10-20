@@ -137,14 +137,42 @@ export class ComprasRepository {
     return result.rows;
   }
 
-  async createCompra(client: PoolClient, usuarioId: number): Promise<CompraRow> {
+  async createCompra(
+    client: PoolClient,
+    usuarioId: number,
+    origenExterno?: string,
+  ): Promise<CompraRow | null> {
+    if (!origenExterno) {
+      const result = await client.query<CompraRow>(
+        `
+          INSERT INTO compras (
+            usuario_id,
+            total_costo
+          )
+          VALUES ($1, 0)
+          RETURNING
+            id,
+            usuario_id,
+            '' AS usuario_nombre,
+            total_costo,
+            'COMPLETADA' AS estado,
+            creado_en
+        `,
+        [usuarioId],
+      );
+
+      return result.rows[0] ?? null;
+    }
+
     const result = await client.query<CompraRow>(
       `
         INSERT INTO compras (
           usuario_id,
-          total_costo
+          total_costo,
+          origen_externo
         )
-        VALUES ($1, 0)
+        VALUES ($1, 0, $2::uuid)
+        ON CONFLICT (origen_externo) DO NOTHING
         RETURNING
           id,
           usuario_id,
@@ -153,10 +181,43 @@ export class ComprasRepository {
           'COMPLETADA' AS estado,
           creado_en
       `,
-      [usuarioId],
+      [usuarioId, origenExterno],
     );
 
-    return result.rows[0] as CompraRow;
+    return result.rows[0] ?? null;
+  }
+
+  async findByOrigenExternoWithClient(
+    client: PoolClient,
+    origenExterno: string,
+  ): Promise<CompraRow | null> {
+    const result = await client.query<CompraRow>(
+      `
+        SELECT
+          c.id,
+          c.usuario_id,
+          u.nombre AS usuario_nombre,
+          c.total_costo,
+          CASE
+            WHEN EXISTS (
+              SELECT 1
+              FROM movimientos_inventario mi
+              WHERE mi.compra_id = c.id
+                AND mi.tipo = 'ANULACION'
+            )
+            THEN 'ANULADA'
+            ELSE 'COMPLETADA'
+          END AS estado,
+          c.creado_en
+        FROM compras c
+        INNER JOIN usuarios u ON u.id = c.usuario_id
+        WHERE c.origen_externo = $1::uuid
+        LIMIT 1
+      `,
+      [origenExterno],
+    );
+
+    return result.rows[0] ?? null;
   }
 
   async findProductoForUpdate(

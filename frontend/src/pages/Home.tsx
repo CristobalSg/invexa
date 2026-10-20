@@ -1,36 +1,33 @@
-import { useEffect, useRef, useState } from "react";
-import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 import {
   ArrowsRightLeftIcon,
+  ArrowUpTrayIcon,
   BanknotesIcon,
   CreditCardIcon,
   CurrencyDollarIcon,
-  MagnifyingGlassIcon,
-  PlusIcon,
   WalletIcon,
-  XMarkIcon,
 } from "@heroicons/react/24/outline";
 import InputForm from "../components/InputForm";
 import MainList from "../components/MainList";
 import SideList from "../components/SideList";
 import StatsPanel from "../components/StatsPanel";
-import ProductTile from "../components/ProductTile";
 import { Button, FormActions, FormField, inputClassName } from "../components/FormControls";
 import AdminPasswordModal from "../components/AdminPasswordModal";
 import type { MetodoPago, MetodoPagoReal, ModalidadVenta, Oferta, Producto } from "../types/api";
 import { createVenta } from "../services/transactionService";
 import { getCajaActual } from "../services/cajaService";
-import { getAllProducts, getProductByBarcode, getProducts } from "../services/productService";
-import { getAllOfertasActivas, getCategorias } from "../services/catalogService";
+import { getAllProducts } from "../services/productService";
+import { getAllOfertasActivas } from "../services/catalogService";
 
 type CartProduct = Producto & { quantity: number; cartItemId: string };
 type CartSession = { id: string; name: string; items: CartProduct[] };
 type MixedPaymentMethod = "EFECTIVO" | "TARJETA" | "TRANSFERENCIA";
 type PaymentAmounts = Record<MixedPaymentMethod, string>;
-type QuickProductsModal = `categoria-${number}`;
-type ProductShelfFilter = "featured" | "offers";
-type CategoryButton = { id: number; name: string; index: number };
+type KeyboardMode = "products" | "cart";
+type CheckoutOption = MetodoPago | "RETIRO_DUENO" | "PRECIO_COSTO";
+type PaymentStep = "options" | "details";
 
 const isWeighableProduct = (product: Producto) =>
   product.unidad_venta === "PESO";
@@ -48,101 +45,34 @@ const createCartSession = (index: number): CartSession => ({
   items: [],
 });
 
-const mixedPaymentOptions: Array<{ label: string; methods: MixedPaymentMethod[] }> = [
-  { label: "Efectivo + débito", methods: ["EFECTIVO", "TARJETA"] },
-  { label: "Efectivo + transferencia", methods: ["EFECTIVO", "TRANSFERENCIA"] },
-  { label: "Débito + transferencia", methods: ["TARJETA", "TRANSFERENCIA"] },
-  { label: "Efectivo + débito + transferencia", methods: ["EFECTIVO", "TARJETA", "TRANSFERENCIA"] },
-];
-
 const paymentLabels: Record<MixedPaymentMethod, string> = {
   EFECTIVO: "Efectivo",
   TARJETA: "Débito / tarjeta",
   TRANSFERENCIA: "Transferencia",
 };
 
-const paymentMethodLabels: Record<MetodoPago, string> = {
-  EFECTIVO: "Efectivo",
-  TARJETA: "Débito / tarjeta",
-  TRANSFERENCIA: "Transferencia",
-  MIXTO: "Mixto",
-};
+const checkoutOptions: Array<{
+  id: CheckoutOption;
+  label: string;
+  hint: string;
+  icon: typeof BanknotesIcon;
+}> = [
+  { id: "EFECTIVO", label: "Efectivo", hint: "Ingresa el monto recibido", icon: BanknotesIcon },
+  { id: "TARJETA", label: "Débito / tarjeta", hint: "Confirma el cobro del terminal", icon: CreditCardIcon },
+  { id: "TRANSFERENCIA", label: "Transferencia", hint: "Confirma la transferencia recibida", icon: ArrowsRightLeftIcon },
+  { id: "MIXTO", label: "Pago mixto", hint: "Divide entre efectivo y débito", icon: WalletIcon },
+  { id: "RETIRO_DUENO", label: "Retiro de dueño", hint: "Descuenta stock sin sumar a caja", icon: ArrowUpTrayIcon },
+  { id: "PRECIO_COSTO", label: "Vender a precio costo", hint: "Venta administrativa en efectivo", icon: CurrencyDollarIcon },
+];
 
-const paymentMethodHints: Record<MetodoPago, string> = {
-  EFECTIVO: "Pago en billetes",
-  TARJETA: "POS / débito",
-  TRANSFERENCIA: "Banco",
-  MIXTO: "Combinar",
-};
-
-const paymentMethodIcons = {
-  EFECTIVO: BanknotesIcon,
-  TARJETA: CreditCardIcon,
-  TRANSFERENCIA: ArrowsRightLeftIcon,
-  MIXTO: WalletIcon,
-} satisfies Record<MetodoPago, typeof BanknotesIcon>;
-
-const cashSuggestionAmounts = [1000, 2000, 5000, 10000, 20000];
 const saleCartsStorageKey = "pos-sale-carts";
-const featuredProductsStorageKey = "pos-featured-products";
-const featuredCategoriesStorageKey = "pos-featured-categories";
-const productModalPageSize = 30;
-const categoryFavoriteSlots = 6;
 
 const toInputAmount = (value: number) => (value > 0 ? String(value) : "");
 const toAmount = (value: string) => Number(value) || 0;
-const roundUpTo = (value: number, step: number) => Math.ceil(value / step) * step;
 const roundCurrency = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
 const roundToNearestTen = (value: number) => Math.round(value / 10) * 10;
 const formatMoney = (value: number) => `$${value.toLocaleString()}`;
 const formatSignedMoney = (value: number) => `${value >= 0 ? "+" : "-"}$${Math.abs(value).toLocaleString()}`;
-
-const getCategoryVisual = (name: string) => {
-  const normalized = normalizeText(name);
-  if (normalized.includes("fruta")) return "🍊";
-  if (normalized.includes("verdura")) return "🥦";
-  if (normalized.includes("lact")) return "🥛";
-  if (normalized.includes("bebida")) return "🧃";
-  if (normalized.includes("carne")) return "🥩";
-  return name.trim().charAt(0).toUpperCase() || "•";
-};
-
-const getCategorySortPriority = (name: string) => {
-  const normalized = normalizeText(name);
-
-  if (normalized.includes("fruta") && normalized.includes("verdura")) return 0;
-  if (normalized.includes("abarrote")) return 1;
-
-  return 2;
-};
-
-const categoryImageModules = import.meta.glob("../assets/images/categories/*.{png,jpg,jpeg,webp,avif}", {
-  eager: true,
-  query: "?url",
-  import: "default",
-}) as Record<string, string>;
-
-const slugifyAssetName = (value: string) =>
-  normalizeText(value)
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-
-const categoryImagesBySlug = Object.entries(categoryImageModules).reduce<Record<string, string>>((acc, [path, src]) => {
-  const filename = path.split("/").pop()?.replace(/\.[^.]+$/, "") ?? "";
-  const matchingCategory = [
-    "frutas-y-verduras",
-    "congelados",
-    "abarrotes",
-    "bebidas",
-    "consignacion",
-  ].find((slug) => filename === slug || filename.startsWith(`${slug}-`));
-
-  if (matchingCategory && !acc[matchingCategory]) {
-    acc[matchingCategory] = src;
-  }
-
-  return acc;
-}, {});
 
 const calculateOfferLine = (product: Producto, quantity: number, offer?: Oferta) => {
   const normalTotal = product.precio_venta * quantity;
@@ -173,30 +103,6 @@ const aggregateSaleItems = (cart: CartProduct[]) => {
 
   return Array.from(itemsByProduct, ([producto_id, cantidad]) => ({ producto_id, cantidad }));
 };
-const createMixedAmounts = (methods: MixedPaymentMethod[], total: number): PaymentAmounts => {
-  const amounts: PaymentAmounts = {
-    EFECTIVO: "",
-    TARJETA: "",
-    TRANSFERENCIA: "",
-  };
-  const balanceMethod = methods[methods.length - 1];
-
-  if (balanceMethod) {
-    amounts[balanceMethod] = toInputAmount(total);
-  }
-
-  return amounts;
-};
-
-const createCashSuggestions = (total: number) => {
-  const roundedOptions = cashSuggestionAmounts
-    .map((amount) => roundUpTo(total, amount))
-    .filter((amount) => amount > total);
-  const uniqueAmounts = Array.from(new Set([total, ...roundedOptions]));
-
-  return uniqueAmounts;
-};
-
 const readSaleCarts = (): CartSession[] => {
   try {
     const stored = window.sessionStorage.getItem(saleCartsStorageKey);
@@ -231,46 +137,22 @@ const readSaleCarts = (): CartSession[] => {
   }
 };
 
-const readFeaturedProductIds = () => {
-  try {
-    const stored = window.sessionStorage.getItem(featuredProductsStorageKey);
-    if (!stored) return [];
-    const parsed = JSON.parse(stored);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter((id) => Number.isInteger(id) && id > 0);
-  } catch {
-    return [];
-  }
-};
-
-const readFeaturedCategoryIds = () => {
-  try {
-    const stored = window.sessionStorage.getItem(featuredCategoriesStorageKey);
-    if (!stored) return [];
-    const parsed = JSON.parse(stored);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter((id) => Number.isInteger(id) && id > 0).slice(0, categoryFavoriteSlots);
-  } catch {
-    return [];
-  }
-};
-
 export default function Home() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const barcodeInputRef = useRef<HTMLInputElement>(null);
-  const productSearchInputRef = useRef<HTMLInputElement>(null);
-  const priceLookupInputRef = useRef<HTMLInputElement>(null);
+  const paymentOptionsRef = useRef<HTMLDivElement>(null);
+  const paymentDetailsRef = useRef<HTMLDivElement>(null);
+  const cashReceivedInputRef = useRef<HTMLInputElement>(null);
+  const mixedCashInputRef = useRef<HTMLInputElement>(null);
+  const saleSubmittingRef = useRef(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [searchPage, setSearchPage] = useState(1);
-  const [isProductSearchOpen, setIsProductSearchOpen] = useState(false);
-  const [isPriceLookupOpen, setIsPriceLookupOpen] = useState(false);
-  const [priceLookupCode, setPriceLookupCode] = useState("");
-  const [priceLookupProduct, setPriceLookupProduct] = useState<Producto | null>(null);
-  const [priceLookupMessage, setPriceLookupMessage] = useState("");
-  const [isPriceLookupLoading, setIsPriceLookupLoading] = useState(false);
   const [barcodeClearSignal, setBarcodeClearSignal] = useState(0);
-  const [productShelfFilter, setProductShelfFilter] = useState<ProductShelfFilter>("featured");
+  const [selectedProductIndex, setSelectedProductIndex] = useState(0);
+  const [keyboardMode, setKeyboardMode] = useState<KeyboardMode>("products");
+  const [selectedCartIndex, setSelectedCartIndex] = useState(0);
+  const [cartQuantityProduct, setCartQuantityProduct] = useState<CartProduct | null>(null);
+  const [cartQuantityValue, setCartQuantityValue] = useState("");
   const [carts, setCarts] = useState<CartSession[]>(readSaleCarts);
   const [activeCartId] = useState(() => "");
   const [message, setMessage] = useState("");
@@ -278,11 +160,11 @@ export default function Home() {
   const [weighableProduct, setWeighableProduct] = useState<Producto | null>(null);
   const [grams, setGrams] = useState("");
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
-  const [categoryModalOpen, setCategoryModalOpen] = useState(false);
-  const [quickProductsModal, setQuickProductsModal] = useState<QuickProductsModal | null>(null);
-  const [quickProductsPage, setQuickProductsPage] = useState(1);
-  const [featuredProductIds, setFeaturedProductIds] = useState<number[]>(readFeaturedProductIds);
-  const [featuredCategoryIds, setFeaturedCategoryIds] = useState<number[]>(readFeaturedCategoryIds);
+  const [paymentStep, setPaymentStep] = useState<PaymentStep>("options");
+  const [selectedCheckoutOptionIndex, setSelectedCheckoutOptionIndex] = useState(0);
+  const [selectedCheckoutOption, setSelectedCheckoutOption] = useState<CheckoutOption>("EFECTIVO");
+  const [paymentConfirmationArmed, setPaymentConfirmationArmed] = useState(false);
+  const [isFinishingSale, setIsFinishingSale] = useState(false);
   const [modalidadVenta, setModalidadVenta] = useState<ModalidadVenta>("NORMAL");
   const [salePasswordOpen, setSalePasswordOpen] = useState(false);
   const [metodoPago, setMetodoPago] = useState<MetodoPago>("EFECTIVO");
@@ -298,88 +180,42 @@ export default function Home() {
     queryKey: ["caja-actual"],
     queryFn: getCajaActual,
   });
-  const { data: productos } = useQuery({
+  const { data: productos, isLoading: isLoadingProducts } = useQuery({
     queryKey: ["products", "all-active"],
     queryFn: () => getAllProducts({ activo: true }),
   });
-  const { data: categorias } = useQuery({
-    queryKey: ["categorias"],
-    queryFn: () => getCategorias(),
-  });
-  const { data: ofertasActivas, isLoading: isLoadingOffers } = useQuery({
+  const { data: ofertasActivas } = useQuery({
     queryKey: ["ofertas", "activas"],
     queryFn: () => getAllOfertasActivas(),
   });
   const normalizedSearchTerm = searchTerm.trim();
-  const { data: searchProducts, isFetching: isSearchFetching } = useQuery({
-    queryKey: ["products", "pos-search", { search: normalizedSearchTerm, page: searchPage }],
-    queryFn: () =>
-      getProducts({
-        activo: true,
-        search: normalizedSearchTerm,
-        page: searchPage,
-        limit: productModalPageSize,
-      }),
-    enabled: isProductSearchOpen && normalizedSearchTerm.length > 0,
-    placeholderData: keepPreviousData,
-  });
+  const normalizedProductSearch = normalizeText(normalizedSearchTerm);
+  const visibleProducts = useMemo(() => {
+    const activeProducts = productos ?? [];
+    if (!normalizedProductSearch) return activeProducts;
+
+    return activeProducts.filter((product) =>
+      normalizeText(product.nombre).includes(normalizedProductSearch) ||
+      normalizeText(product.categoria_nombre).includes(normalizedProductSearch) ||
+      (product.codigo_barras ?? "").includes(normalizedSearchTerm),
+    );
+  }, [normalizedProductSearch, normalizedSearchTerm, productos]);
 
   const activeOffers = ofertasActivas ?? [];
   const activeOffersByProductId = new Map(activeOffers.map((offer) => [offer.producto_id, offer]));
-  const allCategoryButtons = (categorias?.items ?? [])
-    .map((category, index) => ({ id: category.id, name: category.nombre, index }))
-    .sort((first, second) => {
-      const priorityDiff = getCategorySortPriority(first.name) - getCategorySortPriority(second.name);
-      return priorityDiff === 0 ? first.index - second.index : priorityDiff;
-    });
-  const featuredCategoryButtons = featuredCategoryIds.reduce<CategoryButton[]>((acc, categoryId) => {
-    const category = allCategoryButtons.find((item) => item.id === categoryId);
-    if (category) acc.push(category);
-    return acc;
-  }, []);
-  const selectedFeaturedCategoryIds = featuredCategoryButtons.map((category) => category.id);
-  const categorySlots = Array.from({ length: categoryFavoriteSlots }, (_, index) => featuredCategoryButtons[index] ?? null);
-  const quickCategoryId = quickProductsModal?.startsWith("categoria-")
-    ? Number(quickProductsModal.replace("categoria-", ""))
-    : null;
-  const quickCategoryName = allCategoryButtons.find((category) => category.id === quickCategoryId)?.name;
-  const { data: categoryProductsPage, isFetching: isCategoryProductsFetching } = useQuery({
-    queryKey: ["products", "pos-category", { categoryId: quickCategoryId, page: quickProductsPage }],
-    queryFn: () =>
-      getProducts({
-        activo: true,
-        categoria_id: quickCategoryId ?? undefined,
-        page: quickProductsPage,
-        limit: productModalPageSize,
-      }),
-    enabled: quickCategoryId !== null,
-    placeholderData: keepPreviousData,
-  });
-
-  const featuredProducts = (productos ?? []).filter((product) => featuredProductIds.includes(product.id));
-  const offerProducts = (productos ?? []).filter((product) => activeOffersByProductId.has(product.id));
-  const listedProducts = productShelfFilter === "featured" ? featuredProducts : offerProducts;
-  const listedProductsTitle = productShelfFilter === "featured" ? "Favoritos" : "Ofertas";
-  const quickProducts = categoryProductsPage?.items ?? [];
-  const quickProductsPagination = categoryProductsPage?.pagination;
-  const searchProductsItems = searchProducts?.items ?? [];
-  const searchProductsPagination = searchProducts?.pagination;
-  const quickProductsTitle = quickCategoryName ?? "Categoría";
   const resolvedActiveCartId = activeCartId || carts[0]?.id || "";
   const activeCart = carts.find((cartSession) => cartSession.id === resolvedActiveCartId) ?? carts[0];
   const cart = activeCart?.items ?? [];
   const isBarcodeFocusBlocked = Boolean(
-    isProductSearchOpen ||
-    isPriceLookupOpen ||
-    categoryModalOpen ||
-    quickProductsModal ||
     paymentModalOpen ||
     salePasswordOpen ||
     weighableProduct ||
-    centerAlert,
+    centerAlert ||
+    cartQuantityProduct,
   );
 
   const focusBarcodeInput = (force = false) => {
+    setKeyboardMode("products");
     window.setTimeout(() => {
       if (force || !isBarcodeFocusBlocked) {
         barcodeInputRef.current?.focus();
@@ -395,62 +231,34 @@ export default function Home() {
   }, [isBarcodeFocusBlocked]);
 
   useEffect(() => {
-    if (isProductSearchOpen) {
-      window.setTimeout(() => productSearchInputRef.current?.focus(), 0);
-    }
-  }, [isProductSearchOpen]);
+    if (!paymentModalOpen || salePasswordOpen) return;
+
+    const focusTimer = window.setTimeout(() => {
+      if (paymentStep === "options") {
+        paymentOptionsRef.current?.focus();
+      } else if (selectedCheckoutOption === "EFECTIVO" || selectedCheckoutOption === "PRECIO_COSTO") {
+        cashReceivedInputRef.current?.focus();
+      } else if (selectedCheckoutOption === "MIXTO") {
+        mixedCashInputRef.current?.focus();
+      } else {
+        paymentDetailsRef.current?.focus();
+      }
+    }, 0);
+
+    return () => window.clearTimeout(focusTimer);
+  }, [paymentModalOpen, paymentStep, salePasswordOpen, selectedCheckoutOption]);
 
   useEffect(() => {
-    if (isPriceLookupOpen) {
-      window.setTimeout(() => priceLookupInputRef.current?.focus(), 0);
-    }
-  }, [isPriceLookupOpen]);
-
-  useEffect(() => {
-    setSearchPage(1);
+    setSelectedProductIndex(0);
   }, [normalizedSearchTerm]);
-
-  useEffect(() => {
-    setQuickProductsPage(1);
-  }, [quickCategoryId]);
-
-  useEffect(() => {
-    window.sessionStorage.setItem(featuredProductsStorageKey, JSON.stringify(featuredProductIds));
-  }, [featuredProductIds]);
 
   useEffect(() => {
     window.sessionStorage.setItem(saleCartsStorageKey, JSON.stringify(carts));
   }, [carts]);
 
   useEffect(() => {
-    window.sessionStorage.setItem(featuredCategoriesStorageKey, JSON.stringify(featuredCategoryIds));
-  }, [featuredCategoryIds]);
-
-  const toggleFeaturedProduct = (productId: number) => {
-    setFeaturedProductIds((prev) =>
-      prev.includes(productId)
-        ? prev.filter((id) => id !== productId)
-        : [...prev, productId],
-    );
-    focusBarcodeInput();
-  };
-
-  const toggleFeaturedCategory = (categoryId: number) => {
-    setFeaturedCategoryIds((prev) => {
-      const validIds = new Set(allCategoryButtons.map((category) => category.id));
-      const current = prev.filter((id) => validIds.has(id));
-
-      if (current.includes(categoryId)) {
-        return current.filter((id) => id !== categoryId);
-      }
-
-      if (current.length >= categoryFavoriteSlots) {
-        return current;
-      }
-
-      return [...current, categoryId];
-    });
-  };
+    setSelectedProductIndex((current) => Math.min(current, Math.max(0, visibleProducts.length - 1)));
+  }, [visibleProducts.length]);
 
   const setCart = (updater: CartProduct[] | ((items: CartProduct[]) => CartProduct[])) => {
     setCarts((prev) =>
@@ -496,18 +304,26 @@ export default function Home() {
   const totalCobrar = roundCurrency(totalFinal + redondeoVenta);
   const cashReceivedAmount = toAmount(cashReceived);
   const mixedTotal = mixedMethods.reduce((sum, method) => sum + toAmount(mixedAmounts[method]), 0);
-  const cashSuggestions = createCashSuggestions(totalCobrar);
+  const mixedPaymentsAreValid =
+    Math.abs(mixedTotal - totalFinal) < 0.01 &&
+    mixedMethods.every((method) => toAmount(mixedAmounts[method]) > 0);
   const canConfirmSale =
-    modalidadVenta === "RETIRO_DUENO"
+    isFinishingSale
+      ? false
+      : modalidadVenta === "RETIRO_DUENO"
         ? ownerWithdrawalCostBlockers.length === 0
         : metodoPago === "EFECTIVO"
           ? cashReceivedAmount >= totalCobrar
           : metodoPago === "MIXTO"
-            ? mixedTotal >= totalFinal
+            ? mixedPaymentsAreValid
             : true;
+  const selectedCheckoutOptionMeta = checkoutOptions.find((option) => option.id === selectedCheckoutOption) ?? checkoutOptions[0];
 
   const handleOpenPayment = () => {
-    if (cart.length === 0) return;
+    if (cart.length === 0) {
+      setMessage("El carrito está vacío.");
+      return;
+    }
     if (!cajaActual?.abierta) {
       setCenterAlert("Abre una caja antes de registrar ventas.");
       return;
@@ -516,31 +332,56 @@ export default function Home() {
     setMetodoPago("EFECTIVO");
     setModalidadVenta("NORMAL");
     setSalePasswordOpen(false);
-    setCashReceived(toInputAmount(roundToNearestTen(normalTotalFinal)));
+    setPaymentStep("options");
+    setSelectedCheckoutOptionIndex(0);
+    setSelectedCheckoutOption("EFECTIVO");
+    setPaymentConfirmationArmed(false);
+    setCashReceived("");
     setMixedMethods(["EFECTIVO", "TARJETA"]);
-    setMixedAmounts(createMixedAmounts(["EFECTIVO", "TARJETA"], normalTotalFinal));
+    const cashPart = roundCurrency(Math.floor(normalTotalFinal / 2));
+    setMixedAmounts({
+      EFECTIVO: toInputAmount(cashPart),
+      TARJETA: toInputAmount(roundCurrency(normalTotalFinal - cashPart)),
+      TRANSFERENCIA: "",
+    });
+    setMessage("");
     setPaymentModalOpen(true);
   };
 
-  const handlePaymentMethodChange = (method: MetodoPago) => {
-    setMetodoPago(method);
-    if (method === "EFECTIVO") {
-      setCashReceived(toInputAmount(roundToNearestTen(totalFinal)));
-    }
-    if (method === "MIXTO") {
-      const methods: MixedPaymentMethod[] = ["EFECTIVO", "TARJETA"];
-      setMixedMethods(methods);
-      setMixedAmounts(createMixedAmounts(methods, totalFinal));
-    }
-  };
+  const handleCheckoutOptionSelect = (option: CheckoutOption) => {
+    setSelectedCheckoutOption(option);
+    setPaymentConfirmationArmed(false);
+    setMessage("");
 
-  const handleMixedOptionChange = (methods: MixedPaymentMethod[]) => {
-    setMixedMethods(methods);
-    setMixedAmounts(createMixedAmounts(methods, totalFinal));
+    if (option === "RETIRO_DUENO") {
+      setModalidadVenta("RETIRO_DUENO");
+      setMetodoPago("EFECTIVO");
+    } else if (option === "PRECIO_COSTO") {
+      setModalidadVenta("PRECIO_COSTO");
+      setMetodoPago("EFECTIVO");
+      setCashReceived("");
+    } else {
+      setModalidadVenta("NORMAL");
+      setMetodoPago(option);
+      if (option === "EFECTIVO") setCashReceived("");
+      if (option === "MIXTO") {
+        const normalTotal = total - descuentoOfertas;
+        const cashPart = roundCurrency(Math.floor(normalTotal / 2));
+        setMixedMethods(["EFECTIVO", "TARJETA"]);
+        setMixedAmounts({
+          EFECTIVO: toInputAmount(cashPart),
+          TARJETA: toInputAmount(roundCurrency(normalTotal - cashPart)),
+          TRANSFERENCIA: "",
+        });
+      }
+    }
+
+    setPaymentStep("details");
   };
 
   const handleMixedAmountChange = (method: MixedPaymentMethod, value: string) => {
     if (value !== "" && !Number.isFinite(Number(value))) return;
+    setPaymentConfirmationArmed(false);
 
     setMixedAmounts((prev) => {
       const next = { ...prev, [method]: value };
@@ -558,6 +399,8 @@ export default function Home() {
   };
 
   const handleFinishSale = async (adminPassword?: string) => {
+    if (saleSubmittingRef.current) return;
+
     if (modalidadVenta === "RETIRO_DUENO" && ownerWithdrawalCostBlockers.length > 0) {
       setMessage("Completa el costo de los productos bloqueados antes de registrar el retiro.");
       return;
@@ -567,14 +410,17 @@ export default function Home() {
       setMessage("El monto recibido no alcanza para pagar la venta.");
       return;
     }
-    if (metodoPago === "MIXTO" && mixedTotal < totalFinal) {
-      setMessage("La combinación de pagos no alcanza para pagar la venta.");
+    if (metodoPago === "MIXTO" && !mixedPaymentsAreValid) {
+      setMessage("Los montos del pago mixto deben ser mayores a 0 y sumar exactamente el total.");
       return;
     }
     if (modalidadVenta !== "NORMAL" && !adminPassword) {
       setSalePasswordOpen(true);
       return;
     }
+
+    saleSubmittingRef.current = true;
+    setIsFinishingSale(true);
 
     try {
       await createVenta({
@@ -599,16 +445,84 @@ export default function Home() {
       queryClient.invalidateQueries({ queryKey: ["caja-actual"] });
       queryClient.invalidateQueries({ queryKey: ["reportes"] });
       setCart([]);
-      setProductShelfFilter("featured");
       setPaymentModalOpen(false);
       setSalePasswordOpen(false);
       setCashReceived("");
       setModalidadVenta("NORMAL");
+      setPaymentStep("options");
+      setPaymentConfirmationArmed(false);
       setMixedAmounts({ EFECTIVO: "", TARJETA: "", TRANSFERENCIA: "" });
       setMessage("Venta registrada correctamente.");
       focusBarcodeInput();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Hubo un error al registrar la venta");
+      setPaymentConfirmationArmed(false);
+    } finally {
+      saleSubmittingRef.current = false;
+      setIsFinishingSale(false);
+    }
+  };
+
+  const handlePaymentDetailsConfirm = () => {
+    if (modalidadVenta === "RETIRO_DUENO" && ownerWithdrawalCostBlockers.length > 0) {
+      setMessage("Completa el costo de los productos bloqueados antes de registrar el retiro.");
+      return;
+    }
+    if (metodoPago === "EFECTIVO" && modalidadVenta !== "RETIRO_DUENO" && cashReceivedAmount < totalCobrar) {
+      setMessage("El monto recibido no alcanza para pagar la venta.");
+      setPaymentConfirmationArmed(false);
+      return;
+    }
+    if (metodoPago === "MIXTO" && !mixedPaymentsAreValid) {
+      setMessage("El pago mixto debe tener dos montos mayores a 0 que sumen exactamente el total.");
+      setPaymentConfirmationArmed(false);
+      return;
+    }
+
+    setMessage("");
+    if (!paymentConfirmationArmed) {
+      setPaymentConfirmationArmed(true);
+      return;
+    }
+
+    void handleFinishSale();
+  };
+
+  const handlePaymentKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      if (paymentStep === "details") {
+        setPaymentStep("options");
+        setPaymentConfirmationArmed(false);
+        setMessage("");
+      } else {
+        setPaymentModalOpen(false);
+        focusBarcodeInput();
+      }
+      return;
+    }
+
+    if (event.target instanceof HTMLButtonElement) return;
+
+    if (paymentStep === "options") {
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        const direction = event.key === "ArrowDown" ? 1 : -1;
+        setSelectedCheckoutOptionIndex((current) =>
+          (current + direction + checkoutOptions.length) % checkoutOptions.length,
+        );
+      }
+      if (event.key === "Enter") {
+        event.preventDefault();
+        const option = checkoutOptions[selectedCheckoutOptionIndex];
+        if (option) handleCheckoutOptionSelect(option.id);
+      }
+      return;
+    }
+
+    if (event.key === "Enter") {
+      event.preventDefault();
+      handlePaymentDetailsConfirm();
     }
   };
 
@@ -732,112 +646,172 @@ export default function Home() {
     focusBarcodeInput();
   };
 
-  const handleCloseProductSearch = () => {
-    setIsProductSearchOpen(false);
-    setSearchTerm("");
-    setSearchPage(1);
-    focusBarcodeInput(true);
-  };
-
-  const handleOpenPriceLookup = () => {
-    setIsPriceLookupOpen(true);
-    setPriceLookupCode("");
-    setPriceLookupProduct(null);
-    setPriceLookupMessage("");
-  };
-
-  const handleClosePriceLookup = () => {
-    setIsPriceLookupOpen(false);
-    setPriceLookupCode("");
-    setPriceLookupProduct(null);
-    setPriceLookupMessage("");
-    focusBarcodeInput(true);
-  };
-
-  const handlePriceLookup = async () => {
-    const code = priceLookupCode.trim();
-
-    if (!code) {
-      setPriceLookupProduct(null);
-      setPriceLookupMessage("Ingresa un código de barra.");
-      return;
-    }
-
-    setIsPriceLookupLoading(true);
-    setPriceLookupMessage("");
-
-    try {
-      const product = await getProductByBarcode(code);
-      setPriceLookupProduct(product);
-      setPriceLookupMessage(product ? "" : "No se encontró un producto activo con ese código.");
-    } catch (error) {
-      setPriceLookupProduct(null);
-      setPriceLookupMessage(error instanceof Error ? error.message : "No se pudo consultar el precio");
-    } finally {
-      setIsPriceLookupLoading(false);
-      setPriceLookupCode("");
-      window.setTimeout(() => priceLookupInputRef.current?.focus(), 0);
-    }
-  };
-
   const handleClearBarcodeInput = () => {
     setBarcodeClearSignal((current) => current + 1);
+    setSearchTerm("");
+    setSelectedProductIndex(0);
     focusBarcodeInput();
   };
 
-  const handleSearchProductSelect = (product: Producto) => {
-    handleProductFound(product);
-    setIsProductSearchOpen(false);
+  const handleProductSelect = (product: Producto, index = selectedProductIndex) => {
+    setSelectedProductIndex(index);
+    setBarcodeClearSignal((current) => current + 1);
     setSearchTerm("");
-    setSearchPage(1);
+    handleProductFound(product);
   };
 
-  const handleModalidadChange = (modalidad: ModalidadVenta) => {
-    const nextTotal =
-      modalidad === "RETIRO_DUENO"
-        ? 0
-        : modalidad === "PRECIO_COSTO"
-          ? totalCosto
-          : total - descuentoOfertas;
-    setModalidadVenta(modalidad);
-    setSalePasswordOpen(false);
-    setCashReceived(toInputAmount(metodoPago === "EFECTIVO" ? roundToNearestTen(nextTotal) : nextTotal));
-    setMixedAmounts(createMixedAmounts(mixedMethods, nextTotal));
+  const enterCartMode = () => {
+    if (cart.length === 0) {
+      setMessage("El carrito está vacío.");
+      focusBarcodeInput();
+      return;
+    }
+
+    setMessage("");
+    setKeyboardMode("cart");
+    setSelectedCartIndex((current) => Math.min(current, cart.length - 1));
+    setBarcodeClearSignal((current) => current + 1);
+    setSearchTerm("");
+    barcodeInputRef.current?.blur();
   };
+
+  const leaveCartMode = () => {
+    setKeyboardMode("products");
+    focusBarcodeInput(true);
+  };
+
+  const openCartQuantityEditor = (product: CartProduct) => {
+    setCartQuantityProduct(product);
+    setCartQuantityValue(
+      isWeighableProduct(product)
+        ? String(Math.round(product.quantity * 1000))
+        : String(product.quantity),
+    );
+  };
+
+  const confirmCartQuantity = () => {
+    if (!cartQuantityProduct) return;
+    const rawQuantity = Number(cartQuantityValue);
+    const requestedQuantity = isWeighableProduct(cartQuantityProduct)
+      ? Number((rawQuantity / 1000).toFixed(3))
+      : Math.floor(rawQuantity);
+    const maxQuantity = blocksSalesByStock(cartQuantityProduct)
+      ? cartQuantityProduct.stock
+      : requestedQuantity;
+    const nextQuantity = Math.min(requestedQuantity, maxQuantity);
+
+    if (!Number.isFinite(nextQuantity) || nextQuantity <= 0) {
+      setMessage("Ingresa una cantidad mayor a 0.");
+      return;
+    }
+
+    setCart((items) => items.map((item) =>
+      item.cartItemId === cartQuantityProduct.cartItemId
+        ? { ...item, quantity: nextQuantity }
+        : item,
+    ));
+    setCartQuantityProduct(null);
+    setCartQuantityValue("");
+    window.setTimeout(() => barcodeInputRef.current?.blur(), 0);
+  };
+
+  useEffect(() => {
+    if (isBarcodeFocusBlocked) return;
+
+    const handleKeyboardNavigation = (event: KeyboardEvent) => {
+      if (event.key === "]") {
+        event.preventDefault();
+        handleOpenPayment();
+        return;
+      }
+
+      if (event.key === "\\") {
+        event.preventDefault();
+        if (keyboardMode === "cart") leaveCartMode();
+        else enterCartMode();
+        return;
+      }
+
+      if (keyboardMode === "products") {
+        if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+          event.preventDefault();
+          if (visibleProducts.length === 0) return;
+          const direction = event.key === "ArrowDown" ? 1 : -1;
+          setSelectedProductIndex((current) =>
+            (current + direction + visibleProducts.length) % visibleProducts.length,
+          );
+          return;
+        }
+
+        if (event.key === "Enter") {
+          const target = event.target;
+          if (target instanceof HTMLButtonElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) return;
+          event.preventDefault();
+          const selectedProduct = visibleProducts[selectedProductIndex];
+          if (selectedProduct) handleProductSelect(selectedProduct, selectedProductIndex);
+          else setMessage("No hay un producto seleccionado.");
+          return;
+        }
+
+        if (event.key === "Escape") {
+          event.preventDefault();
+          handleClearBarcodeInput();
+        }
+        return;
+      }
+
+      if (event.key === "Escape") {
+        event.preventDefault();
+        leaveCartMode();
+        return;
+      }
+
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        if (cart.length === 0) return;
+        const direction = event.key === "ArrowDown" ? 1 : -1;
+        setSelectedCartIndex((current) => (current + direction + cart.length) % cart.length);
+        return;
+      }
+
+      if (event.key === "Delete" || event.key === "Backspace") {
+        event.preventDefault();
+        const selectedItem = cart[selectedCartIndex];
+        if (!selectedItem) return;
+
+        setCart((items) => items.flatMap((item) => {
+          if (item.cartItemId !== selectedItem.cartItemId) return [item];
+          if (isWeighableProduct(item) || item.quantity <= 1) return [];
+          return [{ ...item, quantity: item.quantity - 1 }];
+        }));
+        return;
+      }
+
+      if (event.key === "Enter") {
+        event.preventDefault();
+        const selectedItem = cart[selectedCartIndex];
+        if (selectedItem) openCartQuantityEditor(selectedItem);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyboardNavigation, true);
+    return () => window.removeEventListener("keydown", handleKeyboardNavigation, true);
+  });
+
+  useEffect(() => {
+    if (cart.length === 0 && keyboardMode === "cart") {
+      setKeyboardMode("products");
+      window.setTimeout(() => barcodeInputRef.current?.focus(), 0);
+      return;
+    }
+
+    setSelectedCartIndex((current) => Math.min(current, Math.max(0, cart.length - 1)));
+  }, [cart.length, keyboardMode]);
 
   const handleEditCostFromWithdrawal = (productId: number) => {
     setPaymentModalOpen(false);
     setSalePasswordOpen(false);
     navigate(`/productos?editar=${productId}`);
-  };
-
-  const renderModalPagination = (
-    pagination: { page: number; totalPages: number; total: number } | undefined,
-    onPageChange: (page: number) => void,
-  ) => {
-    if (!pagination || pagination.totalPages <= 1) return null;
-
-    return (
-      <div className="pos-modal-pagination">
-        <button
-          type="button"
-          onClick={() => onPageChange(Math.max(1, pagination.page - 1))}
-          disabled={pagination.page <= 1}
-        >
-          Anterior
-        </button>
-        <span>
-          Página {pagination.page} de {pagination.totalPages}
-        </span>
-        <button
-          type="button"
-          onClick={() => onPageChange(Math.min(pagination.totalPages, pagination.page + 1))}
-          disabled={pagination.page >= pagination.totalPages}
-        >
-          Siguiente
-        </button>
-      </div>
-    );
   };
 
   return (
@@ -865,139 +839,25 @@ export default function Home() {
         <div className="pos-barcode-row">
           <InputForm
             ref={barcodeInputRef}
-            title="Escanear o ingresar código de barra"
-            onProductFound={handleProductFound}
+            title="Escanea un código o escribe el nombre del producto"
+            onSearchChange={(value) => {
+              setKeyboardMode("products");
+              setSearchTerm(value);
+            }}
+            onFocus={() => setKeyboardMode("products")}
             clearSignal={barcodeClearSignal}
             showClearButton={false}
             size="large"
           />
-          <button
-            type="button"
-            onClick={() => {
-              setIsProductSearchOpen(true);
-              setSearchPage(1);
-            }}
-            className="pos-tool-btn"
-            aria-label="Buscar producto"
-            title="Buscar producto"
-          >
-            <MagnifyingGlassIcon className="h-6 w-6" />
-          </button>
-          <button
-            type="button"
-            onClick={handleOpenPriceLookup}
-            className="pos-tool-btn"
-            aria-label="Consultar precio"
-            title="Consultar precio"
-          >
-            <CurrencyDollarIcon className="h-6 w-6" />
-          </button>
-          <button
-            type="button"
-            onClick={handleClearBarcodeInput}
-            className="pos-tool-btn"
-            aria-label="Borrar código"
-            title="Borrar código"
-          >
-            <XMarkIcon className="h-6 w-6" />
-          </button>
         </div>
-
-        <section className="pos-category-block">
-          <div className="pos-section-row">
-            <div>
-              <span className="pos-kicker">Categorías</span>
-              <h2 className="pos-subtitle">Explora productos</h2>
-            </div>
-            <div className="pos-category-actions">
-              <span className="pos-category-count">{allCategoryButtons.length} categorías</span>
-            </div>
-          </div>
-
-          <div className="pos-category-strip">
-            {categorySlots.map((category, index) => (
-              category ? (
-                <button
-                  key={category.id}
-                  type="button"
-                  onClick={() => {
-                    setQuickProductsModal(`categoria-${category.id}`);
-                  }}
-                  className={`pos-category-card ${quickCategoryId === category.id ? "active" : ""}`}
-                >
-                  <span className="pos-category-visual">
-                    {categoryImagesBySlug[slugifyAssetName(category.name)] ? (
-                      <img src={categoryImagesBySlug[slugifyAssetName(category.name)]} alt="" />
-                    ) : (
-                      getCategoryVisual(category.name)
-                    )}
-                  </span>
-                  <span className="pos-category-label">{category.name}</span>
-                </button>
-              ) : (
-                <button
-                  key={`empty-category-${index}`}
-                  type="button"
-                  onClick={() => setCategoryModalOpen(true)}
-                  className="pos-category-card pos-category-empty"
-                  aria-label={`Seleccionar categoría ${index + 1}`}
-                  title="Seleccionar categoría"
-                >
-                  <span className="pos-category-visual">
-                    <span>{index + 1}</span>
-                  </span>
-                  <span className="pos-category-label">Vacío</span>
-                </button>
-              )
-            ))}
-            <button
-              type="button"
-              onClick={() => setCategoryModalOpen(true)}
-              className="pos-category-card pos-category-add"
-              aria-label="Elegir categorías favoritas"
-              title="Elegir categorías favoritas"
-            >
-              <span className="pos-category-visual">
-                <PlusIcon className="h-8 w-8 text-[#6fab89]" />
-              </span>
-              <span className="pos-category-label">Más</span>
-            </button>
-          </div>
-        </section>
 
         <SideList
           searchTerm={searchTerm}
-          onProductClick={handleProductFound}
-          featuredProductIds={featuredProductIds}
-          onToggleFeatured={toggleFeaturedProduct}
-          productsOverride={listedProducts}
-          isLoadingOverride={!productos || (productShelfFilter === "offers" && isLoadingOffers)}
-          kicker="Vista rápida"
-          title={listedProductsTitle}
-          actions={
-            <div className="pos-list-toggle">
-              <button
-                type="button"
-                onClick={() => {
-                  setProductShelfFilter("featured");
-                  focusBarcodeInput();
-                }}
-                className={productShelfFilter === "featured" ? "active" : ""}
-              >
-                Favoritos
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setProductShelfFilter("offers");
-                  focusBarcodeInput();
-                }}
-                className={productShelfFilter === "offers" ? "active" : ""}
-              >
-                Ofertas
-              </button>
-            </div>
-          }
+          products={visibleProducts}
+          selectedIndex={selectedProductIndex}
+          keyboardActive={keyboardMode === "products"}
+          isLoading={isLoadingProducts}
+          onProductClick={handleProductSelect}
         />
       </section>
 
@@ -1007,22 +867,33 @@ export default function Home() {
             <span className="pos-kicker">Pedido</span>
             <h2 className="pos-subtitle">Carrito de compras</h2>
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              setCart([]);
-              focusBarcodeInput();
-            }}
-            className="border-0 bg-transparent px-2 py-1 text-xs text-[#8b8e97] hover:text-[#494b53]"
-          >
-            Vaciar
-          </button>
+          <div className="pos-cart-head-actions">
+            <span className={`pos-cart-mode-key ${keyboardMode === "cart" ? "active" : ""}`} title="Presiona \\ para entrar o salir del carrito">\</span>
+            <button
+              type="button"
+              onClick={() => {
+                setCart([]);
+                focusBarcodeInput();
+              }}
+              className="border-0 bg-transparent px-2 py-1 text-xs text-[#8b8e97] hover:text-[#494b53]"
+            >
+              Vaciar
+            </button>
+          </div>
         </div>
+        {keyboardMode === "cart" && (
+          <div className="pos-cart-keyboard-banner">
+            <strong>Carrito activo</strong>
+            <span>↑ ↓ navegar · Enter editar cantidad · Supr/Retroceso disminuir · \ volver · ] finalizar</span>
+          </div>
+        )}
         <MainList
           products={cart}
           onDecrease={handleDecreaseQuantity}
           onIncrease={handleIncreaseQuantity}
           onRemove={handleRemoveProduct}
+          selectedIndex={selectedCartIndex}
+          keyboardActive={keyboardMode === "cart"}
         />
         {!cajaActual?.abierta && (
           <div className="mb-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
@@ -1043,159 +914,6 @@ export default function Home() {
         {message && <p className="mb-3 rounded-xl border border-[#ececf0] bg-white p-3 text-sm">{message}</p>}
         <StatsPanel total={totalFinal} onFinish={handleOpenPayment} disabled={cart.length === 0 || !cajaActual?.abierta} />
       </aside>
-      {isProductSearchOpen && (
-        <div
-          className="flow-modal-backdrop"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) handleCloseProductSearch();
-          }}
-        >
-          <div className="flow-modal pos-search-modal">
-            <div className="pos-section-row">
-              <div>
-                <span className="pos-kicker">Buscar</span>
-                <h2 className="flow-modal-title">Buscar producto</h2>
-              </div>
-              <button
-                type="button"
-                onClick={handleCloseProductSearch}
-                className="rounded-xl border border-[#ececf0] bg-white px-4 py-3 text-sm font-bold text-[#5f626b] hover:bg-[#f7f7f9]"
-              >
-                Cerrar
-              </button>
-            </div>
-            <div className="mt-5">
-              <input
-                ref={productSearchInputRef}
-                type="text"
-                value={searchTerm}
-                onChange={(event) => setSearchTerm(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Escape") handleCloseProductSearch();
-                }}
-                className={`${inputClassName} h-14 text-lg font-bold`}
-                placeholder="Nombre o código de barra"
-              />
-            </div>
-
-            <div className="pos-search-results-head">
-              <span>
-                {normalizedSearchTerm
-                  ? searchProductsPagination
-                    ? `${searchProductsPagination.total} resultados`
-                    : "Buscando productos..."
-                  : "Ingresa un texto para buscar"}
-              </span>
-              {isSearchFetching && <span>Actualizando...</span>}
-            </div>
-
-            <div className="category-products-grid pos-search-results-grid">
-              {normalizedSearchTerm && searchProductsItems.map((product) => {
-                const isFeatured = featuredProductIds.includes(product.id);
-
-                return (
-                  <ProductTile
-                    key={product.id}
-                    product={product}
-                    isFeatured={isFeatured}
-                    onClick={() => handleSearchProductSelect(product)}
-                    onToggleFeatured={() => toggleFeaturedProduct(product.id)}
-                  />
-                );
-              })}
-              {normalizedSearchTerm && !isSearchFetching && searchProductsItems.length === 0 && (
-                <div className="category-products-empty">
-                  No hay productos para esta búsqueda.
-                </div>
-              )}
-              {!normalizedSearchTerm && (
-                <div className="category-products-empty">
-                  Escribe el nombre o código para ver resultados.
-                </div>
-              )}
-            </div>
-
-            {renderModalPagination(searchProductsPagination, setSearchPage)}
-          </div>
-        </div>
-      )}
-      {isPriceLookupOpen && (
-        <div
-          className="flow-modal-backdrop"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) handleClosePriceLookup();
-          }}
-        >
-          <div className="flow-modal price-lookup-modal max-w-md">
-            <div className="pos-section-row">
-              <div>
-                <span className="pos-kicker">Consulta</span>
-                <h2 className="flow-modal-title">Buscar precio</h2>
-              </div>
-              <button
-                type="button"
-                onClick={handleClosePriceLookup}
-                className="rounded-xl border border-[#ececf0] bg-white px-4 py-3 text-sm font-bold text-[#5f626b] hover:bg-[#f7f7f9]"
-              >
-                Cerrar
-              </button>
-            </div>
-
-            <FormField label="Código de barra" className="mt-5">
-              <input
-                ref={priceLookupInputRef}
-                autoFocus
-                type="text"
-                inputMode="numeric"
-                value={priceLookupCode}
-                onChange={(event) => {
-                  setPriceLookupCode(event.target.value);
-                  setPriceLookupProduct(null);
-                  setPriceLookupMessage("");
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") handlePriceLookup();
-                  if (event.key === "Escape") handleClosePriceLookup();
-                }}
-                className={`${inputClassName} h-14 text-lg font-bold`}
-                placeholder="Escanea o ingresa el código"
-              />
-            </FormField>
-
-            {priceLookupMessage && (
-              <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-900">
-                {priceLookupMessage}
-              </p>
-            )}
-
-            {priceLookupProduct && (
-              <div className="price-lookup-result">
-                <div className="min-w-0">
-                  <span className="pos-kicker">Producto</span>
-                  <h3>{priceLookupProduct.nombre}</h3>
-                  <p>
-                    {priceLookupProduct.codigo_barras ?? "Sin código"} · Stock {priceLookupProduct.stock}{" "}
-                    {isWeighableProduct(priceLookupProduct) ? "kg" : "un."}
-                  </p>
-                </div>
-                <strong>
-                  ${priceLookupProduct.precio_venta.toLocaleString()}
-                  {isWeighableProduct(priceLookupProduct) ? "/kg" : ""}
-                </strong>
-              </div>
-            )}
-
-            <FormActions className="pt-5">
-              <Button variant="ghost" onClick={handleClosePriceLookup}>
-                Cancelar
-              </Button>
-              <Button onClick={handlePriceLookup} disabled={isPriceLookupLoading || !priceLookupCode.trim()}>
-                {isPriceLookupLoading ? "Consultando..." : "Consultar"}
-              </Button>
-            </FormActions>
-          </div>
-        </div>
-      )}
       {centerAlert && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-sm rounded-lg bg-white p-6 text-center shadow-xl">
@@ -1293,149 +1011,62 @@ export default function Home() {
           </div>
         </div>
       )}
-      {quickProductsModal && (
+      {cartQuantityProduct && (
         <div
           className="flow-modal-backdrop"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) {
-              setQuickProductsModal(null);
-              setQuickProductsPage(1);
-              focusBarcodeInput();
+              setCartQuantityProduct(null);
+              setCartQuantityValue("");
             }
           }}
         >
-          <div className="flow-modal category-products-modal">
-            <div className="pos-section-row">
-              <div>
-                <span className="pos-kicker">Categoría</span>
-                <h2 className="flow-modal-title">{quickProductsTitle}</h2>
-              </div>
-              <span className="pos-status-pill">
-                {quickProductsPagination ? quickProductsPagination.total : quickProducts.length} productos
-              </span>
-              <button
-                type="button"
-                onClick={() => {
-                  setQuickProductsModal(null);
-                  setQuickProductsPage(1);
-                  focusBarcodeInput();
+          <div className="flow-modal pos-cart-quantity-modal max-w-md" role="dialog" aria-modal="true" aria-labelledby="cart-quantity-title">
+            <span className="pos-kicker">Carrito</span>
+            <h2 id="cart-quantity-title" className="flow-modal-title">Editar cantidad</h2>
+            <p className="mt-2 text-sm font-semibold text-[#5f626b]">{cartQuantityProduct.nombre}</p>
+
+            <FormField label={isWeighableProduct(cartQuantityProduct) ? "Peso en gramos" : "Cantidad"} className="mt-5">
+              <input
+                autoFocus
+                type="number"
+                min={1}
+                step={1}
+                value={cartQuantityValue}
+                onChange={(event) => setCartQuantityValue(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+                    event.preventDefault();
+                    const direction = event.key === "ArrowUp" ? 1 : -1;
+                    setCartQuantityValue((current) => String(Math.max(1, (Number(current) || 1) + direction)));
+                  }
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    confirmCartQuantity();
+                  }
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    setCartQuantityProduct(null);
+                    setCartQuantityValue("");
+                  }
                 }}
-                className="rounded-xl border border-[#ececf0] bg-white px-4 py-3 text-sm font-bold text-[#5f626b] hover:bg-[#f7f7f9]"
+                className={`${inputClassName} text-center text-3xl font-black`}
+              />
+            </FormField>
+            <p className="pos-cart-quantity-hint">↑ aumenta · ↓ disminuye · Enter confirma · Esc cancela</p>
+
+            <FormActions className="pt-5">
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setCartQuantityProduct(null);
+                  setCartQuantityValue("");
+                }}
               >
-                Cerrar
-              </button>
-            </div>
-
-            <div className="category-products-grid">
-              {quickProducts.map((product) => {
-                const isFeatured = featuredProductIds.includes(product.id);
-
-                return (
-                  <ProductTile
-                    key={product.id}
-                    product={product}
-                    isFeatured={isFeatured}
-                    density="compact"
-                    onClick={() => {
-                      handleProductFound(product);
-                      setQuickProductsModal(null);
-                      setQuickProductsPage(1);
-                    }}
-                    onToggleFeatured={() => toggleFeaturedProduct(product.id)}
-                  />
-                );
-              })}
-              {isCategoryProductsFetching && quickProducts.length === 0 && (
-                <div className="category-products-empty">
-                  Cargando productos...
-                </div>
-              )}
-              {!isCategoryProductsFetching && quickProducts.length === 0 && (
-                <div className="category-products-empty">
-                  No hay productos en esta categoría.
-                </div>
-              )}
-            </div>
-            {renderModalPagination(quickProductsPagination, setQuickProductsPage)}
-          </div>
-        </div>
-      )}
-      {categoryModalOpen && (
-        <div
-          className="flow-modal-backdrop"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) {
-              setCategoryModalOpen(false);
-              focusBarcodeInput();
-            }
-          }}
-        >
-          <div className="flow-modal max-w-3xl">
-            <div className="pos-section-row">
-              <div>
-                <span className="pos-kicker">Categorías</span>
-                <h2 className="flow-modal-title">Elegir favoritos</h2>
-              </div>
-              <div className="flex items-center gap-2">
-                {selectedFeaturedCategoryIds.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setFeaturedCategoryIds([])}
-                    className="rounded-xl border border-[#ececf0] bg-white px-3 py-2 text-sm font-bold text-[#5f626b] hover:bg-[#f7f7f9]"
-                  >
-                    Limpiar
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCategoryModalOpen(false);
-                    focusBarcodeInput();
-                  }}
-                  className="rounded-xl border border-[#ececf0] bg-white px-3 py-2 text-sm font-bold text-[#5f626b] hover:bg-[#f7f7f9]"
-                >
-                  Cerrar
-                </button>
-              </div>
-            </div>
-
-            <div className="category-favorite-summary">
-              <span>{selectedFeaturedCategoryIds.length}/{categoryFavoriteSlots} seleccionadas</span>
-              <small>Toca las categorías en el orden que quieres dejarlas.</small>
-            </div>
-
-            <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-              {allCategoryButtons.map((category) => {
-                const selectionOrder = selectedFeaturedCategoryIds.indexOf(category.id) + 1;
-                const isSelected = selectionOrder > 0;
-                const isDisabled = !isSelected && selectedFeaturedCategoryIds.length >= categoryFavoriteSlots;
-
-                return (
-                <button
-                  key={category.id}
-                  type="button"
-                  onClick={() => toggleFeaturedCategory(category.id)}
-                  disabled={isDisabled}
-                  className={`pos-category-card category-picker-card ${isSelected ? "selected" : ""}`}
-                >
-                  <span className="pos-category-visual">
-                    {categoryImagesBySlug[slugifyAssetName(category.name)] ? (
-                      <img src={categoryImagesBySlug[slugifyAssetName(category.name)]} alt="" />
-                    ) : (
-                      getCategoryVisual(category.name)
-                    )}
-                    {isSelected && <span className="category-picker-order">{selectionOrder}</span>}
-                  </span>
-                  <span className="pos-category-label">{category.name}</span>
-                </button>
-                );
-              })}
-              {allCategoryButtons.length === 0 && (
-                <p className="col-span-full rounded-2xl border border-[#ececf0] bg-[#fafafa] p-6 text-center text-sm text-[#8b8e98]">
-                  No hay categorías disponibles.
-                </p>
-              )}
-            </div>
+                Cancelar
+              </Button>
+              <Button onClick={confirmCartQuantity}>Guardar</Button>
+            </FormActions>
           </div>
         </div>
       )}
@@ -1443,225 +1074,160 @@ export default function Home() {
         <div
           className="flow-modal-backdrop"
           onMouseDown={(event) => {
-            if (event.target === event.currentTarget) {
+            if (event.target === event.currentTarget && !isFinishingSale) {
               setPaymentModalOpen(false);
               focusBarcodeInput();
             }
           }}
         >
-          <div className="flow-modal payment-modal max-w-4xl">
+          <div
+            ref={paymentStep === "options" ? paymentOptionsRef : paymentDetailsRef}
+            className="flow-modal payment-modal pos-keyboard-payment-modal"
+            role="dialog"
+            aria-modal="true"
+            tabIndex={-1}
+            onKeyDown={handlePaymentKeyDown}
+          >
             <div className="pos-section-row">
               <div>
-                <span className="pos-kicker">Pago</span>
-                <h2 className="flow-modal-title">Finalizar venta</h2>
+                <span className="pos-kicker">Finalizar venta</span>
+                <h2 className="flow-modal-title">
+                  {paymentStep === "options" ? "Selecciona una opción" : selectedCheckoutOptionMeta.label}
+                </h2>
               </div>
-              <div className="pos-status-pill">
-                <span className="pos-status-dot" />
-                {cart.length} productos
+              <div className="pos-payment-total-pill">
+                <small>Total</small>
+                <strong>{formatMoney(paymentStep === "details" ? totalCobrar : total - descuentoOfertas)}</strong>
               </div>
             </div>
-            <div className="mt-4 grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
-              <div>
-                <div className="flow-total-card">
-                  <div className="flex justify-between text-sm text-[#84868e]">
-                    <span>Subtotal</span>
-                    <span>${total.toLocaleString()}</span>
-                  </div>
-                  {modalidadVenta === "NORMAL" && descuentoOfertas > 0 && (
-                    <div className="mt-1 flex justify-between text-sm text-sky-700">
-                      <span>Descuento ofertas</span>
-                      <span>-{formatMoney(descuentoOfertas)}</span>
-                    </div>
-                  )}
-                  {modalidadVenta === "PRECIO_COSTO" && (
-                    <div className="mt-1 flex justify-between text-sm text-[#84868e]">
-                      <span>Venta precio costo</span>
-                      <span>{formatMoney(totalCosto)}</span>
-                    </div>
-                  )}
-                  {modalidadVenta === "RETIRO_DUENO" && (
-                    <div className="mt-1 flex justify-between text-sm text-[#84868e]">
-                      <span>Retiro dueño</span>
-                      <span>Costo ref. {formatMoney(totalCosto)}</span>
-                    </div>
-                  )}
-                  <div className="mt-2 flex justify-between text-sm font-semibold text-[#5f626b]">
-                    <span>Total real</span>
-                    <span>{formatMoney(totalFinal)}</span>
-                  </div>
-                  {metodoPago === "EFECTIVO" && modalidadVenta !== "RETIRO_DUENO" && (
-                    <div className={`mt-1 flex justify-between text-sm font-semibold ${redondeoVenta < 0 ? "text-red-700" : "text-emerald-700"}`}>
-                      <span>Redondeo</span>
-                      <span>{formatSignedMoney(redondeoVenta)}</span>
-                    </div>
-                  )}
-                  <div className="pos-grand-total">
-                    <span>Total a pagar</span>
-                    <strong>${totalCobrar.toLocaleString()}</strong>
-                  </div>
-                </div>
 
-                <label className="mt-5 block text-sm font-bold text-[#5f626b]">Método de pago</label>
-                <div className="mt-2 grid grid-cols-2 gap-2">
-                  {(["EFECTIVO", "TARJETA", "TRANSFERENCIA", "MIXTO"] as MetodoPago[]).map((method) => {
-                    const MethodIcon = paymentMethodIcons[method];
+            {paymentStep === "options" ? (
+              <>
+                <p className="pos-payment-instructions">Usa ↑ y ↓ para navegar. Presiona Enter para seleccionar.</p>
+                <div className="pos-payment-keyboard-list" role="listbox" aria-label="Método o modalidad de venta">
+                  {checkoutOptions.map((option, index) => {
+                    const OptionIcon = option.icon;
+                    const selected = index === selectedCheckoutOptionIndex;
 
                     return (
                       <button
-                        key={method}
+                        key={option.id}
                         type="button"
-                        onClick={() => handlePaymentMethodChange(method)}
-                        className={`flow-payment-option payment-method-option payment-method-${method.toLowerCase()} ${metodoPago === method ? "active" : ""}`}
+                        role="option"
+                        aria-selected={selected}
+                        className={`pos-payment-keyboard-option ${selected ? "selected" : ""}`}
+                        onMouseEnter={() => setSelectedCheckoutOptionIndex(index)}
+                        onClick={() => {
+                          setSelectedCheckoutOptionIndex(index);
+                          handleCheckoutOptionSelect(option.id);
+                        }}
                       >
-                        <MethodIcon className="h-6 w-6" />
+                        <span className="pos-payment-option-icon"><OptionIcon className="h-6 w-6" /></span>
                         <span>
-                          <strong>{paymentMethodLabels[method]}</strong>
-                          <small>{paymentMethodHints[method]}</small>
+                          <strong>{option.label}</strong>
+                          <small>{option.hint}</small>
                         </span>
+                        <span className="pos-payment-option-enter">Enter</span>
                       </button>
                     );
                   })}
                 </div>
-
-                <div className="mt-5">
-                  <p className="text-sm font-bold text-[#5f626b]">Administrador</p>
-                  <div className="mt-2 grid grid-cols-1 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleModalidadChange(modalidadVenta === "RETIRO_DUENO" ? "NORMAL" : "RETIRO_DUENO")}
-                      className={`flow-payment-option ${
-                        modalidadVenta === "RETIRO_DUENO"
-                          ? "active"
-                          : ""
-                      }`}
-                    >
-                      Retiro de dueño
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleModalidadChange(modalidadVenta === "PRECIO_COSTO" ? "NORMAL" : "PRECIO_COSTO")}
-                      className={`flow-payment-option ${
-                        modalidadVenta === "PRECIO_COSTO"
-                          ? "active"
-                          : ""
-                      }`}
-                    >
-                      Vender a precio costo
-                    </button>
-                  </div>
+                <button
+                  type="button"
+                  className="pos-payment-cancel-link"
+                  onClick={() => {
+                    setPaymentModalOpen(false);
+                    focusBarcodeInput();
+                  }}
+                >
+                  Esc · Volver al POS
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="pos-payment-detail-summary">
+                  <span><small>Subtotal</small><strong>{formatMoney(total)}</strong></span>
+                  {modalidadVenta === "NORMAL" && descuentoOfertas > 0 && (
+                    <span><small>Descuento</small><strong>-{formatMoney(descuentoOfertas)}</strong></span>
+                  )}
+                  {modalidadVenta === "PRECIO_COSTO" && (
+                    <span><small>Precio costo</small><strong>{formatMoney(totalCosto)}</strong></span>
+                  )}
+                  {metodoPago === "EFECTIVO" && modalidadVenta !== "RETIRO_DUENO" && (
+                    <span><small>Redondeo</small><strong>{formatSignedMoney(redondeoVenta)}</strong></span>
+                  )}
                 </div>
-              </div>
 
-              <div>
-                {modalidadVenta !== "RETIRO_DUENO" && metodoPago === "EFECTIVO" && (
-                  <>
-                    <FormField label="Monto recibido">
-                    <input
-                      autoFocus
-                      type="number"
-                      min={0}
-                      value={cashReceived}
-                      onChange={(event) => setCashReceived(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") handleFinishSale();
-                        if (event.key === "Escape") {
-                          setPaymentModalOpen(false);
-                          focusBarcodeInput();
-                        }
-                      }}
-                      className={`${inputClassName} text-lg`}
-                    />
+                {(selectedCheckoutOption === "EFECTIVO" || selectedCheckoutOption === "PRECIO_COSTO") && (
+                  <div className="pos-payment-cash-step">
+                    <FormField label="Monto con que paga">
+                      <input
+                        ref={cashReceivedInputRef}
+                        type="number"
+                        inputMode="numeric"
+                        min={0}
+                        value={cashReceived}
+                        onChange={(event) => {
+                          setCashReceived(event.target.value);
+                          setPaymentConfirmationArmed(false);
+                          setMessage("");
+                        }}
+                        className={`${inputClassName} pos-payment-main-input`}
+                        placeholder="0"
+                      />
                     </FormField>
-                    <div className="mt-3 rounded-[20px] border border-emerald-200 bg-emerald-50 p-4 text-center">
-                      <p className="text-sm font-semibold uppercase text-emerald-700">Vuelto</p>
-                      <p className="mt-1 text-4xl font-bold leading-tight text-emerald-800">
-                        ${Math.max(0, cashReceivedAmount - totalCobrar).toLocaleString()}
-                      </p>
+                    <div className="pos-payment-change-card">
+                      <span>Vuelto</span>
+                      <strong>{formatMoney(Math.max(0, cashReceivedAmount - totalCobrar))}</strong>
                     </div>
-                    <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
-                      <div className="rounded-[16px] border border-[#ececf0] bg-[#fafafa] p-3">
-                        <p className="font-bold text-[#8b8e98]">Efectivo recibido</p>
-                        <p className="mt-1 text-lg font-black text-[#25262c]">{formatMoney(cashReceivedAmount)}</p>
-                      </div>
-                      <div className="rounded-[16px] border border-[#ececf0] bg-[#fafafa] p-3">
-                        <p className="font-bold text-[#8b8e98]">Total cobrado</p>
-                        <p className="mt-1 text-lg font-black text-[#25262c]">{formatMoney(totalCobrar)}</p>
-                      </div>
-                    </div>
-                    <div className="mt-4">
-                      <p className="text-sm font-bold text-[#5f626b]">Sugeridos</p>
-                      <div className="mt-2 grid grid-cols-2 gap-2">
-                        {cashSuggestions.map((amount, index) => (
-                          <button
-                            key={amount}
-                            type="button"
-                            onClick={() => setCashReceived(toInputAmount(amount))}
-                            className="flow-payment-option"
-                          >
-                            {index === 0 ? "Pago justo" : formatMoney(amount)}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </>
+                  </div>
                 )}
 
-                {modalidadVenta !== "RETIRO_DUENO" && metodoPago === "MIXTO" && (
-                  <div className="space-y-4">
-                    <div>
-                      <p className="text-sm font-bold text-[#5f626b]">Combinación de pagos</p>
-                      <div className="mt-2 grid grid-cols-2 gap-2">
-                        {mixedPaymentOptions.map((option) => (
-                          <button
-                            key={option.label}
-                            type="button"
-                            onClick={() => handleMixedOptionChange(option.methods)}
-                            className={`flow-payment-option ${
-                              option.methods.join("-") === mixedMethods.join("-")
-                                ? "active"
-                                : ""
-                            }`}
-                          >
-                            {option.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
+                {(selectedCheckoutOption === "TARJETA" || selectedCheckoutOption === "TRANSFERENCIA") && (
+                  <div className="pos-payment-simple-confirmation">
+                    <span className="pos-payment-option-icon">
+                      {selectedCheckoutOption === "TARJETA"
+                        ? <CreditCardIcon className="h-8 w-8" />
+                        : <ArrowsRightLeftIcon className="h-8 w-8" />}
+                    </span>
+                    <strong>{selectedCheckoutOption === "TARJETA" ? "Confirma el pago en el terminal" : "Confirma que recibiste la transferencia"}</strong>
+                    <p>No necesitas ingresar ningún monto adicional.</p>
+                  </div>
+                )}
 
+                {selectedCheckoutOption === "MIXTO" && (
+                  <div className="pos-payment-mixed-step">
+                    <p>Divide el total entre efectivo y débito. Al cambiar uno, el otro se calcula automáticamente.</p>
                     <div className="grid grid-cols-2 gap-3">
-                      {mixedMethods.map((method) => (
+                      {mixedMethods.map((method, index) => (
                         <FormField key={method} label={paymentLabels[method]}>
                           <input
+                            ref={index === 0 ? mixedCashInputRef : undefined}
                             type="number"
                             min={0}
                             value={mixedAmounts[method]}
                             onChange={(event) => handleMixedAmountChange(method, event.target.value)}
-                            className={inputClassName}
+                            className={`${inputClassName} pos-payment-mixed-input`}
                           />
                         </FormField>
                       ))}
                     </div>
-
-                    <div className="rounded-[16px] border border-[#ececf0] bg-[#fafafa] p-3 text-sm text-[#5f626b]">
-                      Pagado: ${mixedTotal.toLocaleString()} · Falta: ${Math.max(0, totalFinal - mixedTotal).toLocaleString()}
+                    <div className="pos-payment-mixed-total">
+                      <span>Pagado {formatMoney(mixedTotal)}</span>
+                      <strong>Falta {formatMoney(Math.max(0, totalFinal - mixedTotal))}</strong>
                     </div>
                   </div>
                 )}
-                {modalidadVenta === "RETIRO_DUENO" && (
+
+                {selectedCheckoutOption === "RETIRO_DUENO" && (
                   <div className="owner-withdrawal-info">
-                    <p>
-                      Este registro descontará stock y quedará marcado como retiro de dueño. No suma efectivo al cierre de caja.
-                    </p>
+                    <p>Este registro descontará stock y quedará marcado como retiro de dueño. No suma efectivo al cierre de caja.</p>
                     {ownerWithdrawalCostBlockers.length > 0 && (
                       <div className="owner-withdrawal-blockers">
                         <strong>Productos sin costo registrado</strong>
                         <div>
                           {ownerWithdrawalCostBlockers.map((product) => (
-                            <button
-                              key={product.id}
-                              type="button"
-                              onClick={() => handleEditCostFromWithdrawal(product.id)}
-                            >
+                            <button key={product.id} type="button" onClick={() => handleEditCostFromWithdrawal(product.id)}>
                               <span>{product.nombre}</span>
                               <small>{product.costo_actual === null ? "Sin costo" : "Costo $0"}</small>
                             </button>
@@ -1671,26 +1237,35 @@ export default function Home() {
                     )}
                   </div>
                 )}
-              </div>
-            </div>
 
-            <FormActions className="mt-1">
-              <Button
-                variant="ghost"
-                onClick={() => {
-                  setPaymentModalOpen(false);
-                  focusBarcodeInput();
-                }}
-              >
-                Cancelar
-              </Button>
-              <Button
-                onClick={() => handleFinishSale()}
-                disabled={!canConfirmSale}
-              >
-                {modalidadVenta === "RETIRO_DUENO" ? "Registrar retiro" : "Confirmar venta"}
-              </Button>
-            </FormActions>
+                {message && <p className="pos-payment-message">{message}</p>}
+
+                <div className={`pos-payment-enter-confirm ${paymentConfirmationArmed ? "armed" : ""}`} aria-live="polite">
+                  <kbd>Enter</kbd>
+                  <span>
+                    <strong>{paymentConfirmationArmed ? "Presiona Enter nuevamente para confirmar" : "Presiona Enter para preparar la confirmación"}</strong>
+                    <small>{modalidadVenta === "NORMAL" ? "La venta se registrará en la caja actual" : "Después se solicitará la contraseña de administrador"}</small>
+                  </span>
+                </div>
+
+                <FormActions className="pt-4">
+                  <Button
+                    variant="ghost"
+                    disabled={isFinishingSale}
+                    onClick={() => {
+                      setPaymentStep("options");
+                      setPaymentConfirmationArmed(false);
+                      setMessage("");
+                    }}
+                  >
+                    Volver
+                  </Button>
+                  <Button onClick={handlePaymentDetailsConfirm} disabled={!canConfirmSale}>
+                    {isFinishingSale ? "Registrando..." : paymentConfirmationArmed ? "Confirmar ahora" : "Preparar confirmación"}
+                  </Button>
+                </FormActions>
+              </>
+            )}
           </div>
         </div>
       )}

@@ -5,6 +5,7 @@ import {
   ArrowPathIcon,
   CheckCircleIcon,
   ClipboardDocumentListIcon,
+  CloudArrowUpIcon,
   PencilIcon,
   PlusIcon,
   TrashIcon,
@@ -12,6 +13,7 @@ import {
 } from "@heroicons/react/24/outline";
 import {
   getProducts,
+  getAllProducts,
   deleteProduct,
   getProduct,
   reactivateProduct,
@@ -20,13 +22,14 @@ import type { ModoInventarioProducto, MovimientoInventario, Producto, TipoMovimi
 
 import { ProductModal } from "../components/ProductModal";
 import ProductFormCreate from "../components/ProductFormCreate";
-import { getStoredUser } from "../services/authService";
+import { authorizeAdmin, getStoredUser } from "../services/authService";
 import { getCategorias, getProveedores } from "../services/catalogService";
 import { getMovimientos } from "../services/inventoryService";
 import { Button, FormField, inputClassName } from "../components/FormControls";
 import ProductTile from "../components/ProductTile";
 import TouchSelectField from "../components/TouchSelectField";
 import AdminPasswordModal from "../components/AdminPasswordModal";
+import { sincronizarProductos, type ResultadoSincronizacionProductos } from "../services/supabaseService";
 
 const modoInventarioLabels: Record<ModoInventarioProducto, string> = {
   SIN_INVENTARIO: "Sin inventario",
@@ -71,6 +74,9 @@ export default function ProductsPage() {
     product: Producto;
   } | null>(null);
   const [createdProductAlert, setCreatedProductAlert] = useState<Producto | null>(null);
+  const [syncProductsOpen, setSyncProductsOpen] = useState(false);
+  const [syncProductsError, setSyncProductsError] = useState("");
+  const [syncProductsResult, setSyncProductsResult] = useState<ResultadoSincronizacionProductos | null>(null);
   const [codigo, setCodigo] = useState("");
   const [nombre, setNombre] = useState("");
   const [categoriaId, setCategoriaId] = useState("");
@@ -168,6 +174,22 @@ export default function ProductsPage() {
     },
   });
 
+  const syncProductsMutation = useMutation({
+    mutationFn: async (masterPassword: string) => {
+      await authorizeAdmin(masterPassword);
+      const allProducts = await getAllProducts({});
+      return sincronizarProductos(allProducts);
+    },
+    onSuccess: (result) => {
+      setSyncProductsResult(result);
+      setSyncProductsError("");
+      setSyncProductsOpen(false);
+    },
+    onError: (syncError) => {
+      setSyncProductsError(syncError instanceof Error ? syncError.message : "No se pudieron subir los productos.");
+    },
+  });
+
   const handleEdit = (product: Producto) => {
     setProductToView(null);
     setProductToEdit(product);
@@ -244,6 +266,17 @@ export default function ProductsPage() {
           <p className="text-sm font-semibold text-gray-500">
             {pagination ? `${pagination.total} productos · Página ${pagination.page} de ${Math.max(1, pagination.totalPages)}` : "Cargando productos..."}
           </p>
+          <button
+            type="button"
+            className="mt-3 inline-flex items-center gap-2 rounded-[14px] border border-[#ddd6fe] bg-[#faf9ff] px-4 py-2.5 text-sm font-black text-[#7652ed] transition hover:-translate-y-0.5 hover:bg-[#f3f0ff]"
+            onClick={() => {
+              setSyncProductsError("");
+              setSyncProductsOpen(true);
+            }}
+          >
+            <CloudArrowUpIcon className="h-5 w-5" />
+            Subir productos a Supabase
+          </button>
         </div>
         <div className="inventory-filter-bar">
           <div className="inventory-filter-grid">
@@ -311,6 +344,11 @@ export default function ProductsPage() {
         </div>
       </div>
       {error && <p className="text-sm text-red-500">Error al cargar productos</p>}
+      {syncProductsResult && (
+        <div className="rounded-[18px] border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm font-semibold text-emerald-800" role="status">
+          Sincronización terminada: {syncProductsResult.insertados} nuevos, {syncProductsResult.actualizados} actualizados, {syncProductsResult.sin_cambios} sin cambios y {syncProductsResult.omitidos} omitidos por no tener código de barras.
+        </div>
+      )}
       {pagination && pagination.totalPages > 1 && (
         <div className="flex items-center gap-2">
           <button
@@ -361,6 +399,27 @@ export default function ProductsPage() {
           onClose={() => setProductActionToAuthorize(null)}
           onConfirm={handleAuthorizedProductAction}
         />
+      )}
+
+      {syncProductsOpen && (
+        <AdminPasswordModal
+          title="Subir productos a Supabase"
+          description="Revisa y autoriza la sincronización del catálogo con la contraseña de administrador. Los productos iguales no se modificarán."
+          isPending={syncProductsMutation.isPending}
+          onClose={() => {
+            if (!syncProductsMutation.isPending) setSyncProductsOpen(false);
+          }}
+          onConfirm={(password) => syncProductsMutation.mutate(password)}
+        >
+          <div className="rounded-[16px] border border-[#ececf0] bg-[#f7f7f9] p-4 text-sm text-[#5f626b]">
+            Se enviarán código de barras, nombre, tipo de propiedad, proveedor, modo de inventario, estado, costo y precio de venta actual. Los productos sin código de barras serán omitidos.
+          </div>
+          {syncProductsError && (
+            <p className="rounded-[14px] border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700" role="alert">
+              {syncProductsError}
+            </p>
+          )}
+        </AdminPasswordModal>
       )}
 
       {createdProductAlert && (

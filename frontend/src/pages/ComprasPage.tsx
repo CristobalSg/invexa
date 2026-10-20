@@ -1,24 +1,28 @@
-import { useEffect, useState } from "react";
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  ArrowPathIcon,
   CheckCircleIcon,
   ClipboardDocumentListIcon,
   DevicePhoneMobileIcon,
-  MagnifyingGlassIcon,
-  QrCodeIcon,
   ReceiptRefundIcon,
   XMarkIcon,
 } from "@heroicons/react/24/outline";
 import { anularCompra, createCompra, getCompra, getCompras } from "../services/compraService";
 import { authorizeAdmin } from "../services/authService";
 import { getCategorias } from "../services/catalogService";
-import { getProductByBarcode, getProducts } from "../services/productService";
+import { getAllProducts } from "../services/productService";
+import {
+  finalizarCompraMovil,
+  getComprasMoviles,
+  tomarCompraMovil,
+  type CompraMovil,
+} from "../services/supabaseService";
 import type { Producto } from "../types/api";
 import ListPanel from "../components/ListPanel";
 import ModuleCard from "../components/ModuleCard";
 import { Button, FormField, inputClassName } from "../components/FormControls";
 import AdminPasswordModal from "../components/AdminPasswordModal";
-import TouchSelectField from "../components/TouchSelectField";
 
 type CompraItemForm = {
   producto: Producto;
@@ -43,7 +47,6 @@ type MasterAction =
   | { type: "remove-item"; productId: number }
   | { type: "clear-items" }
   | { type: "cancel-purchase"; compraId: number; motivo: string };
-type PurchaseAddMode = "codigo" | "buscar";
 type PurchaseToastTone = "success" | "warning" | "error";
 
 interface PurchaseToast {
@@ -69,11 +72,6 @@ const quantityForBackend = (item: CompraItemForm) => {
 };
 const quantityLabel = (product: Producto) => (isWeightProduct(product) ? "Gramos" : "Unidades");
 const purchaseItemsStorageKey = "purchase-draft-items";
-const purchaseProductPageSize = 12;
-const purchaseAddModes: Array<{ value: PurchaseAddMode; label: string; icon: typeof QrCodeIcon }> = [
-  { value: "codigo", label: "Por código", icon: QrCodeIcon },
-  { value: "buscar", label: "Buscar", icon: MagnifyingGlassIcon },
-];
 const productImageModules = import.meta.glob("../assets/images/products/**/*.{png,jpg,jpeg,webp,avif}", {
   eager: true,
   query: "?url",
@@ -137,14 +135,13 @@ const readPurchaseItems = (): CompraItemForm[] => {
 
 export default function ComprasPage() {
   const queryClient = useQueryClient();
+  const productSearchInputRef = useRef<HTMLInputElement>(null);
+  const selectedProductRef = useRef<HTMLButtonElement>(null);
   const { data: categorias } = useQuery({ queryKey: ["categorias"], queryFn: () => getCategorias() });
   const { data: compras } = useQuery({ queryKey: ["compras"], queryFn: () => getCompras() });
 
-  const [codigo, setCodigo] = useState("");
-  const [nombre, setNombre] = useState("");
-  const [categoriaId, setCategoriaId] = useState("");
-  const [addMode, setAddMode] = useState<PurchaseAddMode>("codigo");
-  const [productPage, setProductPage] = useState(1);
+  const [productSearch, setProductSearch] = useState("");
+  const [selectedProductIndex, setSelectedProductIndex] = useState(0);
   const [items, setItems] = useState<CompraItemForm[]>(readPurchaseItems);
   const [message, setMessage] = useState("");
   const [toast, setToast] = useState<PurchaseToast | null>(null);
@@ -161,25 +158,53 @@ export default function ComprasPage() {
     enabled: expandedCompraId !== null,
   });
 
-  const normalizedName = nombre.trim();
-  const productsListEnabled = addMode === "buscar";
-  const { data: productos, isFetching: isFetchingProducts } = useQuery({
-    queryKey: ["products", "purchase-selector", { addMode, nombre: normalizedName, categoriaId, productPage }],
-    queryFn: () =>
-      getProducts({
-        activo: true,
-        search: normalizedName ? normalizedName : undefined,
-        categoria_id: categoriaId ? Number(categoriaId) : undefined,
-        page: productPage,
-        limit: purchaseProductPageSize,
-      }),
-    enabled: productsListEnabled,
-    placeholderData: keepPreviousData,
+  const normalizedProductSearch = normalizeText(productSearch.trim());
+  const { data: productos, isLoading: isLoadingProducts } = useQuery({
+    queryKey: ["products", "purchase-selector", "all-active"],
+    queryFn: () => getAllProducts({ activo: true }),
   });
+  const mobilePurchasesQuery = useQuery({
+    queryKey: ["mobile-purchases"],
+    queryFn: getComprasMoviles,
+    enabled: mobilePurchasesOpen,
+    refetchInterval: mobilePurchasesOpen ? 10_000 : false,
+  });
+  const productosFiltrados = useMemo(() => {
+    const productItems = productos ?? [];
+    if (!normalizedProductSearch) return productItems;
+
+    return productItems.filter((product) =>
+      normalizeText(product.nombre).includes(normalizedProductSearch) ||
+      normalizeText(product.categoria_nombre).includes(normalizedProductSearch) ||
+      (product.codigo_barras ?? "").includes(productSearch.trim()),
+    );
+  }, [normalizedProductSearch, productSearch, productos]);
+  const isProductSearchFocusBlocked = Boolean(
+    purchaseItemDraft || masterAction || expandedCompraId !== null || mobilePurchasesOpen,
+  );
+
+  const focusProductSearch = () => {
+    window.setTimeout(() => productSearchInputRef.current?.focus(), 0);
+  };
 
   useEffect(() => {
-    setProductPage(1);
-  }, [addMode, categoriaId, normalizedName]);
+    setSelectedProductIndex(0);
+  }, [normalizedProductSearch]);
+
+  useEffect(() => {
+    setSelectedProductIndex((current) => Math.min(current, Math.max(0, productosFiltrados.length - 1)));
+  }, [productosFiltrados.length]);
+
+  useEffect(() => {
+    if (isProductSearchFocusBlocked) return;
+    const focusTimer = window.setTimeout(() => productSearchInputRef.current?.focus(), 0);
+    return () => window.clearTimeout(focusTimer);
+  }, [isProductSearchFocusBlocked]);
+
+  useEffect(() => {
+    if (isProductSearchFocusBlocked) return;
+    selectedProductRef.current?.scrollIntoView({ block: "nearest" });
+  }, [isProductSearchFocusBlocked, normalizedProductSearch, productosFiltrados.length, selectedProductIndex]);
 
   useEffect(() => {
     if (!toast) return;
@@ -191,9 +216,6 @@ export default function ComprasPage() {
   useEffect(() => {
     window.sessionStorage.setItem(purchaseItemsStorageKey, JSON.stringify(items));
   }, [items]);
-
-  const productosFiltrados = productsListEnabled ? productos?.items ?? [] : [];
-  const productPagination = productsListEnabled ? productos?.pagination : undefined;
 
   const totalCompra = items.reduce(
     (total, item) => total + quantityForBackend(item) * toNumber(item.costo_unitario),
@@ -270,22 +292,46 @@ export default function ComprasPage() {
     setRecentPurchasesOpen(false);
   };
 
-  const handleBarcodeAdd = async () => {
-    const barcode = codigo.trim();
-    if (!barcode) return;
+  const handleProductSelect = (product: Producto, index = selectedProductIndex) => {
+    setSelectedProductIndex(index);
+    setProductSearch("");
+    openProductDraft(product);
+  };
 
-    const product = await getProductByBarcode(barcode);
-    if (!product) {
-      notify({
-        title: "Producto no encontrado",
-        description: "No se encontró un producto con ese código. Puedes buscarlo por nombre o categoría.",
-        tone: "warning",
-      });
+  const handleProductSearchKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      if (productosFiltrados.length === 0) return;
+      const direction = event.key === "ArrowDown" ? 1 : -1;
+      setSelectedProductIndex((current) =>
+        (current + direction + productosFiltrados.length) % productosFiltrados.length,
+      );
       return;
     }
 
-    openProductDraft(product);
-    setCodigo("");
+    if (event.key === "Enter") {
+      event.preventDefault();
+      const exactBarcodeProduct = productSearch.trim()
+        ? productosFiltrados.find((product) => product.codigo_barras === productSearch.trim())
+        : undefined;
+      const selectedProduct = exactBarcodeProduct ?? productosFiltrados[selectedProductIndex];
+      if (selectedProduct) {
+        handleProductSelect(selectedProduct, productosFiltrados.indexOf(selectedProduct));
+      } else {
+        notify({
+          title: "Producto no encontrado",
+          description: "No hay un producto seleccionado para agregar.",
+          tone: "warning",
+        });
+      }
+      return;
+    }
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setProductSearch("");
+      setSelectedProductIndex(0);
+    }
   };
 
   const removeItem = (productId: number) => {
@@ -319,12 +365,110 @@ export default function ComprasPage() {
         description: "La compra quedó guardada y el inventario fue actualizado.",
         tone: "success",
       });
+      focusProductSearch();
     },
     onError: (error) => notify({
       title: "No se pudo registrar compra",
       description: error instanceof Error ? error.message : "No se pudo registrar compra",
       tone: "error",
     }),
+  });
+
+  const mobileApprovalMutation = useMutation({
+    mutationFn: async (mobilePurchase: CompraMovil) => {
+      const productsByBarcode = new Map(
+        (productos ?? [])
+          .filter((product) => product.codigo_barras)
+          .map((product) => [product.codigo_barras as string, product]),
+      );
+      const usedProductIds = new Set<number>();
+      const purchaseItems = mobilePurchase.items.map((item) => {
+        if (!item.producto?.codigo_barras) {
+          throw new Error(`El producto móvil #${item.producto_id} no tiene código de barras asociado.`);
+        }
+
+        const localProduct = productsByBarcode.get(item.producto.codigo_barras);
+        if (!localProduct) {
+          throw new Error(`${item.producto.nombre} no existe o está inactivo en este POS.`);
+        }
+
+        if (usedProductIds.has(localProduct.id)) {
+          throw new Error(`${localProduct.nombre} está repetido en la compra móvil.`);
+        }
+        usedProductIds.add(localProduct.id);
+
+        const backendQuantity = isWeightProduct(localProduct) ? item.cantidad / 1000 : item.cantidad;
+        if (!Number.isFinite(backendQuantity) || backendQuantity <= 0) {
+          throw new Error(`${localProduct.nombre} tiene una cantidad inválida.`);
+        }
+        if (!Number.isFinite(item.costo_unitario) || item.costo_unitario <= 0) {
+          throw new Error(`${localProduct.nombre} tiene un costo inválido.`);
+        }
+        if (item.actualizar_precio_venta && (!item.precio_final || item.precio_final <= 0)) {
+          throw new Error(`${localProduct.nombre} debe incluir un precio de venta válido.`);
+        }
+
+        return {
+          producto_id: localProduct.id,
+          cantidad: backendQuantity,
+          costo_unitario: item.costo_unitario,
+          precio_final: item.actualizar_precio_venta ? item.precio_final ?? undefined : undefined,
+          actualizar_precio_venta: item.actualizar_precio_venta,
+        };
+      });
+
+      if (purchaseItems.length === 0) {
+        throw new Error("La compra móvil no contiene productos.");
+      }
+
+      const claimed = await tomarCompraMovil(mobilePurchase.id);
+      if (!claimed) {
+        throw new Error("Esta compra ya fue aprobada o dejó de estar disponible.");
+      }
+
+      try {
+        const localPurchase = await createCompra({
+          origen_externo: mobilePurchase.id,
+          items: purchaseItems,
+        });
+        await finalizarCompraMovil({
+          compraId: mobilePurchase.id,
+          estado: "APROBADA",
+          compraLocalId: localPurchase.id,
+        });
+        return localPurchase;
+      } catch (approvalError) {
+        const errorMessage = approvalError instanceof Error ? approvalError.message : "Error desconocido al aprobar";
+        try {
+          await finalizarCompraMovil({
+            compraId: mobilePurchase.id,
+            estado: "ERROR",
+            errorMensaje: errorMessage,
+          });
+        } catch (statusError) {
+          const statusMessage = statusError instanceof Error ? statusError.message : "no se pudo actualizar el estado";
+          throw new Error(`${errorMessage} Además, Supabase no pudo guardar el fallo: ${statusMessage}`);
+        }
+        throw approvalError;
+      }
+    },
+    onSuccess: (localPurchase) => {
+      queryClient.invalidateQueries({ queryKey: ["compras"] });
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      notify({
+        title: "Compra móvil aprobada",
+        description: `Se registró como compra local #${localPurchase.id} y se actualizó el inventario.`,
+        tone: "success",
+      });
+    },
+    onError: (approvalError) => notify({
+      title: "No se pudo aprobar",
+      description: approvalError instanceof Error ? approvalError.message : "No se pudo aprobar la compra móvil.",
+      tone: "error",
+    }),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["mobile-purchases"] });
+    },
   });
 
   const anulacion = useMutation({
@@ -435,7 +579,16 @@ export default function ComprasPage() {
   };
 
   return (
-    <div className="admin-page space-y-6">
+    <div
+      className="admin-page space-y-6"
+      onPointerDown={(event) => {
+        if (isProductSearchFocusBlocked) return;
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+        if (target.closest("button, a, input, textarea, select, [contenteditable='true'], .flow-modal-backdrop")) return;
+        focusProductSearch();
+      }}
+    >
       {toast && (
         <div className={`cash-close-toast ${toast.tone}`} role="status" aria-live="polite">
           <CheckCircleIcon className="h-7 w-7" />
@@ -468,130 +621,62 @@ export default function ComprasPage() {
       >
         <div className="space-y-5">
 
-        <div className="purchase-add-modes">
-          {purchaseAddModes.map((mode) => {
-            const Icon = mode.icon;
+        <div className="purchase-add-panel purchase-keyboard-search-panel">
+          <FormField label="Código de barra o nombre del producto">
+            <input
+              ref={productSearchInputRef}
+              autoFocus
+              value={productSearch}
+              onChange={(event) => setProductSearch(event.target.value)}
+              onKeyDown={handleProductSearchKeyDown}
+              className={`${inputClassName} purchase-product-main-search`}
+              placeholder="Escanea un código o escribe el nombre"
+              autoComplete="off"
+            />
+          </FormField>
+          <div className="purchase-keyboard-help">
+            <span><kbd>↑</kbd><kbd>↓</kbd> navegar</span>
+            <span><kbd>Enter</kbd> seleccionar</span>
+            <span><kbd>Esc</kbd> limpiar</span>
+          </div>
+        </div>
+
+        <div className="purchase-product-results-head" aria-live="polite">
+          <span>{productSearch ? <>Resultados para <strong>“{productSearch}”</strong></> : "Todos los productos activos"}</span>
+          <strong>{isLoadingProducts ? "Cargando..." : `${productosFiltrados.length} productos`}</strong>
+        </div>
+
+        <div className="purchase-product-search-list" role="listbox" aria-label="Productos para agregar a la compra">
+          {productosFiltrados.map((product, index) => {
+            const productImage = productImagesBySlug[slugifyAssetName(product.nombre)];
+            const selected = index === selectedProductIndex;
 
             return (
               <button
-                key={mode.value}
+                key={product.id}
+                ref={selected ? selectedProductRef : undefined}
                 type="button"
-                onClick={() => setAddMode(mode.value)}
-                className={`purchase-add-mode ${addMode === mode.value ? "active" : ""}`}
+                role="option"
+                aria-selected={selected}
+                onMouseEnter={() => setSelectedProductIndex(index)}
+                onClick={() => handleProductSelect(product, index)}
+                className={`purchase-product-search-card ${selected ? "selected" : ""}`}
               >
-                <Icon className="h-6 w-6" />
-                <span>
-                  <strong>{mode.label}</strong>
+                <span className="purchase-product-search-image">
+                  {productImage ? <img src={productImage} alt="" /> : productFallbackVisual(product)}
                 </span>
+                <span className="purchase-product-search-copy">
+                  <strong className="purchase-product-search-name">{product.nombre}</strong>
+                  <small>{product.codigo_barras ?? "Sin código"} · {product.categoria_nombre}</small>
+                </span>
+                <span className="purchase-product-search-price">{money(product.precio_venta)}</span>
               </button>
             );
           })}
+          {!isLoadingProducts && productosFiltrados.length === 0 && (
+            <p className="purchase-product-search-empty">No se encontraron productos para agregar.</p>
+          )}
         </div>
-
-        {addMode === "codigo" && (
-          <div className="purchase-add-panel">
-            <FormField label="Código de barra">
-              <input
-                autoFocus
-                value={codigo}
-                onChange={(event) => setCodigo(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") handleBarcodeAdd();
-                }}
-                className={inputClassName}
-                placeholder="Escanear o escribir código"
-              />
-            </FormField>
-            <Button onClick={handleBarcodeAdd} className="purchase-add-submit">
-              Agregar producto
-            </Button>
-          </div>
-        )}
-
-        {addMode === "buscar" && (
-          <div className="purchase-add-panel">
-            <FormField label="Buscar producto">
-              <input
-                autoFocus
-                value={nombre}
-                onChange={(event) => setNombre(event.target.value)}
-                className={inputClassName}
-                placeholder="Nombre o código de barra"
-              />
-            </FormField>
-            <TouchSelectField
-              label="Categoría"
-              value={categoriaId}
-              options={[
-                { value: "", label: "Todas las categorías" },
-                ...(categorias?.items.map((category) => ({
-                  value: String(category.id),
-                  label: category.nombre,
-                })) ?? []),
-              ]}
-              onChange={(value) => setCategoriaId(value)}
-            />
-          </div>
-        )}
-
-        {addMode !== "codigo" && (
-          <>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-sm font-bold text-[#7b7d86]">
-                {productPagination
-                    ? `${productPagination.total} productos · Página ${productPagination.page} de ${Math.max(1, productPagination.totalPages)}`
-                    : "Cargando productos..."}
-              </p>
-              {isFetchingProducts && <span className="text-xs font-bold text-[#9a9ca4]">Actualizando...</span>}
-            </div>
-
-            <div className="purchase-product-search-grid">
-              {productosFiltrados.map((product) => {
-                const productImage = productImagesBySlug[slugifyAssetName(product.nombre)];
-
-                return (
-                  <button
-                    key={product.id}
-                    type="button"
-                    onClick={() => openProductDraft(product)}
-                    className="purchase-product-search-card"
-                  >
-                    <span className="purchase-product-search-image">
-                      {productImage ? <img src={productImage} alt="" /> : productFallbackVisual(product)}
-                    </span>
-                    <span className="purchase-product-search-name">{product.nombre}</span>
-                  </button>
-                );
-              })}
-              {productsListEnabled && !isFetchingProducts && productosFiltrados.length === 0 && (
-                <p className="col-span-full rounded-2xl border border-[#ececf0] bg-[#fafafa] p-5 text-center text-sm font-bold text-[#8b8e98]">
-                  No se encontraron productos para agregar.
-                </p>
-              )}
-            </div>
-
-            {productPagination && productPagination.totalPages > 1 && (
-              <div className="flex flex-wrap items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setProductPage((current) => Math.max(1, current - 1))}
-                  disabled={productPagination.page <= 1}
-                  className="min-h-11 rounded-xl border border-[#ececf0] bg-white px-4 text-sm font-black text-[#5f626b] disabled:opacity-40"
-                >
-                  Anterior
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setProductPage((current) => Math.min(productPagination.totalPages, current + 1))}
-                  disabled={productPagination.page >= productPagination.totalPages}
-                  className="min-h-11 rounded-xl border border-[#ececf0] bg-white px-4 text-sm font-black text-[#5f626b] disabled:opacity-40"
-                >
-                  Siguiente
-                </button>
-              </div>
-            )}
-          </>
-        )}
 
         {message && <p className="text-sm">{message}</p>}
         </div>
@@ -982,17 +1067,153 @@ export default function ComprasPage() {
                 </span>
                 <h2 className="text-xl font-black tracking-[-0.02em] text-[#17181d]">Compras celular</h2>
               </div>
-              <button
-                type="button"
-                onClick={() => setMobilePurchasesOpen(false)}
-                className="flex h-11 w-11 items-center justify-center rounded-[16px] border border-[#ececf0] bg-white text-[#5f626b] transition hover:border-[#d8d1ff] hover:bg-[#faf9ff] hover:text-[#7652ed]"
-                aria-label="Cerrar"
-                title="Cerrar"
-              >
-                <XMarkIcon className="h-5 w-5" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => mobilePurchasesQuery.refetch()}
+                  disabled={mobilePurchasesQuery.isFetching}
+                  className="flex h-11 w-11 items-center justify-center rounded-[16px] border border-[#ececf0] bg-white text-[#5f626b] transition hover:border-[#d8d1ff] hover:bg-[#faf9ff] hover:text-[#7652ed] disabled:opacity-50"
+                  aria-label="Actualizar compras"
+                  title="Actualizar compras"
+                >
+                  <ArrowPathIcon className={`h-5 w-5 ${mobilePurchasesQuery.isFetching ? "animate-spin" : ""}`} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMobilePurchasesOpen(false)}
+                  className="flex h-11 w-11 items-center justify-center rounded-[16px] border border-[#ececf0] bg-white text-[#5f626b] transition hover:border-[#d8d1ff] hover:bg-[#faf9ff] hover:text-[#7652ed]"
+                  aria-label="Cerrar"
+                  title="Cerrar"
+                >
+                  <XMarkIcon className="h-5 w-5" />
+                </button>
+              </div>
             </div>
-            <div className="min-h-[320px] p-6" />
+            <div className="max-h-[76vh] min-h-[320px] overflow-y-auto p-6">
+              {mobilePurchasesQuery.isLoading && (
+                <p className="py-16 text-center text-sm font-semibold text-[#8b8e98]">Cargando compras del celular...</p>
+              )}
+
+              {mobilePurchasesQuery.error && (
+                <div className="rounded-[18px] border border-red-200 bg-red-50 p-5 text-sm font-semibold text-red-700" role="alert">
+                  {mobilePurchasesQuery.error instanceof Error
+                    ? mobilePurchasesQuery.error.message
+                    : "No se pudieron consultar las compras de Supabase."}
+                </div>
+              )}
+
+              {!mobilePurchasesQuery.isLoading && !mobilePurchasesQuery.error && (mobilePurchasesQuery.data?.length ?? 0) === 0 && (
+                <div className="rounded-[20px] border border-dashed border-[#dddde3] py-16 text-center text-sm font-semibold text-[#8b8e98]">
+                  No hay compras enviadas desde el celular.
+                </div>
+              )}
+
+              <div className="space-y-4">
+                {(mobilePurchasesQuery.data ?? []).map((mobilePurchase) => {
+                  const localProductsByBarcode = new Map(
+                    (productos ?? [])
+                      .filter((product) => product.codigo_barras)
+                      .map((product) => [product.codigo_barras as string, product]),
+                  );
+                  const total = mobilePurchase.items.reduce((sum, item) => {
+                    const localProduct = item.producto?.codigo_barras
+                      ? localProductsByBarcode.get(item.producto.codigo_barras)
+                      : undefined;
+                    const quantity = localProduct && isWeightProduct(localProduct)
+                      ? item.cantidad / 1000
+                      : item.cantidad;
+                    return sum + quantity * item.costo_unitario;
+                  }, 0);
+                  const isApproving = mobileApprovalMutation.isPending && mobileApprovalMutation.variables?.id === mobilePurchase.id;
+                  const canApprove = mobilePurchase.estado !== "APROBADA";
+                  const stateClass = mobilePurchase.estado === "APROBADA"
+                    ? "bg-emerald-100 text-emerald-700"
+                    : mobilePurchase.estado === "ERROR"
+                      ? "bg-red-100 text-red-700"
+                      : mobilePurchase.estado === "PROCESANDO"
+                        ? "bg-amber-100 text-amber-800"
+                        : "bg-violet-100 text-violet-700";
+
+                  return (
+                    <article key={mobilePurchase.id} className="rounded-[22px] border border-[#ececf0] bg-white p-5 shadow-[0_8px_24px_rgba(33,35,48,.05)]">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="font-black text-[#24252a]">Compra {mobilePurchase.id.slice(0, 8)}</h3>
+                            <span className={`rounded-full px-2.5 py-1 text-[11px] font-black ${stateClass}`}>
+                              {mobilePurchase.estado}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-xs font-semibold text-[#8b8e98]">
+                            {new Date(mobilePurchase.creada_en).toLocaleString()}
+                            {mobilePurchase.dispositivo ? ` · ${mobilePurchase.dispositivo}` : ""}
+                          </p>
+                        </div>
+                        <strong className="text-lg font-black text-[#24252a]">{money(total)}</strong>
+                      </div>
+
+                      {mobilePurchase.nota && (
+                        <p className="mt-3 rounded-[14px] bg-[#f7f7f9] px-4 py-3 text-sm text-[#5f626b]">{mobilePurchase.nota}</p>
+                      )}
+
+                      <div className="mt-4 divide-y divide-[#efeff2] rounded-[16px] border border-[#efeff2]">
+                        {mobilePurchase.items.map((item) => {
+                          const localProduct = item.producto?.codigo_barras
+                            ? localProductsByBarcode.get(item.producto.codigo_barras)
+                            : undefined;
+                          const quantityText = localProduct && isWeightProduct(localProduct)
+                            ? `${item.cantidad.toLocaleString()} g (${(item.cantidad / 1000).toLocaleString()} kg)`
+                            : `${item.cantidad.toLocaleString()} un.`;
+
+                          return (
+                            <div key={item.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm">
+                              <div className="min-w-0">
+                                <strong className="block truncate text-[#24252a]">{item.producto?.nombre ?? `Producto #${item.producto_id}`}</strong>
+                                <span className="text-xs font-semibold text-[#8b8e98]">
+                                  {item.producto?.codigo_barras ?? "Sin código"} · {quantityText}
+                                </span>
+                              </div>
+                              <div className="text-right">
+                                <strong className="block text-[#24252a]">Costo {money(item.costo_unitario)}</strong>
+                                <span className="text-xs font-semibold text-[#8b8e98]">
+                                  {item.actualizar_precio_venta ? `Venta ${money(item.precio_final ?? 0)}` : "No cambia precio"}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {mobilePurchase.error_mensaje && (
+                        <p className="mt-3 rounded-[14px] border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+                          {mobilePurchase.error_mensaje}
+                        </p>
+                      )}
+
+                      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                        <p className="text-xs font-semibold text-[#8b8e98]">
+                          {mobilePurchase.estado === "APROBADA" && mobilePurchase.compra_local_id
+                            ? `Registrada como compra local #${mobilePurchase.compra_local_id}`
+                            : "Revisa productos, cantidades, costos y precios antes de aprobar."}
+                        </p>
+                        {canApprove && (
+                          <Button
+                            onClick={() => mobileApprovalMutation.mutate(mobilePurchase)}
+                            disabled={mobileApprovalMutation.isPending || isLoadingProducts}
+                          >
+                            {isApproving
+                              ? "Aprobando..."
+                              : mobilePurchase.estado === "PENDIENTE"
+                                ? "Revisé y aprobar"
+                                : "Reintentar aprobación"}
+                          </Button>
+                        )}
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         </div>
       )}

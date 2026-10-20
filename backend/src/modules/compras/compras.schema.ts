@@ -106,6 +106,7 @@ export const createCompraSchema = {
     required: ['items'],
     additionalProperties: false,
     properties: {
+      origen_externo: { type: 'string', format: 'uuid' },
       items: {
         type: 'array',
         minItems: 1,

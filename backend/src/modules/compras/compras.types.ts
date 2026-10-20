@@ -100,6 +100,7 @@ export interface CreateCompraItemBody {
 }
 
 export interface CreateCompraBody {
+  readonly origen_externo?: string;
   readonly items: CreateCompraItemBody[];
 }
 

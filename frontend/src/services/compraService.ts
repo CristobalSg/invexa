@@ -7,6 +7,7 @@ export async function getCompras(params: { page?: number; limit?: number; fecha_
 }
 
 export async function createCompra(input: {
+  origen_externo?: string;
   items: {
     producto_id: number;
     cantidad: number;

@@ -1,4 +1,5 @@
 // src/components/MainList.tsx
+import { useEffect, useRef } from "react"
 import { MinusIcon, PlusIcon, TrashIcon } from "@heroicons/react/24/outline"
 import type { Producto } from "../types/api"
 
@@ -18,9 +19,25 @@ interface ProductListProps {
   onDecrease?: (id: string) => void
   onIncrease?: (id: string) => void
   onRemove?: (id: string) => void
+  selectedIndex?: number
+  keyboardActive?: boolean
 }
 
-export default function ProductList({ products = [], onDecrease, onIncrease, onRemove }: ProductListProps) {
+export default function ProductList({
+  products = [],
+  onDecrease,
+  onIncrease,
+  onRemove,
+  selectedIndex = 0,
+  keyboardActive = false,
+}: ProductListProps) {
+  const selectedRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!keyboardActive) return
+    selectedRef.current?.scrollIntoView({ block: "nearest" })
+  }, [keyboardActive, selectedIndex])
+
   if (products.length === 0) {
     return (
       <div className="pos-cart-list">
@@ -44,7 +61,8 @@ export default function ProductList({ products = [], onDecrease, onIncrease, onR
           return (
             <div
               key={cartItemId}
-              className="pos-cart-item"
+              ref={keyboardActive && index === selectedIndex ? selectedRef : undefined}
+              className={`pos-cart-item ${keyboardActive && index === selectedIndex ? "keyboard-selected" : ""}`}
             >
               <div className="pos-cart-thumb">{index + 1}</div>
               <div className="min-w-0">
